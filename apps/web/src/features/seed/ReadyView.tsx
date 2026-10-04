@@ -5,6 +5,7 @@
 import { useAppStore } from '../../app/appStore';
 import type { ShowPlan } from '@qualia/contracts';
 import { LedgerWarnings } from '../player/LedgerWarnings';
+import { ProviderNotices } from '../player/ProviderNotices';
 import { Button } from '../../ui/Button';
 import { Eyebrow, InlineRecovery } from '../../ui/Feedback';
 import { SonicDnaCard } from './SonicDna';
@@ -69,6 +70,7 @@ export function ReadyView({ show, hasActiveShow, onStart, onBackToListen, onEdit
   return (
     <section className={styles.ready} aria-labelledby="ready-title" data-testid="ready-view">
       <LedgerWarnings warnings={show.warnings} />
+      <ProviderNotices warnings={show.warnings} />
       <Eyebrow>{count > 0 ? 'YOUR SHOW IS READY' : 'NOTHING PLAYABLE YET'}</Eyebrow>
       <h1 id="ready-title">{count > 0 ? '節目準備好了。' : '這次還沒有可播的曲目。'}</h1>
       <blockquote className={styles.seedQuote}>{show.seed.text}</blockquote>

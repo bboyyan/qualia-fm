@@ -174,11 +174,12 @@ function cachedUrl(cache: Map<string, string>, key: string, make: () => Uint8Arr
   return url;
 }
 
-/** MOCK resolver: synthesised test tones only. Never resolves Spotify URIs or remote URLs. */
+/** 音樂仍限 MOCK 測試音；AI 介紹僅允許驗證過的同源私有 API 路徑。 */
 export function mockSourceResolver(): SourceResolver {
   const cache = new Map<string, string>();
   return (owner, segment) => {
     if (owner === 'speech') {
+      if (segment.speech.kind === 'ai_audio' && /^\/api\/media\/tts\/[A-Za-z0-9_/-]+$/.test(segment.speech.url)) return segment.speech.url;
       if (segment.speech.kind !== 'mock_chime') throw new Error('no speech source');
       const { durationMs } = segment.speech;
       return cachedUrl(cache, `chime:${durationMs}`, () => synthesizeChime(durationMs));

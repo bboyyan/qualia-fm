@@ -67,6 +67,8 @@ export interface EngineState {
   readonly removed: RemovedEntry | null;
   /** segmentId whose track ended naturally right before the current one (transition adjacency). */
   readonly previousPlayedId: string | null;
+  /** 這一段的 AI 語音播放失敗、已直接進曲目；UI 需顯示文字介紹，不可靜默。 */
+  readonly speechFallbackId: string | null;
 }
 
 export interface ProviderState {

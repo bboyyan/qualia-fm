@@ -22,6 +22,7 @@ export const CapabilitiesSchema = z.strictObject({
   canInsertSpeech: z.boolean(),
   canOverlap: z.literal(false),
   supportsBackground: z.enum(['unknown', 'tested-limited', 'unsupported']),
+  providers: z.strictObject({ llm: z.enum(['mock', 'openai']), tts: z.enum(['mock', 'openai']), reason: z.string().max(300).nullable() }).optional(),
   restrictions: z.array(z.string().max(300)).max(12),
 });
 export type Capabilities = z.infer<typeof CapabilitiesSchema>;

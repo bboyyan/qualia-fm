@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigError, loadConfig } from '../src/config/env.js';
+
+beforeEach(() => { vi.stubGlobal('fetch', () => { throw new Error('禁止真實網路'); }); });
 
 describe('loadConfig', () => {
   it('starts in mock mode with no keys at all (AC01)', () => {
@@ -9,6 +12,17 @@ describe('loadConfig', () => {
 
   it('keeps both Spotify gates closed by default', () => {
     expect(loadConfig({}).gates).toEqual({ spotifyEnabled: false, spotifyDjApproved: false });
+  });
+
+  it('.env.example 本身可直接載入：範例值為安全預設（mock、未簽收、預算上限），且不含任何金鑰', () => {
+    const text = readFileSync(new URL('../../../.env.example', import.meta.url), 'utf8');
+    const entries = text.split('\n').filter((line) => /^[A-Z0-9_]+=/.test(line)).map((line) => line.split(/=(.*)/s).slice(0, 2) as [string, string]);
+    const env = Object.fromEntries(entries);
+    for (const name of ['OPENAI_API_KEY', 'SESSION_SECRET', 'NOTION_TOKEN', 'SPOTIFY_CLIENT_ID']) expect(env[name], name).toBe('');
+    expect(env).toMatchObject({ LLM_PROVIDER: 'mock', TTS_PROVIDER: 'mock', OPENAI_REAL_CALLS_APPROVED: 'false', SPOTIFY_ENABLED: 'false', SPOTIFY_DJ_APPROVED: 'false', PORT: '8080' });
+    const config = loadConfig(env);
+    expect(config.openai).toMatchObject({ llm: 'mock', tts: 'mock', reason: null });
+    expect(config.openai.budget).toEqual({ dailyUsd: 1, totalUsd: 10, plansPerDay: 20, graphemesPerDay: 4000 });
   });
 
   it('treats empty env values (as in .env.example) as defaults', () => {
@@ -23,8 +37,16 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ SPOTIFY_DJ_APPROVED: 'true', SPOTIFY_APPROVAL_REFERENCE: 'x' })).toThrow(ConfigError);
   });
 
-  it('refuses real LLM providers that are not implemented yet', () => {
-    expect(() => loadConfig({ LLM_PROVIDER: 'openai' })).toThrow(/T06/);
+  it('接受 openai 設定，缺少憑證仍能啟動並明示降級', () => {
+    expect(loadConfig({ LLM_PROVIDER: 'openai' }).openai.reason).toContain('OPENAI_API_KEY');
+    expect(loadConfig({ LLM_PROVIDER: 'openai', OPENAI_API_KEY: 'TEST' }).openai.reason).toContain('尚待簽收');
+  });
+
+  it('輸出 token 有預設與上下限，模型與單價沒有預設', () => {
+    expect(loadConfig({}).openai.maxOutputTokens).toBe(4096);
+    expect(() => loadConfig({ OPENAI_MAX_OUTPUT_TOKENS: '0' })).toThrow(ConfigError);
+    expect(() => loadConfig({ OPENAI_MAX_OUTPUT_TOKENS: '16385' })).toThrow(ConfigError);
+    expect(loadConfig({ LLM_PROVIDER: 'openai', OPENAI_API_KEY: 'TEST', OPENAI_REAL_CALLS_APPROVED: 'true' }).openai.reason).toContain('設定');
   });
 
   it('does not echo secret values in validation errors', () => {

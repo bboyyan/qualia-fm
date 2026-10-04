@@ -15,9 +15,12 @@ export const MOCK_RESTRICTIONS: readonly string[] = [
   '音量請使用裝置音量鍵，本站不控制系統音量。',
 ];
 
-export function buildCapabilities(config: ServerConfig): Capabilities {
+export function buildCapabilities(config: ServerConfig, reason: string | null = config.openai.reason): Capabilities {
+  // 只有真的可用（無降級原因）才移除「不是 AI 語音」；只「設定」openai 但被 gate 擋住時仍要如實標示。
+  const aiVoiceLive = !reason && config.openai.tts === 'openai';
   return {
     mode: config.mode,
+    providers: { llm: reason ? 'mock' : config.openai.llm, tts: reason ? 'mock' : config.openai.tts, reason },
     spotifyEnabled: config.gates.spotifyEnabled,
     spotifyDjApproved: config.gates.spotifyDjApproved,
     canPlay: true,
@@ -26,7 +29,7 @@ export function buildCapabilities(config: ServerConfig): Capabilities {
     canInsertSpeech: true,
     canOverlap: false,
     supportsBackground: 'unknown',
-    restrictions: [...MOCK_RESTRICTIONS],
+    restrictions: [...MOCK_RESTRICTIONS.filter((text) => !aiVoiceLive || !text.includes('不是 AI 語音')), ...(reason ? [reason] : [])],
   };
 }
 

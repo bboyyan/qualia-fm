@@ -1,3 +1,4 @@
+import { ProviderStatus } from './ProviderStatus';
 import { useId } from 'react';
 import type { MockScenario } from '@qualia/contracts';
 import { useAppStore } from '../../app/appStore';
@@ -60,6 +61,7 @@ function EnvironmentSettings() {
         <div className={styles.row}>
           <div>
             <h3>示範模式</h3>
+            <ProviderStatus providers={caps?.providers} />
             <p>未連接任何音樂服務；曲目皆為虛構，只播放合成測試音。</p>
           </div>
           <CapabilityBadge mode={caps?.mode ?? 'mock'} compact />
@@ -186,7 +188,7 @@ export function SettingsPage() {
       <section className={styles.info} aria-labelledby="data-title">
         <h3 id="data-title">關於聲音與資料</h3>
         <p>
-          你的輸入只用於這次節目，存在伺服器記憶體中，重新啟動即消失；回饋只寫入 TEST 假帳本，請填假資料；重啟即清除。本機只記住 DJ 與播放模式設定。MOCK 模式不呼叫任何 AI 或音樂服務。正式版的 AI 語音會清楚標示。
+          你的輸入只用於這次節目，存在伺服器記憶體中，重新啟動即消失；回饋只寫入 TEST 假帳本，請填假資料；重啟即清除。本機只記住 DJ 與播放模式設定。MOCK 模式不呼叫任何 AI 或音樂服務。OpenAI 僅在伺服器簽收並完成設定後啟用，會接收本輪允許的輸入；AI 語音會清楚標示。
         </p>
       </section>
       <Button

@@ -6,6 +6,8 @@ export interface PlannerContext {
   readonly scenario: MockScenario;
   /** 1 for the initial draft, 2 for the single permitted repair attempt. */
   readonly attempt: number;
+  /** 整輪預算 gate，失敗時只允許 mock。 */
+  readonly realAllowed?: boolean;
 }
 
 /**

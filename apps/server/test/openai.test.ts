@@ -1,0 +1,29 @@
+import { readFileSync } from 'node:fs';
+import { beforeEach, expect, it, vi } from 'vitest';
+import { realConfig } from './openaiHelpers.js';
+import { RealProviderRuntime } from '../src/budget/runtime.js';
+import { OpenAIEditorialPlanner } from '../src/providers/openai/planner.js';
+import { SYSTEM_PROMPT } from '../src/providers/openai/resources.js';
+import { toEditorialInput } from '../src/services/editorialInput.js';
+import { planRequest } from './helpers.js';
+
+beforeEach(() => { vi.stubGlobal('fetch', () => { throw new Error('禁止真實網路'); }); });
+it('Structured Outputs 使用指定模型、token 上限、同步 prompt；資料與指令分開且結果仍不受信任', async () => {
+  const config = realConfig();
+  const runtime = new RealProviderRuntime(config.openai);
+  const fetchImpl = vi.fn<typeof fetch>(async (_url, options) => {
+    const body = JSON.parse(String(options?.body));
+    expect(body.model).toBe('TEST-text');
+    expect(body.max_output_tokens).toBe(4096);
+    expect(body.text.format).toMatchObject({ type: 'json_schema', strict: true, name: 'plan_draft' });
+    expect(body.input[0]).toEqual({ role: 'system', content: SYSTEM_PROMPT });
+    expect(body.input[1].role).toBe('user');
+    expect(body.input[1].content).toContain('TEST fake seed');
+    expect(options?.signal).toBeInstanceOf(AbortSignal);
+    return Response.json({ output: [{ type: 'message', content: [{ type: 'output_text', text: '{"untrusted":true}' }] }], usage: { input_tokens: 10, output_tokens: 20 } });
+  });
+  const planner = new OpenAIEditorialPlanner(config.openai, runtime, fetchImpl);
+  expect(await planner.draft(toEditorialInput(planRequest()), { signal: new AbortController().signal, scenario: 'five', attempt: 1 })).toEqual({ untrusted: true });
+  expect(runtime.ledger!.snapshot().totalUsd).toBeCloseTo(0.00005);
+  expect(SYSTEM_PROMPT).toBe(readFileSync('handoff/prompts/sonic-qualia-system.md', 'utf8'));
+});
