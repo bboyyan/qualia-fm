@@ -11,6 +11,7 @@ export interface FeedbackFormState {
 
 /** One form per playback attempt. A pending save cannot be submitted or skipped twice. */
 export class FeedbackFormModel {
+  private clientRequestId: string | undefined;
   private state: FeedbackFormState = { rating: null, reason: '', busy: false, finished: false, error: null };
   private readonly listeners = new Set<() => void>();
   constructor(
@@ -29,10 +30,16 @@ export class FeedbackFormModel {
     for (const listener of this.listeners) listener();
   }
   setRating(rating: Rating): void {
-    if (!this.state.busy && !this.state.finished) this.update({ rating, error: null });
+    if (!this.state.busy && !this.state.finished) {
+      if (rating !== this.state.rating) this.clientRequestId = undefined;
+      this.update({ rating, error: null });
+    }
   }
   setReason(reason: string): void {
-    if (!this.state.busy && !this.state.finished) this.update({ reason, error: null });
+    if (!this.state.busy && !this.state.finished) {
+      if (reason !== this.state.reason) this.clientRequestId = undefined;
+      this.update({ reason, error: null });
+    }
   }
   skip(): void {
     if (this.state.busy || this.state.finished) return;
@@ -46,10 +53,12 @@ export class FeedbackFormModel {
       this.update({ error: this.state.rating === null ? '請選愛、還行或不對。' : '原因請縮短至 200 字以內。' });
       return;
     }
+    // 一次提交意圖只建立一次 key；失敗後原樣重試沿用。
+    this.clientRequestId ??= crypto.randomUUID();
     this.update({ busy: true, error: null });
     let receipt: FeedbackReceipt;
     try {
-      receipt = await this.save(parsed.data);
+      receipt = await this.save({ ...parsed.data, clientRequestId: this.clientRequestId });
     } catch {
       this.update({ busy: false, error: '未能記錄回饋，內容已保留。請重試或略過回饋。' });
       return;

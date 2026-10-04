@@ -13,7 +13,22 @@ export interface EngineOptions {
   djEnabled: boolean;
   canSeek: boolean;
   onAnnounce?: (message: string) => void;
+  /** Injected so unit tests can drive the position timer with a fake clock. */
+  timer?: IntervalTimer;
 }
+
+export interface IntervalTimer {
+  setInterval(callback: () => void, ms: number): unknown;
+  clearInterval(handle: unknown): void;
+}
+
+/** How often the engine copies the live provider position into state while audible. */
+export const POSITION_TICK_MS = 250;
+
+const systemTimer: IntervalTimer = {
+  setInterval: (callback, ms) => globalThis.setInterval(callback, ms),
+  clearInterval: (handle) => globalThis.clearInterval(handle as ReturnType<typeof globalThis.setInterval>),
+};
 
 function toAction(event: AdapterEvent): Action {
   switch (event.type) {
@@ -42,12 +57,16 @@ export class PlaybackEngine {
   private state: EngineState;
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribe: () => void;
+  private readonly timer: IntervalTimer;
+  private positionTimer: unknown = null;
+  private destroyed = false;
 
   constructor(
     private readonly adapter: MediaAdapter,
     private readonly options: EngineOptions,
   ) {
     this.state = { ...initialEngineState(options.djEnabled, options.canSeek), playbackMode: options.playbackMode ?? 'mock', feedbackEnabled: options.feedbackEnabled ?? false };
+    this.timer = options.timer ?? systemTimer;
     this.unsubscribe = adapter.subscribe((event) => this.dispatch(toAction(event)));
   }
 
@@ -62,6 +81,7 @@ export class PlaybackEngine {
     const reduction = reduce(this.state, action);
     if (reduction.state !== this.state) {
       this.state = reduction.state;
+      this.syncPositionTimer();
       this.notify();
     }
     this.run(reduction.effects);
@@ -70,8 +90,9 @@ export class PlaybackEngine {
 
   /** Live provider position while audible; otherwise the last confirmed position. */
   positionMs(): number {
-    const live = this.state.phase === 'speaking' || this.state.phase === 'track_playing' ? this.adapter.getState() : null;
-    return live ? live.positionMs : this.state.positionMs;
+    const live = isPlaying(this.state) ? this.adapter.getState() : null;
+    if (live) this.dispatch({ type: 'POSITION_UPDATED', attemptId: this.state.attemptId, positionMs: live.positionMs });
+    return this.state.positionMs;
   }
 
   loadShow(show: ShowPlan): string {
@@ -97,7 +118,11 @@ export class PlaybackEngine {
   seek = (positionMs: number): Reduction => this.dispatch({ type: 'SEEK', positionMs });
   setDjEnabled = (enabled: boolean): Reduction => this.dispatch({ type: 'SET_DJ', enabled });
   reconcile = (): Reduction => this.dispatch({ type: 'RECONCILE' });
-  deviceLost = (): Reduction => this.dispatch({ type: 'DEVICE_LOST' });
+  /** Captures the live position first (the timer may be up to one tick stale), then reconciles. */
+  deviceLost = (): Reduction => {
+    this.positionMs();
+    return this.dispatch({ type: 'DEVICE_LOST' });
+  };
   reset = (): Reduction => this.dispatch({ type: 'RESET' });
 
   removeUpcoming(segmentId: string): Reduction {
@@ -114,9 +139,32 @@ export class PlaybackEngine {
   }
 
   destroy(): void {
+    this.destroyed = true;
+    this.stopPositionTimer();
     this.unsubscribe();
     this.adapter.destroy();
     this.listeners.clear();
+  }
+
+  /**
+   * Position is persisted by the engine itself, not by whichever page happens to poll, so a
+   * device loss seen from any tab resumes from the last live position (B1).
+   */
+  private syncPositionTimer(): void {
+    if (this.destroyed || !isPlaying(this.state)) {
+      this.stopPositionTimer();
+      return;
+    }
+    if (this.positionTimer !== null) return;
+    this.positionTimer = this.timer.setInterval(() => {
+      if (!this.destroyed) this.positionMs();
+    }, POSITION_TICK_MS);
+  }
+
+  private stopPositionTimer(): void {
+    if (this.positionTimer === null) return;
+    this.timer.clearInterval(this.positionTimer);
+    this.positionTimer = null;
   }
 
   private run(effects: readonly Effect[]): void {
@@ -162,6 +210,10 @@ export class PlaybackEngine {
   private notify(): void {
     for (const listener of this.listeners) listener();
   }
+}
+
+function isPlaying(state: EngineState): boolean {
+  return state.phase === 'speaking' || state.phase === 'track_playing';
 }
 
 export function isAudible(state: EngineState): boolean {

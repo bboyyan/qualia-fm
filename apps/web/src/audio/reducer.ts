@@ -208,6 +208,7 @@ function replayIntro(state: EngineState, trackPositionMs: number): Reduction {
 }
 
 function removeUpcoming(state: EngineState, segmentId: string, expectedRevision: number): Reduction {
+  if (state.phase === 'feedback') return reject(state, 'not_allowed');
   if (expectedRevision !== state.queueRevision) return reject(state, 'stale_revision');
   const index = state.queue.findIndex((q) => q.segment.segmentId === segmentId);
   if (index <= state.currentIndex) return reject(state, 'not_upcoming');
@@ -298,7 +299,7 @@ function ownerFailed(state: EngineState, owner: OwnerKind, code: 'AUTOPLAY_BLOCK
   );
 }
 
-function adapterEvent(state: EngineState, action: Extract<Action, { attemptId: number }>): Reduction {
+function adapterEvent(state: EngineState, action: Extract<Action, { type: 'OWNER_STARTED' | 'OWNER_PAUSED' | 'OWNER_ENDED' | 'OWNER_FAILED' }>): Reduction {
   if (action.attemptId !== state.attemptId) return ok(state);
   switch (action.type) {
     case 'OWNER_STARTED':
@@ -360,6 +361,10 @@ export function reduce(state: EngineState, action: Action): Reduction {
       const updated = { ...state, djEnabled: action.enabled };
       return !action.enabled && inSpeech(state) ? startTrack(updated, state.trackResumeMs) : ok(updated);
     }
+    case 'POSITION_UPDATED':
+      return action.attemptId === state.attemptId && (state.phase === 'speaking' || state.phase === 'track_playing') && action.positionMs !== state.positionMs
+        ? ok({ ...state, positionMs: action.positionMs })
+        : ok(state);
     case 'DEVICE_LOST':
       return ACTIVE.has(state.phase) ? ok({ ...state, phase: 'reconciling' }, [{ type: 'reconcile' }]) : ok(state);
     case 'RECONCILE':

@@ -2,7 +2,7 @@
  * In-memory job / show repository scoped by owner (session id). Records are replaced, never
  * mutated in place. Single-process only: nothing survives a restart (docs/04).
  */
-import type { ErrorInfo, JobInfo, JobPhase, JobStatus, ShowPlan } from '@qualia/contracts';
+import type { FeedbackReceipt, ErrorInfo, JobInfo, JobPhase, JobStatus, ShowPlan } from '@qualia/contracts';
 
 export interface JobRecord {
   readonly jobId: string;
@@ -16,9 +16,10 @@ export interface JobRecord {
   readonly idempotencyKey: string;
   readonly controller: AbortController;
   readonly createdAt: number;
+  readonly lastAccess: number;
 }
 
-const RETENTION_MS = 60 * 60 * 1000;
+const RETENTION_MS = 24 * 60 * 60 * 1000;
 const MAX_JOBS = 2_000;
 
 export function toJobInfo(job: JobRecord): JobInfo {
@@ -35,7 +36,9 @@ export function toJobInfo(job: JobRecord): JobInfo {
 export class JobStore {
   private readonly jobs = new Map<string, JobRecord>();
   private readonly idempotency = new Map<string, string>();
-  private readonly shows = new Map<string, { ownerId: string; plan: ShowPlan; createdAt: number }>();
+  private readonly shows = new Map<string, { ownerId: string; plan: ShowPlan; lastAccess: number; feedback: Map<string, Promise<FeedbackReceipt>> }>();
+
+  constructor(private readonly now: () => number = Date.now, private readonly retentionMs = RETENTION_MS) {}
 
   add(job: JobRecord): void {
     this.prune(job.createdAt);
@@ -46,7 +49,11 @@ export class JobStore {
   /** Owner-checked lookup: another session's job is indistinguishable from a missing one. */
   get(jobId: string, ownerId: string): JobRecord | undefined {
     const job = this.jobs.get(jobId);
-    return job && job.ownerId === ownerId ? job : undefined;
+    if (!job || job.ownerId !== ownerId) return undefined;
+    const touched = { ...job, lastAccess: this.now() };
+    this.jobs.set(jobId, touched);
+    if (job.showId) this.getShow(job.showId, ownerId);
+    return touched;
   }
 
   byIdempotencyKey(ownerId: string, key: string): JobRecord | undefined {
@@ -75,12 +82,28 @@ export class JobStore {
   }
 
   putShow(ownerId: string, plan: ShowPlan, now: number): void {
-    this.shows.set(plan.showId, { ownerId, plan, createdAt: now });
+    this.shows.set(plan.showId, { ownerId, plan, lastAccess: now, feedback: new Map() });
   }
 
   getShow(showId: string, ownerId: string): ShowPlan | undefined {
     const entry = this.shows.get(showId);
-    return entry && entry.ownerId === ownerId ? entry.plan : undefined;
+    if (!entry || entry.ownerId !== ownerId) return undefined;
+    this.shows.set(showId, { ...entry, lastAccess: this.now() });
+    return entry.plan;
+  }
+
+  /** 先保留進行中的寫入，並行重送共用收據；失敗才釋放 key 供重試。 */
+  saveFeedback(showId: string, ownerId: string, key: string, save: () => Promise<FeedbackReceipt>): Promise<FeedbackReceipt> {
+    const entry = this.shows.get(showId);
+    if (!entry || entry.ownerId !== ownerId) throw new Error('feedback requires an owned show');
+    const existing = entry.feedback.get(key);
+    if (existing) return existing;
+    const pending = Promise.resolve().then(save).catch((error: unknown) => {
+      entry.feedback.delete(key);
+      throw error;
+    });
+    entry.feedback.set(key, pending);
+    return pending;
   }
 
   forgetOwner(ownerId: string): void {
@@ -91,8 +114,9 @@ export class JobStore {
 
   private prune(now: number): void {
     for (const [id, job] of this.jobs) {
-      if (now - job.createdAt > RETENTION_MS || this.jobs.size > MAX_JOBS) this.jobs.delete(id);
+      if (now - job.lastAccess > this.retentionMs || this.jobs.size > MAX_JOBS) this.jobs.delete(id);
     }
-    for (const [id, show] of this.shows) if (now - show.createdAt > RETENTION_MS) this.shows.delete(id);
+    for (const [key, jobId] of this.idempotency) if (!this.jobs.has(jobId)) this.idempotency.delete(key);
+    for (const [id, show] of this.shows) if (now - show.lastAccess > this.retentionMs) this.shows.delete(id);
   }
 }

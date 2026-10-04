@@ -17,6 +17,7 @@ import { JobStore } from './stores/jobStore.js';
 
 export interface AppOverrides {
   ledger?: FeedbackLedger;
+  store?: JobStore;
   now?: () => number;
   clock?: PhaseClock;
   planner?: EditorialPlanner;
@@ -47,7 +48,7 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
     ledger: overrides.ledger ?? new InMemoryLedger(),
     planner: overrides.planner ?? new MockEditorialPlanner(),
     resolver: overrides.resolver ?? new MockCatalogResolver(config.mock.trackMs),
-    store: new JobStore(),
+    store: overrides.store ?? new JobStore(now),
     clock: overrides.clock ?? realClock,
     now,
   });

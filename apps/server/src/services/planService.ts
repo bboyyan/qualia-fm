@@ -86,6 +86,7 @@ export class PlanService {
       idempotencyKey: input.idempotencyKey,
       controller: new AbortController(),
       createdAt: this.deps.now(),
+      lastAccess: this.deps.now(),
     };
     this.deps.store.add(job);
     void this.run(job, input);
@@ -115,13 +116,14 @@ export class PlanService {
     const show = this.show(ownerId, request.showId);
     const segment = show.segments.find((s) => s.segmentId === request.segmentId);
     if (!segment) throw new AppError('NOT_FOUND');
-    return this.deps.ledger.append({
+    const key = JSON.stringify([request.segmentId, request.clientRequestId ?? null]);
+    return this.deps.store.saveFeedback(request.showId, ownerId, key, () => this.deps.ledger.append({
       date: new Date(this.deps.now()).toISOString(),
       seed: [show.seed.artist, show.seed.text].filter(Boolean).join(' — '),
       recommendation: `${segment.candidate.artist} — ${segment.candidate.title}`,
       rating: request.rating,
       reason: request.reason,
-    });
+    }));
   }
 
   /** Logout / session end: abort in-flight work and forget everything the owner had. */

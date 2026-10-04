@@ -94,6 +94,7 @@ export type Action =
   | { type: 'RESTORE_REMOVED'; expectedRevision: number }
   | { type: 'COMMIT_TAIL'; items: readonly QueueItem[]; sessionId: string; expectedRevision: number; warnings?: readonly string[] }
   | { type: 'SET_DJ'; enabled: boolean }
+  | { type: 'POSITION_UPDATED'; attemptId: number; positionMs: number }
   | { type: 'DEVICE_LOST' }
   | { type: 'RECONCILE' }
   | { type: 'RECONCILE_RESULT'; state: ProviderState | null }

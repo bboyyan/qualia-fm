@@ -65,7 +65,7 @@ function QueueRow({ state, item, index }: { state: EngineState; item: QueueItem;
           </button>
         )}
         {upcoming && (
-          <button type="button" className={`${styles.rowButton} ${styles.rowRemove}`} onClick={remove} aria-label={`移除 ${title}`}>
+          <button type="button" className={`${styles.rowButton} ${styles.rowRemove}`} onClick={remove} disabled={state.phase === 'feedback'} aria-describedby={state.phase === 'feedback' ? 'queue-feedback-help' : undefined} aria-label={`移除 ${title}`}>
             移除
           </button>
         )}
@@ -83,6 +83,7 @@ export function QueueSheet() {
     <BottomSheet open={open && state.queue.length > 0} title={`這一段 · ${state.queue.length} 首`} onClose={() => closeSheet()} testId="queue-sheet">
       <SheetToast />
       <p className={styles.lead}>查看清單不會中斷播放。想跳到某首，請按「現在播放」。</p>
+      {state.phase === 'feedback' && <p id="queue-feedback-help">回饋進行中，請先送出或略過回饋，再移除接下來的曲目。</p>}
       <ol className={styles.rows} aria-label="節目單">
         {state.queue.map((item, index) => (
           <QueueRow key={item.segment.segmentId} state={state} item={item} index={index} />

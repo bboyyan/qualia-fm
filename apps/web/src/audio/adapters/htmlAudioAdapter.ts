@@ -19,6 +19,7 @@ export class HtmlAudioAdapter implements MediaAdapter {
   private readonly audio: HTMLAudioElement;
   private readonly listeners = new Set<(event: AdapterEvent) => void>();
   private current: Current | null = null;
+  private metadataListener: (() => void) | null = null;
   private playingAttempt: number | null = null;
   private blockNextPlay = false;
   private lost = false;
@@ -34,6 +35,7 @@ export class HtmlAudioAdapter implements MediaAdapter {
   }
 
   start(request: StartRequest): Promise<void> {
+    this.clearMetadataListener();
     this.current = { attemptId: request.attemptId, owner: request.owner };
     this.playingAttempt = null;
     this.audio.pause();
@@ -45,7 +47,11 @@ export class HtmlAudioAdapter implements MediaAdapter {
     }
     this.audio.src = url;
     if (request.fromMs > 0) {
-      this.audio.addEventListener('loadedmetadata', () => (this.audio.currentTime = request.fromMs / 1000), { once: true });
+      this.metadataListener = () => {
+        this.clearMetadataListener();
+        this.audio.currentTime = request.fromMs / 1000;
+      };
+      this.audio.addEventListener('loadedmetadata', this.metadataListener, { once: true });
     }
     return this.playGuarded();
   }
@@ -65,6 +71,7 @@ export class HtmlAudioAdapter implements MediaAdapter {
   }
 
   stop(): void {
+    this.clearMetadataListener();
     this.current = null;
     this.playingAttempt = null;
     this.audio.pause();
@@ -108,6 +115,13 @@ export class HtmlAudioAdapter implements MediaAdapter {
 
   reconnect(): void {
     this.lost = false;
+  }
+
+  /** 替換音源與停止時也必須移除尚未觸發的一次性監聽器。 */
+  private clearMetadataListener(): void {
+    if (!this.metadataListener) return;
+    this.audio.removeEventListener('loadedmetadata', this.metadataListener);
+    this.metadataListener = null;
   }
 
   private playGuarded(): Promise<void> {
