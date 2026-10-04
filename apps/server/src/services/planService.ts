@@ -13,6 +13,7 @@ import {
   type PlanRequest,
   type ShowPlan,
 } from '@qualia/contracts';
+import type { FeedbackLedger } from '../ledger/types.js';
 import type { ServerConfig } from '../config/env.js';
 import { AppError, errorEnvelope, newRequestId } from '../http/errors.js';
 import type { CatalogResolver, EditorialPlanner, PhaseClock } from '../providers/types.js';
@@ -28,6 +29,7 @@ const GLOBAL_PLAN_CAP_PER_HOUR = 1_000;
 const TARGET_SEGMENTS = 5;
 
 export interface PlanServiceDeps {
+  readonly ledger: FeedbackLedger;
   readonly config: ServerConfig;
   readonly planner: EditorialPlanner;
   readonly resolver: CatalogResolver;
@@ -133,7 +135,10 @@ export class PlanService {
     const deadline = setTimeout(() => job.controller.abort('timeout'), this.deps.config.limits.planDeadlineMs);
     deadline.unref?.();
     try {
-      const plan = await this.pipeline(job.jobId, toEditorialInput(input.request), input, signal);
+      const history = await this.deps.ledger.read(signal);
+      if (signal.aborted) throw signal.reason;
+      const editorial = { ...toEditorialInput(input.request), history };
+      const plan = await this.pipeline(job.jobId, editorial, input, signal);
       this.deps.store.putShow(job.ownerId, plan, this.deps.now());
       this.finish(job, plan);
     } catch (error: unknown) {

@@ -3,9 +3,10 @@
  * built by explicit field picking — never a serialised request, ShowPlan, session or provider
  * response. Extra properties smuggled onto the request object are dropped here.
  */
-import type { PlanRequest } from '@qualia/contracts';
+import type { LedgerRow, PlanRequest } from '@qualia/contracts';
 
 export interface EditorialInput {
+  readonly history: readonly LedgerRow[];
   readonly seedKind: 'feeling' | 'song' | 'sound';
   readonly seedText: string;
   readonly seedArtist: string | null;
@@ -15,6 +16,7 @@ export interface EditorialInput {
 }
 
 export const EDITORIAL_INPUT_KEYS: readonly (keyof EditorialInput)[] = [
+  'history',
   'seedKind',
   'seedText',
   'seedArtist',
@@ -25,6 +27,7 @@ export const EDITORIAL_INPUT_KEYS: readonly (keyof EditorialInput)[] = [
 
 export function toEditorialInput(request: PlanRequest): EditorialInput {
   return {
+    history: [],
     seedKind: request.seed.kind,
     seedText: request.seed.text,
     seedArtist: request.seed.artist,

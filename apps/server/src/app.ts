@@ -11,9 +11,12 @@ import { createApiRouter } from './routes/api.js';
 import { securityHeaders } from './security/headers.js';
 import { SessionStore } from './security/sessions.js';
 import { PlanService, realClock } from './services/planService.js';
+import { InMemoryLedger } from './ledger/fake.js';
+import type { FeedbackLedger } from './ledger/types.js';
 import { JobStore } from './stores/jobStore.js';
 
 export interface AppOverrides {
+  ledger?: FeedbackLedger;
   now?: () => number;
   clock?: PhaseClock;
   planner?: EditorialPlanner;
@@ -41,6 +44,7 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
   const sessions = new SessionStore();
   const plans = new PlanService({
     config,
+    ledger: overrides.ledger ?? new InMemoryLedger(),
     planner: overrides.planner ?? new MockEditorialPlanner(),
     resolver: overrides.resolver ?? new MockCatalogResolver(config.mock.trackMs),
     store: new JobStore(),
