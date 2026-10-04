@@ -10,6 +10,9 @@ const int = (fallback: number, min: number, max: number) =>
 const flag = z.preprocess(emptyToUndefined, z.enum(['true', 'false']).default('false'));
 /** 官方 audio/speech 文件：instructions「Does not work with tts-1 or tts-1-hd」。 */
 const TTS_MODELS_WITHOUT_INSTRUCTIONS: ReadonlySet<string> = new Set(['tts-1', 'tts-1-hd']);
+/** 聲線指示上限（Unicode code points）；預設 B2 instr-zh 約 170 字，留足調整空間也避免誤貼長文。 */
+const MAX_TTS_INSTRUCTIONS_CHARS = 1500;
+const blankToUndefined = (value: unknown): unknown => (typeof value === 'string' && value.trim() === '' ? undefined : value);
 
 const EnvSchema = z.object({
   NODE_ENV: z.preprocess(emptyToUndefined, z.enum(['development', 'test', 'production']).default('development')),
@@ -33,11 +36,13 @@ const EnvSchema = z.object({
   OPENAI_TEXT_MODEL: z.preprocess(emptyToUndefined, z.string().optional()),
   OPENAI_TTS_MODEL: z.preprocess(emptyToUndefined, z.string().optional()),
   OPENAI_TTS_VOICE: z.preprocess(emptyToUndefined, z.string().optional()),
+  OPENAI_TTS_INSTRUCTIONS: z.preprocess(blankToUndefined, z.string()
+    .refine((value) => [...value].length <= MAX_TTS_INSTRUCTIONS_CHARS).optional()),
   OPENAI_REAL_CALLS_APPROVED: flag,
   REAL_PROVIDERS_KILL_SWITCH: flag,
   OPENAI_MAX_OUTPUT_TOKENS: int(4096, 256, 16384),
   PROVIDER_TIMEOUT_MS: int(8000, 1, 60000),
-  TTS_TIMEOUT_MS: int(15000, 1, 60000),
+  TTS_TIMEOUT_MS: int(30000, 1, 60000),
   BUDGET_DAILY_USD: z.preprocess(emptyToUndefined, z.coerce.number().positive().max(1).default(1)),
   BUDGET_TOTAL_USD: z.preprocess(emptyToUndefined, z.coerce.number().positive().max(10).default(10)),
   BUDGET_MAX_PLANS_PER_DAY: int(20, 1, 20),
@@ -73,6 +78,8 @@ export interface ServerConfig {
   openai: {
     llm: 'mock' | 'openai'; tts: 'mock' | 'openai'; apiKey: string | undefined;
     textModel: string | undefined; ttsModel: string | undefined; voice: string | undefined;
+    /** 覆寫預設聲線指示；未設時 TTS provider 使用內建 B2 instructions。 */
+    ttsInstructions: string | undefined;
     reason: string | null; killSwitch: () => boolean; killSwitchFile: string;
     maxOutputTokens: number; providerTimeoutMs: number; ttsTimeoutMs: number;
     inputPrice: number | undefined; outputPrice: number | undefined; ttsPrice: number | undefined;
@@ -133,6 +140,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
     openai: {
       llm: env.LLM_PROVIDER, tts: env.TTS_PROVIDER, apiKey: env.OPENAI_API_KEY,
       textModel: env.OPENAI_TEXT_MODEL, ttsModel: env.OPENAI_TTS_MODEL, voice: env.OPENAI_TTS_VOICE,
+      ttsInstructions: env.OPENAI_TTS_INSTRUCTIONS,
       reason, killSwitch: () => source.REAL_PROVIDERS_KILL_SWITCH === 'true', killSwitchFile: env.KILL_SWITCH_FILE,
       maxOutputTokens: env.OPENAI_MAX_OUTPUT_TOKENS, providerTimeoutMs: env.PROVIDER_TIMEOUT_MS, ttsTimeoutMs: env.TTS_TIMEOUT_MS,
       inputPrice, outputPrice, ttsPrice, ledgerPath: env.BUDGET_LEDGER_PATH,

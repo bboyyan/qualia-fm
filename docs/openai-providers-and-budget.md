@@ -8,9 +8,9 @@
 
 LLM 與 TTS 建構子都必須收到 fetchImpl；只有正式 app 組裝會傳入平台 fetch，預設 mock 不會發出 OpenAI 請求。請求固定為 `https://api.openai.com/v1/responses` 或 `/audio/speech`，禁止 redirect，不接受模型／使用者提供的端點。金鑰只放 Authorization，供應商本文與原始錯誤不回傳或寫入日誌。
 
-`OpenAIEditorialPlanner` 使用 Responses 的 `text.format` JSON Schema／strict Structured Outputs，永遠提供 max_output_tokens 且 store=false。system prompt 與 schema 複製為 `resources.ts`，測試逐字比對 prompt 與唯讀 handoff 原檔。使用者資料只放 user 角色的 JSON，system 角色固定；來源仍是既有 EditorialInput allowlist，不傳 Spotify 回應、解析結果或憑證。回應 JSON 仍是不受信任資料，PlanService 的 PlanDraftSchema、ID 驗證及最多 MAX_LLM_CALLS_PER_PLAN 次呼叫保留；無效 JSON 視為無效草稿，消耗同一個修復額度。
+`OpenAIEditorialPlanner` 使用 Responses 的 `text.format` JSON Schema／strict Structured Outputs，永遠提供 max_output_tokens 且 store=false。system prompt 與 schema 複製為 `resources.ts`，測試逐字比對 prompt 與 handoff 原檔（`handoff/prompts/sonic-qualia-system.md`），修改時兩處必須同步。使用者資料只放 user 角色的 JSON，system 角色固定；來源仍是既有 EditorialInput allowlist，不傳 Spotify 回應、解析結果或憑證。回應 JSON 仍是不受信任資料，PlanService 的 PlanDraftSchema、ID 驗證及最多 MAX_LLM_CALLS_PER_PLAN 次呼叫保留；無效 JSON 視為無效草稿，消耗同一個修復額度。
 
-`OpenAITtsProvider` 固定要求「台灣國語口音、自然有呼吸、親切電台 DJ。不模仿特定真人。」模型必須由管理者確認支援 instructions；不支援時保留文字、提示語音無法使用。送出前以 Intl.Segmenter 檢查 1–80 grapheme clusters。每個節目最多合成五段 seed 台詞；成功的 AI 段落退回 seed Bridge（移除可選 transitionBridge），避免相鄰順序變化時播放錯誤台詞，也避免另花五段 transition 費用。mock 的 transition 行為保留。
+`OpenAITtsProvider` 預設送出 B2 繁中詳細聲線指示（見下節「TTS 聲線：B2 組合」），可用 `OPENAI_TTS_INSTRUCTIONS` 覆寫。模型必須由管理者確認支援 instructions；不支援時保留文字、提示語音無法使用。送出前以 Intl.Segmenter 檢查 1–80 grapheme clusters。每個節目最多合成五段 seed 台詞；成功的 AI 段落退回 seed Bridge（移除可選 transitionBridge），避免相鄰順序變化時播放錯誤台詞，也避免另花五段 transition 費用。mock 的 transition 行為保留。
 
 API 的 `speech.kind=ai_audio` 必須含 `aiVoice: true`，DJ 區塊顯示「AI 合成語音」。語音檔由既有單一 audio adapter 讀取同源 `/api/media/tts/:showId/:segmentId/:hash`，route 驗 session、節目與 segment 所有權，再比對 locator；其他 session 取不到。`POST /api/tts` 可重建已擁有 AI segment 的 seed 台詞，使用伺服器 voice，忽略用戶 voiceId；不能提交任意台詞或 transition。MOCK 仍拒絕此 API。
 
@@ -23,6 +23,20 @@ API 的 `speech.kind=ai_audio` 必須含 `aiVoice: true`，DJ 區塊顯示「AI 
 - TTS（伺服器合成）：失敗時該段保留文字介紹＋提示音（mock_chime，介紹區如實標示「MOCK 提示音，非 AI 語音」並可「跳過介紹」），顯示「AI 語音本輪改為文字介紹＋提示音：原因」；本輪第一次失敗後不再嘗試其餘段落，避免逾時連鎖與重複預扣。
 - TTS（手機播放）：AI 音檔播放失敗（如快取過期 404、斷網）時不擋音樂（AC17），直接進曲目，同時在收聽頁顯示文字介紹全文與「重試語音」（在使用者點擊內重播介紹）。自動播放被擋則照舊顯示「點一下繼續」，介紹文字仍在。
 - iPhone 手勢：「開始收聽」的點擊同步執行 loadShow＋play，第一段 AI 介紹的 `audio.play()` 在同一個點擊內發出；之後同一個 audio 元素連續切換來源。媒體路由用 `sendFile` 回應 Range（206），iOS Safari 播放 `<audio>` 需要此行為。
+
+### TTS 聲線：B2 組合（2026-10-05 曄試聽選定）
+
+iPhone 實測原本的聲線「不像台灣腔」。用同一段文稿比較 voice、instructions 與文字寫法（BRA-99 A/B 樣本，直接呼叫 speech API，費用在服務帳本外，約 US$0.02），曄試聽後選 **B2**：
+
+- **voice=`cedar`**：用 `OPENAI_TTS_VOICE=cedar` 設定（放在 repo 外的 env 檔，改完重啟服務；快取 key 含 voice，會重新合成）。程式不寫死 voice。
+- **instructions：繁中詳細版（instr-zh，約 170 字）**，為 `tts.ts` 的 `DEFAULT_INSTRUCTIONS`，內容如下：
+  > 請用台灣華語（臺灣國語）的口音朗讀，像台北在地的深夜電台主持人在跟朋友聊天。語氣溫暖、低調、放鬆，語速自然偏慢，句與句之間有輕輕的停頓和呼吸。使用台灣人日常口語的聲調與節奏，輕聲與語尾助詞（啊、喔、吧）要自然，不要捲舌過度。不要大陸普通話的播音腔，不要兒化音，不要過度戲劇化或推銷感。英文歌名用清楚、自然的英語發音念出，念完再回到台灣華語。
+- **`OPENAI_TTS_INSTRUCTIONS`（選填）**：不改程式就能調整聲線。空值或只有空白都當成未設，改用上面的預設。上限 1500 個 Unicode code points，超過會讓 env 驗證失敗、服務拒絕啟動，錯誤只列欄位名稱。快取 key 用的是實際送出的 instructions，所以改指示後同一句台詞會重新合成（並重新計費），不會播到舊聲線的檔案。
+- **口語台灣用語文稿**：選歌 system prompt 的「語言與 DJ」一節加了一條規則：使用台灣用語，不寫「視頻」「質量」「信息」「質感」等大陸用語；DJ 台詞用口語短句；數字寫中文念法，但曲名原文中的數字照原樣保留；英文歌名前可以用「英文名字是」之類的說法帶出。既有硬規則（30–55 grapheme 目標、上限 80、不得引用歌詞、不模仿特定真人、djLine 可單獨依 Seed 成立）全部保留。AI 語音標示（`aiVoice: true`、「AI 合成語音」）由程式與 UI 保證，與 prompt 無關。
+
+**時長與逾時**：instructions 要求「偏慢」，試聽時 60–70 字約 12–15 秒（舊聲線約 6–8 秒）；30–55 字的台詞預計約 7–11 秒，達到 80 grapheme 上限時約 20 秒以上。speech 請求是非串流的，要等整段音訊產生完畢，因此 `TTS_TIMEOUT_MS` 預設從 15000 放寬到 30000（範圍仍是 1–60000）。注意：整輪的 `PLAN_DEADLINE_MS`（預設 60000）仍包含 LLM 加上最多五段依序合成的時間，deadline 到了整輪會中止。如果實際延遲接近上限，再評估要不要調高 deadline 或縮短台詞。
+
+**費用**：預算估算沒有改。TTS 仍以台詞 Unicode code points × `OPENAI_PRICE_TTS_PER_1M_CHARS`（簽收的保守全費用上界）預扣與結算，instructions 長度不算進預扣。試聽時以每百萬字元 US$60 的保守算法，每段約 US$0.0038；依官方公開價估算的實際費用約 US$0.0031–0.0040，大致都在保守值附近。若要把 instructions 調得比預設長很多，或台詞明顯變短，需重新確認字元單價仍能涵蓋 instructions 的輸入 token 與音訊輸出費用。
 
 官方請求格式依 [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs) 與 [Text to speech](https://developers.openai.com/api/docs/guides/text-to-speech) 核對；這不是帳號模型可用性或實際單價的證明。
 
@@ -46,13 +60,14 @@ API 的 `speech.kind=ai_audio` 必須含 `aiVoice: true`，DJ 區塊顯示「AI 
 | OPENAI_API_KEY | 無 | 僅後端憑證；缺少時明確降級 |
 | OPENAI_REAL_CALLS_APPROVED | false | 曄簽收上限數字後才可設 true |
 | OPENAI_TEXT_MODEL | 無 | 必須明確填帳號可用的 Structured Outputs 模型 |
-| OPENAI_TTS_MODEL / OPENAI_TTS_VOICE | 無 | 必須明確填支援 instructions 的模型（`tts-1`／`tts-1-hd` 不支援，設定即降級）與非真人模仿 voice |
+| OPENAI_TTS_MODEL / OPENAI_TTS_VOICE | 無 | 必須明確填支援 instructions 的模型（`tts-1`／`tts-1-hd` 不支援，設定即降級）與非真人模仿 voice；B2 選定 `cedar` |
+| OPENAI_TTS_INSTRUCTIONS | 無（用內建 B2 instr-zh），≤1500 code points | 覆寫 TTS 聲線指示；空值／空白視為未設，超長拒絕啟動 |
 | OPENAI_MAX_OUTPUT_TOKENS | 4096，256–16384 | 每次模型輸出硬上限，含模型回報的輸出用量 |
 | OPENAI_PRICE_INPUT_PER_1M_TOKENS | 無，>0 且 ≤100000 | USD／一百萬輸入 tokens，無快取折扣 |
 | OPENAI_PRICE_OUTPUT_PER_1M_TOKENS | 無，>0 且 ≤100000 | USD／一百萬輸出 tokens |
 | OPENAI_PRICE_TTS_PER_1M_CHARS | 無，>0 且 ≤100000 | USD／一百萬 Unicode code points 的保守全費用上界 |
 | PROVIDER_TIMEOUT_MS | 8000，1–60000 | LLM 單次 HTTP／讀取本文 timeout |
-| TTS_TIMEOUT_MS | 15000，1–60000 | TTS 單次 HTTP／讀取本文 timeout |
+| TTS_TIMEOUT_MS | 30000，1–60000 | TTS 單次 HTTP／讀取本文 timeout；B2 慢語速，從 15000 放寬 |
 | PLAN_DEADLINE_MS | 60000，1000–120000 | 沿用整輪 deadline |
 | MAX_LLM_CALLS_PER_PLAN | 2，1–2 | 初始＋唯一 repair，不能另加補位呼叫 |
 | BUDGET_DAILY_USD | 1，>0 且 ≤1 | 每個台北日最多 US$ 1 |
@@ -73,7 +88,7 @@ API 的 `speech.kind=ai_audio` 必須含 `aiVoice: true`，DJ 區塊顯示「AI 
 
 1. 整輪真實 plan 開始前先持久化扣一個 plan 額度，LLM 與「僅 TTS」都適用。修復不再扣第二個 plan，既有 idempotency 不重複計數。被 gate 拒絕的 mock 降級不消耗真實 plan 額度；已取得額度但取消／失敗的嘗試保留計數。
 2. LLM 每次發出前，以完整請求 JSON 的 UTF-8 位元組數加 2048 tokens 框架餘裕（`REQUEST_OVERHEAD_TOKENS`），乘輸入單價，加 max_output_tokens 乘輸出單價預扣。依據：BPE token 至少對應 1 個位元組，位元組數本身已是內容 token 上界（中文約 3 位元組／字、約 1 token／字，已高估約 3 倍）；餘裕只需涵蓋訊息框架與 schema 轉換差額。原本的 8192 讓輸入預扣再翻倍（實測 20 筆歷史的請求約 8.6 KB），改 2048 仍保守。單次預扣若超過每日額度的 10%（`MAX_CALL_SHARE_OF_DAILY`）直接拒絕、不發請求，並在設定頁顯示原因——避免選到貴模型或把 OPENAI_MAX_OUTPUT_TOKENS 調太大時一次吃光日額。參考：以 US$0.40／1.60 每百萬 token 的單價，一次呼叫預扣約 US$0.011；US$2／8 約 US$0.05（皆 ≤ 日額 10%）。成功取得可信的 usage 數值後，按 input_tokens／output_tokens 結算並釋放金額差額；被截斷（status=incomplete）的輸出視為無效草稿，仍按 usage 結算；輸出 schema 驗證仍獨立執行。
-3. TTS 先以 Unicode code points 乘單價預扣金額，另以 grapheme clusters 扣每日字數；code points 可大於 graphemes，避免組合 emoji 低估費用。成功依送出字元數結算。hash 包含文字＋voice＋model＋instructions；相同內容命中磁碟快取不呼叫也不重複扣費／字數，跨重啟有效。命中仍先檢查停止 gate。過期先刪除，超額用 atime 淘汰，保護剛回傳的音檔；快取可被淘汰，不能承諾永久播放。
+3. TTS 先以 Unicode code points 乘單價預扣金額，另以 grapheme clusters 扣每日字數；code points 可大於 graphemes，避免組合 emoji 低估費用。成功依送出字元數結算。hash 包含文字＋voice＋model＋實際送出的 instructions（預設或 env 覆寫）；相同內容命中磁碟快取不呼叫也不重複扣費／字數，跨重啟有效。命中仍先檢查停止 gate。過期先刪除，超額用 atime 淘汰，保護剛回傳的音檔；快取可被淘汰，不能承諾永久播放。
 4. 日界線固定為 UTC+8（Asia/Taipei），與伺服器時區無關。跨午夜完成的 commit 仍結算在原 reserve 日期。總額不因換日清零。
 5. 呼叫與預扣共用 concurrency=1 FIFO，LLM 與 TTS 不會同時進入 provider；每次取得鎖後再次檢查 gate。停止檔／環境停止旗標阻擋新的呼叫，不撤回已送到供應商的請求；取消與 timeout 使用 AbortSignal。
 6. **失敗、逾時、abort、拒絕或 usage 不可確認，一律保守保留完整預扣與字數。** 供應商可能已計費，不能憑本地 timeout 免費重試。即使 crash／重啟，檔案已包含預扣，不自動釋放。這可能提早用完額度，需曄對照帳單人工處理。
@@ -98,7 +113,8 @@ touch ~/.config/qualia/openai.env && chmod 600 ~/.config/qualia/openai.env
 #   TTS_PROVIDER=openai
 #   OPENAI_TEXT_MODEL=<帳號可用、支援 Structured Outputs 的模型>
 #   OPENAI_TTS_MODEL=<支援 instructions 的模型，例如 gpt-4o-mini-tts 系列>
-#   OPENAI_TTS_VOICE=<內建 voice，例如 coral>
+#   OPENAI_TTS_VOICE=cedar   # B2 試聽選定
+#   OPENAI_TTS_INSTRUCTIONS=  # 選填，空值用內建 B2 聲線指示
 #   OPENAI_PRICE_INPUT_PER_1M_TOKENS=<當期單價>
 #   OPENAI_PRICE_OUTPUT_PER_1M_TOKENS=<當期單價>
 #   OPENAI_PRICE_TTS_PER_1M_CHARS=<涵蓋文字＋音訊的保守全費用上界>

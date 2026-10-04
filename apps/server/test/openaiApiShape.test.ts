@@ -73,6 +73,6 @@ it('Speech API：端點、欄位名稱、mp3、instructions 固定聲線；金�
   expect(new Headers(init?.headers).get('authorization')).toBe('Bearer TEST-fake-secret');
   const body = JSON.parse(String(init?.body));
   expect(Object.keys(body).sort()).toEqual(['input', 'instructions', 'model', 'response_format', 'voice']);
-  expect(body).toEqual({ model: 'TEST-tts', voice: 'TEST-voice', input: '晚安，這首歌陪你回家。', instructions: expect.stringContaining('台灣國語'), response_format: 'mp3' });
+  expect(body).toEqual({ model: 'TEST-tts', voice: 'TEST-voice', input: '晚安，這首歌陪你回家。', instructions: expect.stringContaining('臺灣國語'), response_format: 'mp3' });
   expect([...body.input].length).toBeLessThanOrEqual(4096);
 });

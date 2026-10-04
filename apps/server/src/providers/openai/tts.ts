@@ -6,25 +6,27 @@ import type { OpenAIConfig, RealProviderRuntime } from '../../budget/runtime.js'
 import { AppError } from '../../http/errors.js';
 import { openAIRequest } from './http.js';
 
-const INSTRUCTIONS = '台灣國語口音、自然有呼吸、親切電台 DJ。不模仿特定真人。';
+/** B2 試聽選定的繁中詳細聲線指示（搭配 voice=cedar）；可由 OPENAI_TTS_INSTRUCTIONS 覆寫。 */
+const DEFAULT_INSTRUCTIONS = '請用台灣華語（臺灣國語）的口音朗讀，像台北在地的深夜電台主持人在跟朋友聊天。語氣溫暖、低調、放鬆，語速自然偏慢，句與句之間有輕輕的停頓和呼吸。使用台灣人日常口語的聲調與節奏，輕聲與語尾助詞（啊、喔、吧）要自然，不要捲舌過度。不要大陸普通話的播音腔，不要兒化音，不要過度戲劇化或推銷感。英文歌名用清楚、自然的英語發音念出，念完再回到台灣華語。';
 export interface AiSpeech { kind: 'ai_audio'; aiVoice: true; url: string }
-/** 文字、model、voice 與固定聲線指示共同決定快取；原文與金鑰不寫入快取名稱。 */
+/** 文字、model、voice 與實際送出的聲線指示共同決定快取；原文與金鑰不寫入快取名稱。 */
 export class OpenAITtsProvider {
   constructor(private readonly config: OpenAIConfig, private readonly runtime: RealProviderRuntime, private readonly fetchImpl: typeof fetch, private readonly now = Date.now) {}
   async synthesize(text: string, signal: AbortSignal): Promise<AiSpeech> {
     const graphemes = countGraphemes(text);
     if (graphemes < 1 || graphemes > 80) throw new AppError('INVALID_INPUT', { message: 'DJ 台詞須為 1–80 grapheme clusters。' });
     if (this.config.tts !== 'openai' || !this.config.ttsModel || !this.config.voice || !this.config.apiKey || !this.config.ttsPrice) throw new AppError('FEATURE_RESTRICTED');
+    const instructions = this.config.ttsInstructions ?? DEFAULT_INSTRUCTIONS;
     return this.runtime.serial(signal, async () => {
-      const key = createHash('sha256').update(JSON.stringify([text, this.config.voice, this.config.ttsModel, INSTRUCTIONS])).digest('hex');
+      const key = createHash('sha256').update(JSON.stringify([text, this.config.voice, this.config.ttsModel, instructions])).digest('hex');
       const locator: AiSpeech = { kind: 'ai_audio', aiVoice: true, url: `/api/media/tts/${key}` };
       this.clean();
       if (this.read(key)) return locator;
-      // chars 計價以 Unicode code points 保守上界預扣，grapheme 另計每日額度。
+      // chars 計價以 Unicode code points 保守上界預扣，grapheme 另計每日額度；instructions 費用由簽收單價涵蓋。
       const usd = [...text].length * this.config.ttsPrice! / 1e6;
       return this.runtime.charge({ usd, graphemes }, async () => {
         const bytes = await openAIRequest(this.fetchImpl, this.config.apiKey!, 'audio/speech', {
-          model: this.config.ttsModel, voice: this.config.voice, input: text, instructions: INSTRUCTIONS, response_format: 'mp3',
+          model: this.config.ttsModel, voice: this.config.voice, input: text, instructions, response_format: 'mp3',
         }, signal, this.config.ttsTimeoutMs, async (response) => Buffer.from(await response.arrayBuffer()));
         if (!bytes.length || bytes.length > this.config.cacheMaxMb * 1024 * 1024) throw new AppError('FEATURE_RESTRICTED');
         const file = join(this.config.cacheDir, `${key}.mp3`);

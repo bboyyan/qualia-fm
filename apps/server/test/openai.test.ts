@@ -27,3 +27,13 @@ it('Structured Outputs 使用指定模型、token 上限、同步 prompt；資�
   expect(runtime.ledger!.snapshot().totalUsd).toBeCloseTo(0.00005);
   expect(SYSTEM_PROMPT).toBe(readFileSync('handoff/prompts/sonic-qualia-system.md', 'utf8'));
 });
+it('選歌提示詞要求台灣用語（禁大陸用語、數字中文念法、口語 DJ），且既有 DJ 硬規則全部保留', () => {
+  const md = readFileSync('handoff/prompts/sonic-qualia-system.md', 'utf8');
+  expect(SYSTEM_PROMPT).toBe(md);
+  for (const term of ['視頻', '質量', '信息', '質感']) expect(SYSTEM_PROMPT, term).toContain(`「${term}」`);
+  expect(SYSTEM_PROMPT).toMatch(/台灣用語/);
+  expect(SYSTEM_PROMPT).toMatch(/數字.*中文念法/);
+  expect(SYSTEM_PROMPT).toContain('英文名字是');
+  for (const rule of ['30–55 grapheme clusters', '上限80', '不得引用歌詞', '不說自己真實身份或模仿特定真人', 'djLine 應能單獨依 Seed 成立'])
+    expect(SYSTEM_PROMPT, rule).toContain(rule);
+});

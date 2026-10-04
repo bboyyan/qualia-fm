@@ -23,6 +23,7 @@ describe('loadConfig', () => {
     const config = loadConfig(env);
     expect(config.openai).toMatchObject({ llm: 'mock', tts: 'mock', reason: null });
     expect(config.openai.budget).toEqual({ dailyUsd: 1, totalUsd: 10, plansPerDay: 20, graphemesPerDay: 4000 });
+    expect(config.openai).toMatchObject({ ttsTimeoutMs: 30_000, ttsInstructions: undefined });
   });
 
   it('treats empty env values (as in .env.example) as defaults', () => {
@@ -47,6 +48,25 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ OPENAI_MAX_OUTPUT_TOKENS: '0' })).toThrow(ConfigError);
     expect(() => loadConfig({ OPENAI_MAX_OUTPUT_TOKENS: '16385' })).toThrow(ConfigError);
     expect(loadConfig({ LLM_PROVIDER: 'openai', OPENAI_API_KEY: 'TEST', OPENAI_REAL_CALLS_APPROVED: 'true' }).openai.reason).toContain('設定');
+  });
+
+  it('OPENAI_TTS_INSTRUCTIONS：未設、空值或只有空白視為未設；有值則保留', () => {
+    expect(loadConfig({}).openai.ttsInstructions).toBeUndefined();
+    expect(loadConfig({ OPENAI_TTS_INSTRUCTIONS: '' }).openai.ttsInstructions).toBeUndefined();
+    expect(loadConfig({ OPENAI_TTS_INSTRUCTIONS: '  \n ' }).openai.ttsInstructions).toBeUndefined();
+    expect(loadConfig({ OPENAI_TTS_INSTRUCTIONS: '溫暖的台灣電台聲線。' }).openai.ttsInstructions).toBe('溫暖的台灣電台聲線。');
+  });
+
+  it('OPENAI_TTS_INSTRUCTIONS 上限 1500 字元（code points），超長拒絕啟動', () => {
+    expect(loadConfig({ OPENAI_TTS_INSTRUCTIONS: '台'.repeat(1500) }).openai.ttsInstructions).toHaveLength(1500);
+    expect(() => loadConfig({ OPENAI_TTS_INSTRUCTIONS: '台'.repeat(1501) })).toThrow(ConfigError);
+    expect(() => loadConfig({ OPENAI_TTS_INSTRUCTIONS: '😀'.repeat(1501) })).toThrow(/OPENAI_TTS_INSTRUCTIONS/);
+  });
+
+  it('TTS_TIMEOUT_MS 預設 30000（慢語速 B2 聲線），範圍 1–60000', () => {
+    expect(loadConfig({}).openai.ttsTimeoutMs).toBe(30_000);
+    expect(loadConfig({ TTS_TIMEOUT_MS: '60000' }).openai.ttsTimeoutMs).toBe(60_000);
+    expect(() => loadConfig({ TTS_TIMEOUT_MS: '60001' })).toThrow(ConfigError);
   });
 
   it('does not echo secret values in validation errors', () => {
