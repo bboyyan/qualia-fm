@@ -35,3 +35,20 @@ it.each(['show', 'feedback', 'plan'] as const)('存取 %s 會延長保留，無�
   await waitForJob(client, (await postPlan(client, planRequest())).body.jobId);
   await client.agent.get(`/api/shows/${show.showId}`).expect(404);
 });
+
+it('只透過 job 輪詢（不直接讀 show），跨過多個保留期後 job 與 show 都仍存活', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const retentionMs = 60_000;
+  const { app } = testApp({}, { store: new JobStore(Date.now, retentionMs) });
+  const client = await bootstrap(app);
+  const job = await waitForJob(client, (await postPlan(client, planRequest())).body.jobId);
+  // 每 50 秒只輪詢一次 job，再開新台觸發清理；總時長 150 秒遠超保留期 60 秒。
+  for (let i = 0; i < 3; i += 1) {
+    vi.setSystemTime(Date.now() + 50_000);
+    await waitForJob(client, (await postPlan(client, planRequest())).body.jobId);
+    await client.agent.get(`/api/jobs/${job.jobId}`).expect(200);
+  }
+  vi.setSystemTime(Date.now() + 50_000);
+  await waitForJob(client, (await postPlan(client, planRequest())).body.jobId);
+  await client.agent.get(`/api/shows/${job.showId}`).expect(200);
+});

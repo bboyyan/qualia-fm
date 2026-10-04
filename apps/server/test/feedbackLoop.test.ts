@@ -87,6 +87,25 @@ it.each([undefined, 'TEST-feedback-intent'])('回饋重送回傳相同收據且�
   expect(await ledger.read()).toHaveLength(1);
 });
 
+it.each([undefined, 'TEST-shared-intent'])('同一 show 的兩個 segment 各自記一列，各自重送仍只有兩列：%s', async (clientRequestId) => {
+  const ledger = new InMemoryLedger();
+  const client = await bootstrap(testApp({}, { ledger }).app);
+  const job = await waitForJob(client, (await postPlan(client, planRequest())).body.jobId);
+  const show = (await client.agent.get(`/api/shows/${job.showId}`)).body;
+  const [a, b] = show.segments;
+  const send = (segmentId: string) => client.agent.post('/api/feedback').set('Origin', 'http://127.0.0.1:5173').set('X-CSRF-Token', client.csrf)
+    .send({ showId: show.showId, segmentId, rating: '愛', reason: 'TEST', clientRequestId }).expect(201);
+  const firstA = await send(a.segmentId);
+  const firstB = await send(b.segmentId);
+  expect(await ledger.read()).toHaveLength(2);
+  expect((await send(a.segmentId)).body).toEqual(firstA.body);
+  expect((await send(b.segmentId)).body).toEqual(firstB.body);
+  expect((await ledger.read()).map((row) => row.recommendation)).toEqual([
+    `${a.candidate.artist} — ${a.candidate.title}`,
+    `${b.candidate.artist} — ${b.candidate.title}`,
+  ]);
+});
+
 it('存在的 show 搭配不存在的 segment 回 404，且不寫帳本', async () => {
   const ledger = new InMemoryLedger();
   const client = await bootstrap(testApp({}, { ledger }).app);

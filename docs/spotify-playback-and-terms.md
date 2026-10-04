@@ -61,7 +61,7 @@
 
 **建議（我們的推論）：**今天先保留 MOCK，或由曄自行手動點歌單／使用本站 TEST 回饋；這最符合不花錢、不登入、不接 API 的限制。先確認文字理由與手動流程是否值得繼續，再另票研究已授權音源。這是建議，**不替曄決定，也不把任何選項視為已同意**。
 
-未驗證：iPhone／電腦 SDK、Spotify app／Connect、Premium／allowlist／端點、iPhone 暫停休眠與鎖屏／背景恢復、真實語音與無雙播、個案用途核可。PR 供 **Sylphy** 審查，BRA-101 止於開 PR／In Review；Done 由專案管家或曄關閉，本次不操作 Linear。依賴 BRA-97／PR #1，base 是 `qualia/mvp-t01-t05`；PR #1 合併後需 retarget 到 `main`。本頁可用 git revert 或刪分支回滾。
+未驗證：iPhone／電腦 SDK、Spotify app／Connect、Premium／allowlist／端點、iPhone 暫停休眠與鎖屏／背景恢復、真實語音與無雙播、個案用途核可。本頁可用 git revert 回滾。
 
 ### 待曄決定
 

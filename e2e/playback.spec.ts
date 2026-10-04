@@ -152,4 +152,34 @@ test.describe('T04 播放引擎', () => {
     });
     expect(audio).toEqual({ mark: 'same', paused: false, count: 1 });
   });
+
+  test('device loss while on Settings does not rewind progress after reconnect (B1)', async ({ page }) => {
+    const currentTime = () => page.evaluate(() => (document.querySelector('audio') as HTMLAudioElement).currentTime);
+    const toSeconds = (text: string) => text.split(':').reduce((total, part) => total * 60 + Number(part), 0);
+    // One engine tick (250ms) of staleness plus media-clock jitter.
+    const toleranceS = 0.5;
+    await startListening(page);
+    await page.getByTestId('skip-intro').click();
+    await waitForTrack(page);
+    await expect.poll(currentTime, { timeout: 4_000 }).toBeGreaterThanOrEqual(1);
+    await page.getByTestId('tab-settings').click();
+    const leftListenAt = await currentTime();
+    // Keep playing away from the player long enough that losing the off-tab progress is visible.
+    await expect.poll(currentTime, { timeout: 4_000 }).toBeGreaterThanOrEqual(leftListenAt + 1.5);
+    const lostAt = await currentTime();
+    await page.getByTestId('simulate-device-lost').click();
+    await expect(page.getByTestId('playback-error')).toContainText('播放裝置目前未連線');
+    // Installed while the output is silent, so it records exactly where the reconnect starts.
+    await page.evaluate(() => {
+      const audio = document.querySelector('audio') as HTMLAudioElement;
+      const w = window as unknown as { __qfmResumedAt?: number };
+      audio.addEventListener('playing', () => (w.__qfmResumedAt = audio.currentTime), { once: true });
+    });
+    await page.getByRole('button', { name: '重新連線' }).click();
+    await waitForTrack(page);
+    const resumedAt = await page.evaluate(() => (window as unknown as { __qfmResumedAt?: number }).__qfmResumedAt);
+    expect(resumedAt).toBeGreaterThanOrEqual(lostAt - toleranceS);
+    expect(toSeconds(await elapsed(page))).toBeGreaterThanOrEqual(Math.floor(lostAt - toleranceS));
+    expect((await probe(page)).maxPlaying).toBeLessThanOrEqual(1);
+  });
 });

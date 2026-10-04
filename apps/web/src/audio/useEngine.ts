@@ -7,22 +7,16 @@ export function useEngineState(): EngineState {
   return useSyncExternalStore(engine.subscribe, engine.getState, engine.getState);
 }
 
-const POSITION_TICK_MS = 250;
-
 /**
- * Provider-confirmed position, re-read every 250ms only while audible and the page is visible
- * (no per-frame re-render, no hidden-tab timers). Otherwise the last confirmed value is shown.
+ * Provider-confirmed position. The engine's own 250ms timer persists it while audible, so this
+ * hook only subscribes (no second interval, no extra re-renders); it reads once when the view
+ * becomes active so returning to the player never shows a value up to one tick stale.
  */
 export function usePlaybackPosition(active: boolean): number {
   const engine = getEngine();
   const state = useSyncExternalStore(engine.subscribe, engine.getState, engine.getState);
   useEffect(() => {
-    if (!active) return;
-    engine.positionMs();
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') engine.positionMs();
-    }, POSITION_TICK_MS);
-    return () => window.clearInterval(timer);
+    if (active) engine.positionMs();
   }, [active, engine]);
   return state.positionMs;
 }

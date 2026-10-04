@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PlaybackEngine, classifyPlayError } from '../src/audio/engine';
+import { PlaybackEngine, POSITION_TICK_MS, classifyPlayError, type IntervalTimer } from '../src/audio/engine';
 import type { AdapterEvent, MediaAdapter, OwnerKind, ProviderState, StartRequest } from '../src/audio/types';
 import { makeShow } from './fixtures';
 
@@ -62,12 +62,30 @@ class FakeAdapter implements MediaAdapter {
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
+/** 假時鐘：只有 tick() 才會觸發計時器，可直接觀察目前存活的計時器數量。 */
+class FakeClock implements IntervalTimer {
+  private nextId = 1;
+  readonly active = new Map<number, { callback: () => void; ms: number }>();
+  setInterval(callback: () => void, ms: number): number {
+    const id = this.nextId++;
+    this.active.set(id, { callback, ms });
+    return id;
+  }
+  clearInterval(handle: unknown): void {
+    this.active.delete(handle as number);
+  }
+  tick(): void {
+    for (const { callback } of [...this.active.values()]) callback();
+  }
+}
+
 function setup(djEnabled = true) {
   const adapter = new FakeAdapter();
+  const clock = new FakeClock();
   const announcements: string[] = [];
-  const engine = new PlaybackEngine(adapter, { djEnabled, canSeek: true, onAnnounce: (m) => announcements.push(m) });
+  const engine = new PlaybackEngine(adapter, { djEnabled, canSeek: true, onAnnounce: (m) => announcements.push(m), timer: clock });
   engine.loadShow(makeShow());
-  return { adapter, engine, announcements };
+  return { adapter, engine, announcements, clock };
 }
 
 describe('PlaybackEngine', () => {
@@ -254,4 +272,93 @@ it('輪詢 positionMs 會保存進度，provider 消失後復原仍從最後位�
   expect(engine.getState().error?.code).toBe('DEVICE_UNAVAILABLE');
   engine.play();
   expect(adapter.starts.at(-1)).toMatchObject({ owner: 'track', fromMs: 14_000 });
+});
+
+describe('engine 自有的播放位置計時器（B1）', () => {
+  const live = (positionMs: number) => () => ({ positionMs, durationMs: 30_000, paused: false, ready: true });
+
+  it('沒有任何人呼叫 positionMs()、沒有 hook 輪詢，裝置先消失再通知斷線，重連仍從 live 位置開始', async () => {
+    const { adapter, engine, clock } = setup(false);
+    engine.play();
+    adapter.confirm();
+    adapter.getState = live(20_000);
+    clock.tick();
+    adapter.getState = () => null;
+    engine.deviceLost();
+    await flush();
+    expect(engine.getState().error?.code).toBe('DEVICE_UNAVAILABLE');
+    engine.play();
+    expect(adapter.starts.at(-1)).toMatchObject({ owner: 'track', fromMs: 20_000 });
+  });
+
+  it('deviceLost() 在 dispatch 前同步擷取 live 位置，未經任何 tick 也不倒退', async () => {
+    const { adapter, engine } = setup(false);
+    engine.play();
+    adapter.confirm();
+    adapter.getState = live(20_000);
+    engine.deviceLost();
+    adapter.getState = () => null;
+    await flush();
+    engine.play();
+    expect(adapter.starts.at(-1)).toMatchObject({ owner: 'track', fromMs: 20_000 });
+  });
+
+  it('計時器只在 speaking／track_playing 時存在且最多一個，間隔為 250ms', () => {
+    const { adapter, engine, clock } = setup(true);
+    expect(clock.active.size).toBe(0);
+    engine.play();
+    expect(clock.active.size).toBe(0);
+    adapter.confirm();
+    expect(engine.getState().phase).toBe('speaking');
+    expect([...clock.active.values()].map((t) => t.ms)).toEqual([POSITION_TICK_MS]);
+    expect(POSITION_TICK_MS).toBe(250);
+    adapter.end(engine.getState().attemptId, 'speech');
+    expect(engine.getState().phase).toBe('loading_track');
+    expect(clock.active.size).toBe(0);
+    adapter.confirm();
+    expect(clock.active.size).toBe(1);
+    engine.pause();
+    expect(clock.active.size).toBe(0);
+    engine.play();
+    adapter.confirm();
+    expect(engine.getState().phase).toBe('track_playing');
+    expect(clock.active.size).toBe(1);
+    engine.reset();
+    expect(clock.active.size).toBe(0);
+  });
+
+  it('播放結束進入回饋時停止計時', () => {
+    const adapter = new FakeAdapter();
+    const clock = new FakeClock();
+    const engine = new PlaybackEngine(adapter, { djEnabled: false, canSeek: true, feedbackEnabled: true, timer: clock });
+    engine.loadShow(makeShow());
+    engine.play();
+    adapter.confirm();
+    expect(clock.active.size).toBe(1);
+    adapter.end(engine.getState().attemptId, 'track');
+    expect(engine.getState().phase).toBe('feedback');
+    expect(clock.active.size).toBe(0);
+  });
+
+  it('tick 把 live 位置寫進 state 並通知訂閱者；destroy 後不再 tick 也不再讀 adapter', () => {
+    const { adapter, engine, clock } = setup(false);
+    engine.play();
+    adapter.confirm();
+    let reads = 0;
+    adapter.getState = () => {
+      reads += 1;
+      return { positionMs: 5_000 + reads, durationMs: 30_000, paused: false, ready: true };
+    };
+    let notified = 0;
+    engine.subscribe(() => (notified += 1));
+    const tick = [...clock.active.values()][0]!.callback;
+    tick();
+    expect(engine.getState().positionMs).toBe(5_001);
+    expect(notified).toBe(1);
+    engine.destroy();
+    expect(clock.active.size).toBe(0);
+    tick();
+    expect(reads).toBe(1);
+    expect(engine.getState().positionMs).toBe(5_001);
+  });
 });
