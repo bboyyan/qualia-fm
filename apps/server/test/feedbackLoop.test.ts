@@ -24,3 +24,17 @@ it('V4 waits for ledger before planner and includes the saved rating and reason 
   expect(inputs).toHaveLength(2);
   expect(inputs.map((input) => input.history)).toEqual([await ledger.read(), await ledger.read()]);
 });
+
+it('V4 ledger failure completes with only confirmed seed and an explicit warning', async () => {
+  const inputs: EditorialInput[] = [];
+  const mock = new MockEditorialPlanner();
+  const client = await bootstrap(testApp({}, {
+    ledger: { append: async () => { throw new Error('TEST'); }, read: async () => { throw new Error('TEST unavailable'); } },
+    planner: { draft: async (input, context) => { inputs.push(input); return mock.draft(input, context); } },
+  }).app);
+  const job = await waitForJob(client, (await postPlan(client, { ...planRequest(), tuning: 'TEST tuning' })).body.jobId);
+  expect(job.status).toBe('completed');
+  expect(inputs[0]).toMatchObject({ seedKind: 'song', seedText: 'Time Flows Ever Onward', seedArtist: 'Evan Call', tuning: null, history: [] });
+  const show = await client.agent.get(`/api/shows/${job.showId}`);
+  expect(show.body.warnings).toContain('未讀到帳本：本輪只用種子曲。');
+});

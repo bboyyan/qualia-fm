@@ -5,6 +5,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import {
   PlanDraftSchema,
+  CONFIRMED_SEED,
   type Candidate,
   type JobInfo,
   type JobPhase,
@@ -135,10 +136,20 @@ export class PlanService {
     const deadline = setTimeout(() => job.controller.abort('timeout'), this.deps.config.limits.planDeadlineMs);
     deadline.unref?.();
     try {
-      const history = await this.deps.ledger.read(signal);
+      let request = input.request;
+      let warning: string | null = null;
+      let history: EditorialInput['history'] = [];
+      try {
+        history = await this.deps.ledger.read(signal);
+      } catch {
+        if (signal.aborted) throw signal.reason;
+        request = { ...request, seed: { ...CONFIRMED_SEED }, tuning: null };
+        warning = '未讀到帳本：本輪只用種子曲。';
+      }
       if (signal.aborted) throw signal.reason;
-      const editorial = { ...toEditorialInput(input.request), history };
-      const plan = await this.pipeline(job.jobId, editorial, input, signal);
+      const editorial = { ...toEditorialInput(request), history };
+      const result = await this.pipeline(job.jobId, editorial, { ...input, request }, signal);
+      const plan = warning ? { ...result, warnings: [...result.warnings, warning] } : result;
       this.deps.store.putShow(job.ownerId, plan, this.deps.now());
       this.finish(job, plan);
     } catch (error: unknown) {
