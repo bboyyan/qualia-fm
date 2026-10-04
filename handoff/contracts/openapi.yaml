@@ -1,0 +1,885 @@
+openapi: 3.1.0
+info:
+  title: Qualia FM MVP API
+  version: 1.0.0
+  description: Implementation contract, not a running service. Enforce documented
+    grapheme, identity, ownership, policy and budget rules in addition to schema.
+servers:
+- url: /
+paths:
+  /api/health:
+    get:
+      summary: Liveness without private configuration
+      operationId: get_health
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                required:
+                - ok
+                additionalProperties: false
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security: []
+  /api/session:
+    post:
+      summary: Create anonymous private-test session; validate Origin and rate limit
+      operationId: post_session
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionInfo'
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security: []
+  /api/capabilities:
+    get:
+      summary: Return enforced capabilities and restrictions
+      operationId: get_capabilities
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Capabilities'
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - sessionCookie: []
+  /api/plan:
+    post:
+      summary: Start cancellable generation
+      operationId: post_plan
+      responses:
+        '202':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobInfo'
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanRequest'
+      parameters:
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          type: string
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+  /api/jobs/{jobId}:
+    get:
+      summary: Read owned generation status
+      operationId: get_jobs_jobId
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobInfo'
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - sessionCookie: []
+      parameters:
+      - in: path
+        name: jobId
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: Cancel owned generation idempotently
+      operationId: delete_jobs_jobId
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobInfo'
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - sessionCookie: []
+      parameters:
+      - in: path
+        name: jobId
+        required: true
+        schema:
+          type: string
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          type: string
+  /api/shows/{showId}:
+    get:
+      summary: Read immutable owned ShowPlan
+      operationId: get_shows_showId
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShowPlan'
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - sessionCookie: []
+      parameters:
+      - in: path
+        name: showId
+        required: true
+        schema:
+          type: string
+  /api/tts:
+    post:
+      summary: Synthesize approved server-owned segment text only
+      operationId: post_tts
+      responses:
+        '202':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TtsInfo'
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '200':
+          description: Cache ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TtsInfo'
+      security:
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TtsRequest'
+      parameters:
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          type: string
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+  /api/tts/{ttsId}:
+    get:
+      summary: Read owned speech generation status
+      operationId: get_tts_ttsId
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TtsInfo'
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - sessionCookie: []
+      parameters:
+      - in: path
+        name: ttsId
+        required: true
+        schema:
+          type: string
+  /api/media/tts/{ttsId}:
+    get:
+      summary: Read private owned speech audio
+      operationId: get_media_tts_ttsId
+      responses:
+        '200':
+          description: Success
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - sessionCookie: []
+      parameters:
+      - in: path
+        name: ttsId
+        required: true
+        schema:
+          type: string
+  /api/auth/spotify/start:
+    get:
+      summary: Start PKCE only when server policy gate permits
+      operationId: get_auth_spotify_start
+      responses:
+        '302':
+          description: Success
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security: []
+  /api/auth/spotify/callback:
+    get:
+      summary: Validate state once and exchange code; redirect without tokens
+      operationId: get_auth_spotify_callback
+      responses:
+        '303':
+          description: Success
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security: []
+      parameters:
+      - name: code
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: state
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: error
+        in: query
+        required: false
+        schema:
+          type: string
+  /api/auth/spotify/token:
+    get:
+      summary: Short-lived access token for SDK; no refresh token; no-store
+      operationId: get_auth_spotify_token
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  expiresAt:
+                    type: string
+                    format: date-time
+                required:
+                - accessToken
+                - expiresAt
+                additionalProperties: false
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - sessionCookie: []
+  /api/auth/logout:
+    post:
+      summary: Abort jobs and delete private session state
+      operationId: post_auth_logout
+      responses:
+        '204':
+          description: Success
+        default:
+          description: Typed error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - sessionCookie: []
+      parameters:
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          type: string
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: qualia_session
+  schemas:
+    PlanRequest:
+      type: object
+      properties:
+        seed: &id005
+          type: object
+          properties:
+            kind:
+              type: string
+              enum:
+              - feeling
+              - song
+              - sound
+            text:
+              type: string
+              minLength: 1
+              maxLength: 2000
+            artist:
+              anyOf:
+              - type: string
+              - type: 'null'
+          required:
+          - kind
+          - text
+          - artist
+          additionalProperties: false
+        requestedCount:
+          type: integer
+          enum:
+          - 5
+        dj:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            length:
+              type: string
+              enum:
+              - short
+              - standard
+          required:
+          - enabled
+          - length
+          additionalProperties: false
+        tuning:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+      required:
+      - seed
+      - requestedCount
+      - dj
+      - tuning
+      additionalProperties: false
+    PlanDraft:
+      type: object
+      properties:
+        schemaVersion:
+          type: integer
+          enum:
+          - 1
+        analysis: &id002
+          type: object
+          properties:
+            hookOfFeeling:
+              type: string
+              minLength: 1
+            spatialSignature:
+              anyOf:
+              - type: string
+              - type: 'null'
+            emotionalVelocity:
+              anyOf:
+              - type: string
+              - type: 'null'
+            timbralPalette:
+              type: array
+              items:
+                type: string
+            lyricalContext:
+              anyOf:
+              - type: string
+              - type: 'null'
+            basis: &id001
+              type: string
+              enum:
+              - user_description
+              - licensed_editorial
+              - model_knowledge
+              - unknown
+            caveat:
+              anyOf:
+              - type: string
+              - type: 'null'
+          required:
+          - hookOfFeeling
+          - spatialSignature
+          - emotionalVelocity
+          - timbralPalette
+          - lyricalContext
+          - basis
+          - caveat
+          additionalProperties: false
+        candidates:
+          type: array
+          items: &id003
+            type: object
+            properties:
+              candidateId:
+                type: string
+                pattern: ^c[0-9]+$
+              title:
+                type: string
+                minLength: 1
+              artist:
+                type: string
+                minLength: 1
+              versionHint:
+                anyOf:
+                - type: string
+                - type: 'null'
+              seedBridge:
+                type: string
+                minLength: 1
+              transitionBridge:
+                anyOf:
+                - type: object
+                  properties:
+                    fromCandidateId:
+                      type: string
+                    text:
+                      type: string
+                      minLength: 1
+                    djLine:
+                      type: string
+                      minLength: 1
+                  required:
+                  - fromCandidateId
+                  - text
+                  - djLine
+                  additionalProperties: false
+                - type: 'null'
+              vibe:
+                type: array
+                items:
+                  type: string
+                  minLength: 1
+                minItems: 3
+                maxItems: 3
+              djLine:
+                type: string
+                minLength: 1
+              evidenceLevel: *id001
+              evidenceRefs:
+                type: array
+                items:
+                  type: string
+              uncertainty:
+                anyOf:
+                - type: string
+                - type: 'null'
+            required:
+            - candidateId
+            - title
+            - artist
+            - versionHint
+            - seedBridge
+            - transitionBridge
+            - vibe
+            - djLine
+            - evidenceLevel
+            - evidenceRefs
+            - uncertainty
+            additionalProperties: false
+          maxItems: 7
+        warnings:
+          type: array
+          items:
+            type: string
+      required:
+      - schemaVersion
+      - analysis
+      - candidates
+      - warnings
+      additionalProperties: false
+    SonicDNA: *id002
+    Candidate: *id003
+    ResolvedTrack: &id004
+      type: object
+      properties:
+        provider:
+          type: string
+          enum:
+          - mock
+          - licensed
+          - spotify
+          - external
+        providerTrackId:
+          anyOf:
+          - type: string
+          - type: 'null'
+        canonicalTitle:
+          type: string
+        canonicalArtists:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        artworkUrl:
+          anyOf:
+          - type: string
+            format: uri
+          - type: 'null'
+        durationMs:
+          anyOf:
+          - type: integer
+            minimum: 0
+          - type: 'null'
+        externalUrl:
+          anyOf:
+          - type: string
+            format: uri
+          - type: 'null'
+        availability:
+          type: string
+          enum:
+          - resolved
+          - unavailable
+          - unverified
+        canAttemptPlayback:
+          type: boolean
+        audioLocator:
+          oneOf:
+          - type: object
+            properties:
+              kind:
+                const: none
+                type: string
+            required:
+            - kind
+            additionalProperties: false
+          - type: object
+            properties:
+              kind:
+                const: licensed_url
+                type: string
+              url:
+                type: string
+                format: uri
+            required:
+            - kind
+            - url
+            additionalProperties: false
+          - type: object
+            properties:
+              kind:
+                const: spotify_uri
+                type: string
+              uri:
+                type: string
+                pattern: '^spotify:track:'
+            required:
+            - kind
+            - uri
+            additionalProperties: false
+      required:
+      - provider
+      - providerTrackId
+      - canonicalTitle
+      - canonicalArtists
+      - artworkUrl
+      - durationMs
+      - externalUrl
+      - availability
+      - canAttemptPlayback
+      - audioLocator
+      additionalProperties: false
+    Segment: &id006
+      type: object
+      properties:
+        segmentId:
+          type: string
+        candidate: *id003
+        track: *id004
+      required:
+      - segmentId
+      - candidate
+      - track
+      additionalProperties: false
+    ShowPlan:
+      type: object
+      properties:
+        schemaVersion:
+          type: integer
+          enum:
+          - 1
+        showId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        seed: *id005
+        analysis: *id002
+        segments:
+          type: array
+          items: *id006
+          maxItems: 5
+        warnings:
+          type: array
+          items:
+            type: string
+        isDemo:
+          type: boolean
+      required:
+      - schemaVersion
+      - showId
+      - createdAt
+      - seed
+      - analysis
+      - segments
+      - warnings
+      - isDemo
+      additionalProperties: false
+    JobInfo:
+      type: object
+      properties:
+        jobId:
+          type: string
+        generationId:
+          type: string
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - completed
+          - partial
+          - failed
+          - cancelled
+        phase:
+          type: string
+          enum:
+          - queued
+          - understanding
+          - matching
+          - resolving
+          - preparing
+          - done
+        showId:
+          anyOf:
+          - type: string
+          - type: 'null'
+        error:
+          anyOf:
+          - &id007
+            type: object
+            properties:
+              code:
+                type: string
+              message:
+                type: string
+              retryable:
+                type: boolean
+              requestId:
+                type: string
+              retryAfterMs:
+                anyOf:
+                - type: integer
+                  minimum: 0
+                - type: 'null'
+            required:
+            - code
+            - message
+            - retryable
+            - requestId
+            - retryAfterMs
+            additionalProperties: false
+          - type: 'null'
+      required:
+      - jobId
+      - generationId
+      - status
+      - phase
+      - showId
+      - error
+      additionalProperties: false
+    TtsRequest:
+      type: object
+      properties:
+        showId:
+          type: string
+        segmentId:
+          type: string
+        variant:
+          type: string
+          enum:
+          - seed
+          - transition
+        voiceId:
+          type: string
+      required:
+      - showId
+      - segmentId
+      - variant
+      - voiceId
+      additionalProperties: false
+    TtsInfo:
+      type: object
+      properties:
+        ttsId:
+          type: string
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - ready
+          - failed
+          - cancelled
+        textHash:
+          type: string
+        audioUrl:
+          anyOf:
+          - type: string
+          - type: 'null'
+        error:
+          anyOf:
+          - *id007
+          - type: 'null'
+      required:
+      - ttsId
+      - status
+      - textHash
+      - audioUrl
+      - error
+      additionalProperties: false
+    Capabilities:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+          - mock
+          - licensed
+          - spotify
+          - external
+        spotifyEnabled:
+          type: boolean
+        spotifyDjApproved:
+          type: boolean
+        canPlay:
+          type: boolean
+        canSeek:
+          type: boolean
+        canProgrammaticallySetVolume:
+          type: boolean
+        canInsertSpeech:
+          type: boolean
+        canOverlap:
+          type: boolean
+          const: false
+        supportsBackground:
+          type: string
+          enum:
+          - unknown
+          - tested-limited
+          - unsupported
+        restrictions:
+          type: array
+          items:
+            type: string
+      required:
+      - mode
+      - spotifyEnabled
+      - spotifyDjApproved
+      - canPlay
+      - canSeek
+      - canProgrammaticallySetVolume
+      - canInsertSpeech
+      - canOverlap
+      - supportsBackground
+      - restrictions
+      additionalProperties: false
+    SessionInfo:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        csrfToken:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+      - sessionId
+      - csrfToken
+      - expiresAt
+      additionalProperties: false
+    ErrorEnvelope:
+      type: object
+      properties:
+        error: *id007
+      required:
+      - error
+      additionalProperties: false

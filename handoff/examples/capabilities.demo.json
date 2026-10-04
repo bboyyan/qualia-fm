@@ -1,0 +1,14 @@
+{
+  "mode": "mock",
+  "spotifyEnabled": false,
+  "spotifyDjApproved": false,
+  "canPlay": false,
+  "canSeek": false,
+  "canProgrammaticallySetVolume": false,
+  "canInsertSpeech": false,
+  "canOverlap": false,
+  "supportsBackground": "unsupported",
+  "restrictions": [
+    "僅介面展示，不播放音訊。"
+  ]
+}

@@ -1,0 +1,25 @@
+/* Qualia FM · proposed mobile design tokens · 2026-10-04 */
+:root {
+  --q-bg: #F6F4ED;
+  --q-surface: #FFFEFA;
+  --q-subtle: #ECEFE7;
+  --q-ink: #1F302A;
+  --q-muted: #586A60;
+  --q-primary: #294F42;
+  --q-on-primary: #FFFFFF;
+  --q-accent: #985339;
+  --q-border: #CED5CB;
+  --q-focus: #1E695E;
+  --q-danger: #A63030;
+  --q-space-1: 4px; --q-space-2: 8px; --q-space-3: 12px;
+  --q-space-4: 16px; --q-space-5: 20px; --q-space-6: 24px;
+  --q-space-8: 32px; --q-space-10: 40px; --q-space-12: 48px;
+  --q-radius-card: 20px; --q-radius-input: 16px;
+  --q-radius-sheet: 28px; --q-radius-button: 999px;
+  --q-tap: 48px; --q-play: 64px; --q-content-max: 480px;
+  --q-font: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans CJK TC", "Microsoft JhengHei", sans-serif;
+  --q-page-motion: 180ms; --q-sheet-motion: 240ms; --q-press-motion: 100ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --q-page-motion: 0ms; --q-sheet-motion: 0ms; --q-press-motion: 0ms; }
+}

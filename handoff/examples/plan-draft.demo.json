@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "analysis": {
+    "hookOfFeeling": "示意：有溫度的低頻，陪你保持一點清醒。",
+    "spatialSignature": "依輸入設想：貼近、留有空間",
+    "emotionalVelocity": "放鬆但不完全靜止",
+    "timbralPalette": [
+      "柔和低頻",
+      "輕薄聲景"
+    ],
+    "lyricalContext": null,
+    "basis": "user_description",
+    "caveat": "以下全為介面示意，沒有分析真實音樂。"
+  },
+  "candidates": [
+    {
+      "candidateId": "c1",
+      "title": "微光偏航（虛構示意）",
+      "artist": "Qualia Demo · 虛構音源",
+      "versionHint": null,
+      "seedBridge": "示意：延續你描述的溫暖低頻，讓節奏保持一點前進感。",
+      "transitionBridge": null,
+      "vibe": [
+        "溫暖",
+        "留白",
+        "夜行"
+      ],
+      "djLine": "以下是介面示意：延續你描述的溫暖低頻，讓節奏保持一點前進感。",
+      "evidenceLevel": "unknown",
+      "evidenceRefs": [],
+      "uncertainty": "非真實曲目，無播放音源，不能作為音樂推薦或聲學事實。"
+    },
+    {
+      "candidateId": "c2",
+      "title": "雨後的底片（虛構示意）",
+      "artist": "Qualia Demo · 虛構音源",
+      "versionHint": null,
+      "seedBridge": "示意：把空間拉開一些，仍保留夜裡貼近耳邊的感覺。",
+      "transitionBridge": null,
+      "vibe": [
+        "溫暖",
+        "留白",
+        "夜行"
+      ],
+      "djLine": "以下是介面示意：把空間拉開一些，仍保留夜裡貼近耳邊的感覺。",
+      "evidenceLevel": "unknown",
+      "evidenceRefs": [],
+      "uncertainty": "非真實曲目，無播放音源，不能作為音樂推薦或聲學事實。"
+    },
+    {
+      "candidateId": "c3",
+      "title": "柔焦公路（虛構示意）",
+      "artist": "Qualia Demo · 虛構音源",
+      "versionHint": null,
+      "seedBridge": "示意：保留柔和的輪廓，增加輕輕向前的律動。",
+      "transitionBridge": null,
+      "vibe": [
+        "溫暖",
+        "留白",
+        "夜行"
+      ],
+      "djLine": "以下是介面示意：保留柔和的輪廓，增加輕輕向前的律動。",
+      "evidenceLevel": "unknown",
+      "evidenceRefs": [],
+      "uncertainty": "非真實曲目，無播放音源，不能作為音樂推薦或聲學事實。"
+    },
+    {
+      "candidateId": "c4",
+      "title": "低空漂浮（虛構示意）",
+      "artist": "Qualia Demo · 虛構音源",
+      "versionHint": null,
+      "seedBridge": "示意：讓推進放慢，留下更寬的空間與懸浮感。",
+      "transitionBridge": null,
+      "vibe": [
+        "溫暖",
+        "留白",
+        "夜行"
+      ],
+      "djLine": "以下是介面示意：讓推進放慢，留下更寬的空間與懸浮感。",
+      "evidenceLevel": "unknown",
+      "evidenceRefs": [],
+      "uncertainty": "非真實曲目，無播放音源，不能作為音樂推薦或聲學事實。"
+    },
+    {
+      "candidateId": "c5",
+      "title": "第一道晨光（虛構示意）",
+      "artist": "Qualia Demo · 虛構音源",
+      "versionHint": null,
+      "seedBridge": "示意：以更明亮的質地收尾，保留這段節目的溫度。",
+      "transitionBridge": null,
+      "vibe": [
+        "溫暖",
+        "留白",
+        "夜行"
+      ],
+      "djLine": "以下是介面示意：以更明亮的質地收尾，保留這段節目的溫度。",
+      "evidenceLevel": "unknown",
+      "evidenceRefs": [],
+      "uncertainty": "非真實曲目，無播放音源，不能作為音樂推薦或聲學事實。"
+    },
+    {
+      "candidateId": "c6",
+      "title": "慢行星（虛構示意）",
+      "artist": "Qualia Demo · 虛構音源",
+      "versionHint": null,
+      "seedBridge": "示意：維持輕盈懸浮，讓感覺往更陌生的方向延伸。",
+      "transitionBridge": null,
+      "vibe": [
+        "溫暖",
+        "留白",
+        "夜行"
+      ],
+      "djLine": "以下是介面示意：維持輕盈懸浮，讓感覺往更陌生的方向延伸。",
+      "evidenceLevel": "unknown",
+      "evidenceRefs": [],
+      "uncertainty": "非真實曲目，無播放音源，不能作為音樂推薦或聲學事實。"
+    },
+    {
+      "candidateId": "c7",
+      "title": "夜色餘溫（虛構示意）",
+      "artist": "Qualia Demo · 虛構音源",
+      "versionHint": null,
+      "seedBridge": "示意：讓色彩慢慢收攏，留下柔和而不沈重的餘韻。",
+      "transitionBridge": null,
+      "vibe": [
+        "溫暖",
+        "留白",
+        "夜行"
+      ],
+      "djLine": "以下是介面示意：讓色彩慢慢收攏，留下柔和而不沈重的餘韻。",
+      "evidenceLevel": "unknown",
+      "evidenceRefs": [],
+      "uncertainty": "非真實曲目，無播放音源，不能作為音樂推薦或聲學事實。"
+    }
+  ],
+  "warnings": [
+    "所有歌名與音色為UI測試資料，不連結真實作品。"
+  ]
+}

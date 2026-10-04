@@ -1,0 +1,40 @@
+{
+  "prototypeOnly": true,
+  "browser": "Chromium via Playwright",
+  "method": "inline HTML load; no file:// navigation claim",
+  "checksPassed": 24,
+  "checks": [
+    "Empty Seed disables generation",
+    "Listen has an actionable empty state",
+    "Example fills without submitting",
+    "Cancelled generation preserves draft; late timer cannot publish",
+    "Ready is not auto-playing",
+    "Skip intro keeps current track",
+    "Paused demo progress remains still",
+    "Bridge opens a named native dialog",
+    "Escape closes dialog",
+    "Dialog returns focus to its trigger",
+    "Remove affects future queue only",
+    "Undo remains operable inside the modal",
+    "Tune preserves current track",
+    "Tune mock swaps only upcoming items",
+    "Mini-player follows navigation without replacing session",
+    "Offline state offers explicit recovery",
+    "Listen has no horizontal overflow at 320px",
+    "Listen has no horizontal overflow at 360px",
+    "Listen has no horizontal overflow at 390px",
+    "Listen has no horizontal overflow at 430px",
+    "Listen has no horizontal overflow at 1440px",
+    "Body text-size smoke check has no horizontal overflow",
+    "Prototype makes no network requests",
+    "No JavaScript runtime errors: []"
+  ],
+  "notTested": [
+    "Real iPhone Safari / standalone PWA",
+    "Android device audio",
+    "Spotify OAuth, API, SDK, policy approval",
+    "LLM and TTS integration",
+    "VoiceOver / TalkBack",
+    "True 200% browser zoom and full accessibility audit"
+  ]
+}

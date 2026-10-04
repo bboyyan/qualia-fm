@@ -1,0 +1,208 @@
+{
+  "schemaVersion": 1,
+  "showId": "show_demo_1",
+  "createdAt": "2026-10-04T05:24:32Z",
+  "seed": {
+    "kind": "feeling",
+    "text": "深夜，還不想睡；暖一點，別太躁。",
+    "artist": null
+  },
+  "analysis": {
+    "hookOfFeeling": "示意：有溫度的低頻，陪你保持一點清醒。",
+    "spatialSignature": "依輸入設想：貼近、留有空間",
+    "emotionalVelocity": "放鬆但不完全靜止",
+    "timbralPalette": [
+      "柔和低頻",
+      "輕薄聲景"
+    ],
+    "lyricalContext": null,
+    "basis": "user_description",
+    "caveat": "以下全為介面示意，沒有分析真實音樂。"
+  },
+  "segments": [
+    {
+      "segmentId": "segment_demo_1",
+      "candidate": {
+        "candidateId": "c1",
+        "title": "微光偏航（虛構示意）",
+        "artist": "Qualia Demo · 虛構音源",
+        "versionHint": null,
+        "seedBridge": "示意：延續你描述的溫暖低頻，讓節奏保持一點前進感。",
+        "transitionBridge": null,
+        "vibe": [
+          "溫暖",
+          "留白",
+          "夜行"
+        ],
+        "djLine": "以下是介面示意：延續你描述的溫暖低頻，讓節奏保持一點前進感。",
+        "evidenceLevel": "unknown",
+        "evidenceRefs": [],
+        "uncertainty": "非真實曲目，無播放音源，不能作為音樂推薦或聲學事實。"
+      },
+      "track": {
+        "provider": "mock",
+        "providerTrackId": null,
+        "canonicalTitle": "微光偏航（虛構示意）",
+        "canonicalArtists": [
+          "Qualia Demo · 虛構音源"
+        ],
+        "artworkUrl": null,
+        "durationMs": null,
+        "externalUrl": null,
+        "availability": "unverified",
+        "canAttemptPlayback": false,
+        "audioLocator": {
+          "kind": "none"
+        }
+      }
+    },
+    {
+      "segmentId": "segment_demo_2",
+      "candidate": {
+        "candidateId": "c2",
+        "title": "雨後的底片（虛構示意）",
+        "artist": "Qualia Demo · 虛構音源",
+        "versionHint": null,
+        "seedBridge": "示意：把空間拉開一些，仍保留夜裡貼近耳邊的感覺。",
+        "transitionBridge": null,
+        "vibe": [
+          "溫暖",
+          "留白",
+          "夜行"
+        ],
+        "djLine": "以下是介面示意：把空間拉開一些，仍保留夜裡貼近耳邊的感覺。",
+        "evidenceLevel": "unknown",
+        "evidenceRefs": [],
+        "uncertainty": "非真實曲目，無播放音源，不能作為音樂推薦或聲學事實。"
+      },
+      "track": {
+        "provider": "mock",
+        "providerTrackId": null,
+        "canonicalTitle": "雨後的底片（虛構示意）",
+        "canonicalArtists": [
+          "Qualia Demo · 虛構音源"
+        ],
+        "artworkUrl": null,
+        "durationMs": null,
+        "externalUrl": null,
+        "availability": "unverified",
+        "canAttemptPlayback": false,
+        "audioLocator": {
+          "kind": "none"
+        }
+      }
+    },
+    {
+      "segmentId": "segment_demo_3",
+      "candidate": {
+        "candidateId": "c3",
+        "title": "柔焦公路（虛構示意）",
+        "artist": "Qualia Demo · 虛構音源",
+        "versionHint": null,
+        "seedBridge": "示意：保留柔和的輪廓，增加輕輕向前的律動。",
+        "transitionBridge": null,
+        "vibe": [
+          "溫暖",
+          "留白",
+          "夜行"
+        ],
+        "djLine": "以下是介面示意：保留柔和的輪廓，增加輕輕向前的律動。",
+        "evidenceLevel": "unknown",
+        "evidenceRefs": [],
+        "uncertainty": "非真實曲目，無播放音源，不能作為音樂推薦或聲學事實。"
+      },
+      "track": {
+        "provider": "mock",
+        "providerTrackId": null,
+        "canonicalTitle": "柔焦公路（虛構示意）",
+        "canonicalArtists": [
+          "Qualia Demo · 虛構音源"
+        ],
+        "artworkUrl": null,
+        "durationMs": null,
+        "externalUrl": null,
+        "availability": "unverified",
+        "canAttemptPlayback": false,
+        "audioLocator": {
+          "kind": "none"
+        }
+      }
+    },
+    {
+      "segmentId": "segment_demo_4",
+      "candidate": {
+        "candidateId": "c4",
+        "title": "低空漂浮（虛構示意）",
+        "artist": "Qualia Demo · 虛構音源",
+        "versionHint": null,
+        "seedBridge": "示意：讓推進放慢，留下更寬的空間與懸浮感。",
+        "transitionBridge": null,
+        "vibe": [
+          "溫暖",
+          "留白",
+          "夜行"
+        ],
+        "djLine": "以下是介面示意：讓推進放慢，留下更寬的空間與懸浮感。",
+        "evidenceLevel": "unknown",
+        "evidenceRefs": [],
+        "uncertainty": "非真實曲目，無播放音源，不能作為音樂推薦或聲學事實。"
+      },
+      "track": {
+        "provider": "mock",
+        "providerTrackId": null,
+        "canonicalTitle": "低空漂浮（虛構示意）",
+        "canonicalArtists": [
+          "Qualia Demo · 虛構音源"
+        ],
+        "artworkUrl": null,
+        "durationMs": null,
+        "externalUrl": null,
+        "availability": "unverified",
+        "canAttemptPlayback": false,
+        "audioLocator": {
+          "kind": "none"
+        }
+      }
+    },
+    {
+      "segmentId": "segment_demo_5",
+      "candidate": {
+        "candidateId": "c5",
+        "title": "第一道晨光（虛構示意）",
+        "artist": "Qualia Demo · 虛構音源",
+        "versionHint": null,
+        "seedBridge": "示意：以更明亮的質地收尾，保留這段節目的溫度。",
+        "transitionBridge": null,
+        "vibe": [
+          "溫暖",
+          "留白",
+          "夜行"
+        ],
+        "djLine": "以下是介面示意：以更明亮的質地收尾，保留這段節目的溫度。",
+        "evidenceLevel": "unknown",
+        "evidenceRefs": [],
+        "uncertainty": "非真實曲目，無播放音源，不能作為音樂推薦或聲學事實。"
+      },
+      "track": {
+        "provider": "mock",
+        "providerTrackId": null,
+        "canonicalTitle": "第一道晨光（虛構示意）",
+        "canonicalArtists": [
+          "Qualia Demo · 虛構音源"
+        ],
+        "artworkUrl": null,
+        "durationMs": null,
+        "externalUrl": null,
+        "availability": "unverified",
+        "canAttemptPlayback": false,
+        "audioLocator": {
+          "kind": "none"
+        }
+      }
+    }
+  ],
+  "warnings": [
+    "所有歌名與音色為UI測試資料，不連結真實作品。"
+  ],
+  "isDemo": true
+}

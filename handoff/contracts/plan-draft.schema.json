@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Qualia PlanDraft v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "enum": [
+        1
+      ]
+    },
+    "analysis": {
+      "type": "object",
+      "properties": {
+        "hookOfFeeling": {
+          "type": "string",
+          "minLength": 1
+        },
+        "spatialSignature": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "emotionalVelocity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timbralPalette": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "lyricalContext": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "basis": {
+          "type": "string",
+          "enum": [
+            "user_description",
+            "licensed_editorial",
+            "model_knowledge",
+            "unknown"
+          ]
+        },
+        "caveat": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "hookOfFeeling",
+        "spatialSignature",
+        "emotionalVelocity",
+        "timbralPalette",
+        "lyricalContext",
+        "basis",
+        "caveat"
+      ],
+      "additionalProperties": false
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "candidateId": {
+            "type": "string",
+            "pattern": "^c[0-9]+$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "artist": {
+            "type": "string",
+            "minLength": 1
+          },
+          "versionHint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seedBridge": {
+            "type": "string",
+            "minLength": 1
+          },
+          "transitionBridge": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "fromCandidateId": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "djLine": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "fromCandidateId",
+                  "text",
+                  "djLine"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vibe": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "djLine": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidenceLevel": {
+            "type": "string",
+            "enum": [
+              "user_description",
+              "licensed_editorial",
+              "model_knowledge",
+              "unknown"
+            ]
+          },
+          "evidenceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "uncertainty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "candidateId",
+          "title",
+          "artist",
+          "versionHint",
+          "seedBridge",
+          "transitionBridge",
+          "vibe",
+          "djLine",
+          "evidenceLevel",
+          "evidenceRefs",
+          "uncertainty"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 7
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "analysis",
+    "candidates",
+    "warnings"
+  ],
+  "additionalProperties": false
+}
