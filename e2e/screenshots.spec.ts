@@ -3,7 +3,7 @@
  * Browser-rendered evidence only — not real-device evidence.
  */
 import { test, type Page } from '@playwright/test';
-import { openApp } from './support';
+import { chooseScenario, fillSeed, generate, openApp } from './support';
 
 const SIZES = [
   { width: 360, height: 800 },
@@ -21,6 +21,51 @@ interface Screen {
 
 const SCREENS: readonly Screen[] = [
   { name: '01-home', prepare: async () => {} },
+  {
+    name: '01b-home-filled',
+    prepare: async (page) => {
+      await fillSeed(page, '深夜，還不想睡；暖一點，別太躁。');
+    },
+  },
+  {
+    name: '05-generating',
+    prepare: async (page) => {
+      await chooseScenario(page, '慢速（>20 秒）');
+      await generate(page);
+      await page.locator('[data-state="running"]').first().waitFor();
+    },
+  },
+  {
+    name: '06-ready',
+    prepare: async (page) => {
+      await generate(page);
+      await page.getByTestId('ready-view').waitFor();
+    },
+  },
+  {
+    name: '07-ready-partial-3',
+    prepare: async (page) => {
+      await chooseScenario(page, '部分：3 首');
+      await generate(page);
+      await page.getByTestId('partial-notice').scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    name: '08-ready-zero',
+    prepare: async (page) => {
+      await chooseScenario(page, '0 首可播');
+      await generate(page);
+      await page.getByTestId('zero-notice').scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    name: '09-generation-error',
+    prepare: async (page) => {
+      await chooseScenario(page, '編排失敗');
+      await generate(page);
+      await page.getByTestId('generation-error').waitFor();
+    },
+  },
   {
     name: '02-settings',
     prepare: async (page) => {

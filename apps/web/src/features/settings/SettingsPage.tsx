@@ -1,7 +1,8 @@
 import { useId } from 'react';
+import type { MockScenario } from '@qualia/contracts';
 import { useAppStore } from '../../app/appStore';
 import { Button } from '../../ui/Button';
-import { SegmentedControl, Switch } from '../../ui/controls';
+import { Chip, SegmentedControl, Switch } from '../../ui/controls';
 import { CapabilityBadge, Eyebrow } from '../../ui/Feedback';
 import styles from './settings.module.css';
 
@@ -81,6 +82,40 @@ function EnvironmentSettings() {
   );
 }
 
+const SCENARIOS: readonly { value: MockScenario; label: string }[] = [
+  { value: 'five', label: '5 首（預設）' },
+  { value: 'three', label: '部分：3 首' },
+  { value: 'zero', label: '0 首可播' },
+  { value: 'error', label: '編排失敗' },
+  { value: 'slow', label: '慢速（>20 秒）' },
+];
+
+/** Labelled MOCK-only scenario preview for review/E2E; it changes only the next mock plan. */
+function ScenarioSettings() {
+  const scenario = useAppStore((s) => s.mockScenario);
+  const setScenario = useAppStore((s) => s.setMockScenario);
+  return (
+    <>
+      <h2 className={styles.sectionLabel}>情境預覽 · MOCK，不代表真實故障</h2>
+      <section className={styles.group} aria-label="MOCK 情境預覽">
+        <div className={styles.rowStack}>
+          <div>
+            <h3>下一次開台的結果</h3>
+            <p>用來檢查部分成功、沒有曲目、失敗與等待較久時的畫面。</p>
+          </div>
+          <div className={styles.chips} role="group" aria-label="MOCK 開台情境">
+            {SCENARIOS.map((s) => (
+              <Chip key={s.value} selected={scenario === s.value} onClick={() => setScenario(s.value)}>
+                {s.label}
+              </Chip>
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
 export function SettingsPage() {
   const resetSettings = useAppStore((s) => s.resetSettings);
   const showToast = useAppStore((s) => s.showToast);
@@ -92,6 +127,7 @@ export function SettingsPage() {
       </header>
       <DjSettings />
       <EnvironmentSettings />
+      <ScenarioSettings />
       <section className={styles.info} aria-labelledby="data-title">
         <h3 id="data-title">關於聲音與資料</h3>
         <p>

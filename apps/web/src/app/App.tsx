@@ -29,10 +29,11 @@ export function App() {
   usePopStateNavigation();
   const tab = useAppStore((s) => s.tab);
   const boot = useAppStore((s) => s.boot);
+  const showToast = useAppStore((s) => s.showToast);
   return (
     <AppShell sheets={<EnvironmentSheet />}>
       {boot === 'error' && <BootError />}
-      {tab === 'home' && <HomePage />}
+      {tab === 'home' && <HomePage hasActiveShow={false} onStartShow={() => showToast('播放引擎將在 T04 接上。')} />}
       {tab === 'listen' && <ListenPage />}
       {tab === 'settings' && <SettingsPage />}
     </AppShell>

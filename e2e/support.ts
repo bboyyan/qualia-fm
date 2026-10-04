@@ -28,3 +28,15 @@ export async function openApp(page: Page): Promise<void> {
 export async function fillSeed(page: Page, text: string): Promise<void> {
   await page.getByTestId('seed-input').fill(text);
 }
+
+export async function chooseScenario(page: Page, label: string): Promise<void> {
+  await page.getByTestId('tab-settings').click();
+  await page.getByRole('group', { name: 'MOCK 開台情境' }).getByRole('button', { name: label }).click();
+  await page.getByTestId('tab-home').click();
+}
+
+export async function generate(page: Page, text = '深夜，還不想睡；暖一點，別太躁。'): Promise<void> {
+  await fillSeed(page, text);
+  await page.getByTestId('generate').click();
+  await expect(page.getByTestId('generation-view')).toBeVisible();
+}

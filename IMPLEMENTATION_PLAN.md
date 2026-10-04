@@ -18,7 +18,7 @@ Spec: `handoff/docs/10_IMPLEMENTATION_PLAN.md`. Remove this file when all stages
 **Goal**: Seed composer, examples, Sonic DNA, real-phase progress, ready, partial/error.
 **Success Criteria**: empty/loading/cancel/ready 0/3/5 mock states.
 **Tests**: generation controller unit tests (late result, A/B), E2E per state.
-**Status**: Not Started
+**Status**: Complete
 
 ## Stage 4: T04 播放引擎
 **Goal**: reducer/commands, adapter, queue, single audio owner.

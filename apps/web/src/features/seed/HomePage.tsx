@@ -1,35 +1,97 @@
-import { useAppStore } from '../../app/appStore';
+import type { PlanRequest } from '@qualia/contracts';
+import { useAppStore, type Draft, type Settings } from '../../app/appStore';
+import { generation } from '../../app/services';
 import { Eyebrow } from '../../ui/Feedback';
 import { Icon } from '../../ui/Icon';
+import { GenerationView } from './GenerationView';
+import { ReadyView } from './ReadyView';
 import { SeedComposer } from './SeedComposer';
+import { useGeneration } from './useGeneration';
 import styles from './seed.module.css';
 
-/** S01 開台. Generation, ready and error states are wired in T03. */
-export function HomePage() {
-  const showToast = useAppStore((s) => s.showToast);
+export function toPlanRequest(draft: Draft, settings: Settings, tuning: string | null = null): PlanRequest {
+  const artist = draft.kind === 'song' && draft.artist.trim() ? draft.artist.trim() : null;
+  return {
+    seed: { kind: draft.kind, text: draft.text.trim(), artist },
+    requestedCount: 5,
+    dj: { enabled: settings.djEnabled, length: settings.djLength },
+    tuning,
+  };
+}
+
+interface HomePageProps {
+  hasActiveShow: boolean;
+  onStartShow: () => void;
+}
+
+function Hero() {
+  return (
+    <section className={styles.hero} aria-labelledby="home-title">
+      <Eyebrow>YOUR FEELING, ON AIR.</Eyebrow>
+      <h1 id="home-title">
+        不是同類型。
+        <br />
+        是<em>同一種感覺。</em>
+      </h1>
+      <p>
+        給我一首歌，或此刻的心情。
+        <br />
+        讓下一首，接住你想留下的感覺。
+      </p>
+    </section>
+  );
+}
+
+/** 開台 tab: composer → real-phase generation → ready / partial / zero / error. */
+export function HomePage({ hasActiveShow, onStartShow }: HomePageProps) {
+  const state = useGeneration(generation);
+  const draft = useAppStore((s) => s.draft);
+  const settings = useAppStore((s) => s.settings);
+  const setTab = useAppStore((s) => s.setTab);
+  const announce = useAppStore((s) => s.announce);
+
+  if (state.status === 'running' || state.status === 'failed') {
+    return (
+      <GenerationView
+        state={state}
+        seedText={state.request?.seed.text ?? draft.text}
+        onCancel={() => {
+          generation.cancel();
+          announce('已取消，輸入保留');
+        }}
+        onRetry={() => void generation.retry()}
+        onEdit={() => generation.reset()}
+      />
+    );
+  }
+  if (state.status === 'ready' && state.show) {
+    return (
+      <ReadyView
+        show={state.show}
+        hasActiveShow={hasActiveShow}
+        onStart={onStartShow}
+        onBackToListen={() => setTab('listen')}
+        onEdit={() => generation.reset()}
+        onRegenerate={() => void generation.retry()}
+      />
+    );
+  }
   return (
     <>
-      <section className={styles.hero} aria-labelledby="home-title">
-        <Eyebrow>YOUR FEELING, ON AIR.</Eyebrow>
-        <h1 id="home-title">
-          不是同類型。
-          <br />
-          是<em>同一種感覺。</em>
-        </h1>
-        <p>
-          給我一首歌，或此刻的心情。
-          <br />
-          讓下一首，接住你想留下的感覺。
-        </p>
-      </section>
-      <SeedComposer submitLabel="為我開台" onSubmit={() => showToast('生成流程將在下一個里程碑接上。')} />
+      <Hero />
+      <SeedComposer
+        submitLabel={hasActiveShow ? '建立下一段' : '為我開台'}
+        onSubmit={() => void generation.start(toPlanRequest(draft, settings))}
+      />
       <div className={styles.note}>
         <span className={styles.noteIcon}>
           <Icon name="leaf" size={20} />
         </span>
         <div>
           <strong>不只推薦，也告訴你為什麼。</strong>
-          <p>跨過曲風，用空間感、音色與情緒連起下一首。</p>
+          <p>
+            {hasActiveShow ? '建立下一段不會停止正在播放的這首；準備好後由你決定何時切換。' : '跨過曲風，用空間感、音色與情緒連起下一首。'}
+          </p>
         </div>
       </div>
     </>

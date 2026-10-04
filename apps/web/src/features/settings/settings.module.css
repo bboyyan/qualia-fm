@@ -12,3 +12,4 @@
 .info h3 { font-size: 14px; }
 .info p { margin-top: 6px; font-size: 13px; line-height: 1.7; color: var(--q-muted); }
 .stack { display: grid; gap: 10px; margin-bottom: 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
