@@ -7,6 +7,28 @@ import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { IconButton } from './Button';
 import styles from './ui.module.css';
 
+/**
+ * Safari/WebKit does not focus a button on click, so `document.activeElement` is <body> when a
+ * sheet opens from a tap. Remember the last pointer-activated control as the return target.
+ */
+let lastPointerControl: HTMLElement | null = null;
+if (typeof document !== 'undefined') {
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      const target = event.target instanceof Element ? event.target.closest<HTMLElement>('button, a, [tabindex]') : null;
+      if (target) lastPointerControl = target;
+    },
+    true,
+  );
+}
+
+function focusOrigin(): HTMLElement | null {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && active !== document.body) return active;
+  return lastPointerControl?.isConnected ? lastPointerControl : null;
+}
+
 interface BottomSheetProps {
   open: boolean;
   title: string;
@@ -25,7 +47,7 @@ export function BottomSheet({ open, title, onClose, children, footer, testId }: 
     const dialog = ref.current;
     if (!dialog) return;
     if (open && !dialog.open) {
-      returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      returnFocus.current = focusOrigin();
       dialog.showModal();
       document.body.classList.add('sheet-open');
     } else if (!open && dialog.open) {

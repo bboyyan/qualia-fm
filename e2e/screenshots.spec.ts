@@ -14,6 +14,12 @@ const SIZES = [
 
 const OUT = 'docs/implementation/screenshots';
 
+async function startPlaying(page: Page): Promise<void> {
+  await startShow(page);
+  await page.getByTestId('skip-intro').click();
+  await expect(page.getByTestId('phase-label')).toContainText('播放中', { timeout: 10_000 });
+}
+
 async function startShow(page: Page): Promise<void> {
   await generate(page);
   await page.getByTestId('start-listening').click();
@@ -115,6 +121,56 @@ const SCREENS: readonly Screen[] = [
       });
       await startShow(page);
       await page.getByTestId('autoplay-blocked').waitFor();
+    },
+  },
+  {
+    name: '14-bridge-sheet',
+    prepare: async (page) => {
+      await startPlaying(page);
+      await page.getByTestId('bridge-card').click();
+      await page.getByTestId('bridge-sheet').getByRole('heading', { name: '為什麼是這首' }).waitFor();
+    },
+  },
+  {
+    name: '15-queue-sheet',
+    prepare: async (page) => {
+      await startPlaying(page);
+      await page.getByTestId('count-pill').click();
+      await page.getByTestId('queue-row').first().waitFor();
+    },
+  },
+  {
+    name: '16-queue-undo-toast',
+    prepare: async (page) => {
+      await startPlaying(page);
+      await page.getByTestId('count-pill').click();
+      await page.getByRole('button', { name: '移除 柔焦公路' }).click();
+      await page.getByTestId('queue-sheet').getByTestId('toast').waitFor();
+    },
+  },
+  {
+    name: '17-tune-sheet',
+    prepare: async (page) => {
+      await startPlaying(page);
+      await page.getByTestId('open-tune').click();
+      await page.getByTestId('tune-sheet').getByRole('button', { name: '更放鬆' }).click();
+    },
+  },
+  {
+    name: '18-mini-player',
+    prepare: async (page) => {
+      await startPlaying(page);
+      await page.getByTestId('tab-home').click();
+      await page.getByTestId('mini-player').waitFor();
+    },
+  },
+  {
+    name: '19-device-lost',
+    prepare: async (page) => {
+      await startPlaying(page);
+      await page.getByTestId('tab-settings').click();
+      await page.getByTestId('simulate-device-lost').click();
+      await page.getByTestId('playback-error').waitFor();
     },
   },
   {

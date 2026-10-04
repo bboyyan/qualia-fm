@@ -57,6 +57,13 @@ function BottomNav() {
   );
 }
 
+/** Toast rendered inside the open sheet so its Undo stays reachable (the page is inert). */
+export function SheetToast() {
+  const toast = useAppStore((s) => s.toast);
+  const dismissToast = useAppStore((s) => s.dismissToast);
+  return <Toast toast={toast} onDismiss={dismissToast} placement="sheet" />;
+}
+
 export function AppShell({ children, miniPlayer, sheets }: AppShellProps) {
   const sheetOpen = useAppStore((s) => s.sheet !== null);
   const toast = useAppStore((s) => s.toast);

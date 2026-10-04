@@ -74,7 +74,7 @@
 .dnaTitle { font-size: 13px; font-weight: 650; letter-spacing: 0.08em; color: var(--q-accent); }
 .hook { margin-top: 8px; font-size: 17px; line-height: 1.65; font-weight: 550; }
 .facets { margin: 14px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.facet { padding: 10px 12px; background: var(--q-bg); border-radius: 12px; min-width: 0; }
+.facet { padding: 10px 12px; background: var(--q-subtle); border-radius: 12px; min-width: 0; }
 .facet dt { font-size: 12px; color: var(--q-muted); }
 .facet dd { margin: 3px 0 0; font-size: 14px; line-height: 1.55; }
 .facetUnknown dd { color: var(--q-muted); font-style: italic; }

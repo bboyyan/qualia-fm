@@ -37,13 +37,32 @@ pnpm lint        # ESLint（全 workspace）
 pnpm typecheck   # tsc --noEmit（contracts／server／web）
 pnpm test        # Vitest 單元＋整合測試
 pnpm build       # contracts → server（tsc）→ web（tsc + vite build）
+
+# E2E（Playwright，手機視窗 360×800／390×844／430×932；會先 build，並自行在 127.0.0.1:4173 啟動 server）
+pnpm e2e
+# 額外：WebKit 引擎 390×844（仍不是 iPhone Safari 真機）
+pnpm e2e:webkit
+# 重新產生截圖到 docs/implementation/screenshots/（360／390／430／1440）
+pnpm screenshots
 ```
+
+Playwright 使用本機已快取的瀏覽器（`@playwright/test@1.63.0` 對應 chromium-1243、webkit-2359）。首次在其他機器上執行若沒有快取，需另外執行 `pnpm exec playwright install chromium webkit`（會下載瀏覽器）。
+
+## Mock 流程怎麼走
+
+1. 開台：輸入感覺（或點範例 chip，只會填入）→「為我開台」。
+2. 生成中：顯示伺服器實際階段，可「取消，保留我的輸入」。
+3. 節目準備好：感覺鉤子＋四面向、實際首數 →「開始收聽」（由這次點擊開始播放）。
+4. 收聽：DJ 介紹（合成提示音＋串詞文字）→ 同一段的合成測試音；可暫停、跳過介紹、重播本曲、下一首。
+5. 「完整理由」看 Bridge；「01 / 05」或「接下來」看節目單（移除可 5 秒內復原）；「微調」只替換接下來、不打斷這首。
+6. 設定 →「情境預覽 · MOCK」可切換 3 首／0 首／失敗／慢速，以及模擬「點一下繼續」與「播放裝置斷線」。
 
 ## 專案結構
 
 ```text
-apps/server        Express + TS：session／CSRF、capabilities gate、mock plan job
-apps/web           React + Vite + TS：手機 UI、播放引擎
+apps/server        Express + TS：session／CSRF、capabilities gate、mock planner／resolver、plan job
+apps/web           React + Vite + TS：手機 UI；src/audio 為唯一播放引擎（reducer＋單一 <audio> adapter）
+e2e/               Playwright 規格與截圖產生器
 packages/contracts Zod schema（domain／API／錯誤碼）、grapheme 計數
 docs/implementation decision log、里程碑報告、截圖
 handoff/           唯讀規格包

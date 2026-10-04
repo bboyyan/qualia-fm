@@ -2,7 +2,12 @@ import { useEffect } from 'react';
 import { bindMediaSession } from '../audio/mediaSession';
 import { useEngineState } from '../audio/useEngine';
 import { HomePage } from '../features/seed/HomePage';
+import { BridgeSheet } from '../features/player/BridgeSheet';
 import { ListenPage } from '../features/player/ListenPage';
+import { MiniPlayer } from '../features/player/MiniPlayer';
+import { QueueSheet } from '../features/player/QueueSheet';
+import { TuneSheet } from '../features/player/TuneSheet';
+import { commitTune, commitTuneAnyway, pendingTune, type TuneOutcome } from '../features/player/tuneFlow';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { InlineRecovery } from '../ui/Feedback';
 import { Button } from '../ui/Button';
@@ -10,7 +15,7 @@ import { AppShell } from './AppShell';
 import { EnvironmentSheet } from './EnvironmentSheet';
 import { useAppStore } from './appStore';
 import { useBoot, usePopStateNavigation } from './hooks';
-import { generation, getEngine } from './services';
+import { generation, getEngine, tuneGeneration } from './services';
 
 function BootError() {
   return (
@@ -50,6 +55,38 @@ function useEngineBindings(): void {
   }, []);
 }
 
+function reportTune(outcome: TuneOutcome, retry: () => void): void {
+  const store = useAppStore.getState();
+  if (outcome.kind === 'committed') {
+    store.showToast(`已替換接下來的 ${outcome.count} 首；這首沒有中斷。`);
+    store.closeSheet();
+  } else if (outcome.kind === 'empty') {
+    store.showToast('這次沒有找到可用的曲目，已保留原本的接下來。');
+  } else if (outcome.kind === 'stale_revision') {
+    store.showToast('節目單剛剛有變動，新的接下來還沒套用。', { label: '仍要套用', run: retry });
+  } else {
+    store.showToast('節目已經切換，這次微調已捨棄。');
+  }
+}
+
+/** Commits a finished tune job against the context captured at tap time (docs/06). */
+function useTuneCommit(): void {
+  useEffect(
+    () =>
+      tuneGeneration.subscribe(() => {
+        const state = tuneGeneration.getState();
+        const context = pendingTune.current;
+        if (state.status !== 'ready' || !state.show || !context) return;
+        const show = state.show;
+        pendingTune.current = null;
+        tuneGeneration.reset();
+        const engine = getEngine();
+        reportTune(commitTune(engine, show, context), () => reportTune(commitTuneAnyway(engine, show, context.sessionId), () => undefined));
+      }),
+    [],
+  );
+}
+
 /**
  * Starts the ready show from the user's tap: load + play run synchronously in the click handler
  * so the single audio element is unlocked by this gesture. Switching shows is always explicit.
@@ -68,12 +105,23 @@ export function App() {
   useBoot();
   usePopStateNavigation();
   useEngineBindings();
+  useTuneCommit();
   const tab = useAppStore((s) => s.tab);
   const boot = useAppStore((s) => s.boot);
   const engineState = useEngineState();
   const hasActiveShow = engineState.queue.length > 0;
   return (
-    <AppShell sheets={<EnvironmentSheet />}>
+    <AppShell
+      miniPlayer={hasActiveShow && tab !== 'listen' ? <MiniPlayer state={engineState} /> : undefined}
+      sheets={
+        <>
+          <EnvironmentSheet />
+          <BridgeSheet />
+          <QueueSheet />
+          <TuneSheet />
+        </>
+      }
+    >
       {boot === 'error' && <BootError />}
       {tab === 'home' && <HomePage hasActiveShow={hasActiveShow} onStartShow={startReadyShow} />}
       {tab === 'listen' && <ListenPage />}

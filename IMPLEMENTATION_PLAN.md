@@ -30,4 +30,4 @@ Spec: `handoff/docs/10_IMPLEMENTATION_PLAN.md`. Remove this file when all stages
 **Goal**: Bridge, Queue, Tune, mini-player, settings.
 **Success Criteria**: never interrupts playback; Bridge adjacency correct; removal undoable.
 **Tests**: queue/bridge unit tests; E2E queue undo, tune, tab switch keeps audio owner.
-**Status**: Not Started
+**Status**: Complete

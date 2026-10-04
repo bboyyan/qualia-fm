@@ -1,6 +1,9 @@
 import { useId } from 'react';
 import type { MockScenario } from '@qualia/contracts';
 import { useAppStore } from '../../app/appStore';
+import { getEngine, mockAudioControls } from '../../app/services';
+import { isAudible } from '../../audio/engine';
+import { useEngineState } from '../../audio/useEngine';
 import { Button } from '../../ui/Button';
 import { Chip, SegmentedControl, Switch } from '../../ui/controls';
 import { CapabilityBadge, Eyebrow } from '../../ui/Feedback';
@@ -90,6 +93,47 @@ const SCENARIOS: readonly { value: MockScenario; label: string }[] = [
   { value: 'slow', label: '慢速（>20 秒）' },
 ];
 
+/** MOCK-only playback situations; they drive the real engine recovery paths. */
+function PlaybackSimulations() {
+  const showToast = useAppStore((s) => s.showToast);
+  const setTab = useAppStore((s) => s.setTab);
+  const engineState = useEngineState();
+  const audible = isAudible(engineState);
+  return (
+    <div className={styles.rowStack}>
+      <div>
+        <h3>播放情境</h3>
+        <p>模擬手機擋下自動播放、或播放裝置斷線，檢查恢復流程。</p>
+      </div>
+      <div className={styles.stack}>
+        <Button
+          variant="outline"
+          block
+          onClick={() => {
+            mockAudioControls()?.simulateAutoplayBlockOnce();
+            showToast('已設定：下一次開始播放會被擋下（MOCK）。');
+          }}
+        >
+          模擬「點一下繼續」
+        </Button>
+        <Button
+          variant="outline"
+          block
+          disabled={!audible}
+          onClick={() => {
+            mockAudioControls()?.simulateDeviceLost();
+            getEngine().deviceLost();
+            setTab('listen');
+          }}
+          data-testid="simulate-device-lost"
+        >
+          {audible ? '模擬「播放裝置斷線」' : '模擬「播放裝置斷線」（播放中才可用）'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** Labelled MOCK-only scenario preview for review/E2E; it changes only the next mock plan. */
 function ScenarioSettings() {
   const scenario = useAppStore((s) => s.mockScenario);
@@ -111,6 +155,7 @@ function ScenarioSettings() {
             ))}
           </div>
         </div>
+        <PlaybackSimulations />
       </section>
     </>
   );
