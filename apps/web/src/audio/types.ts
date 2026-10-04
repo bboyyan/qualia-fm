@@ -5,6 +5,9 @@
 import type { ErrorCode, Segment, ShowPlan } from '@qualia/contracts';
 
 export type Phase =
+  | 'manual_ready'
+  | 'manual_playing'
+  | 'feedback'
   | 'empty'
   | 'ready'
   | 'loading_speech'
@@ -37,6 +40,9 @@ export interface RemovedEntry {
 }
 
 export interface EngineState {
+  readonly playbackMode: 'manual' | 'mock';
+  readonly feedbackEnabled: boolean;
+  readonly feedbackNextIndex: number | null;
   readonly sessionId: string | null;
   readonly show: ShowPlan | null;
   readonly queue: readonly QueueItem[];
@@ -72,6 +78,10 @@ export interface ProviderState {
 
 export type Action =
   | { type: 'LOAD_SHOW'; show: ShowPlan; sessionId: string }
+  | { type: 'SET_MODE'; mode: 'manual' | 'mock' }
+  | { type: 'MANUAL_STARTED' }
+  | { type: 'MANUAL_FINISHED' }
+  | { type: 'COMPLETE_FEEDBACK' }
   | { type: 'PLAY' }
   | { type: 'PAUSE'; positionMs?: number }
   | { type: 'NEXT' }
@@ -82,7 +92,7 @@ export type Action =
   | { type: 'SEEK'; positionMs: number }
   | { type: 'REMOVE_UPCOMING'; segmentId: string; expectedRevision: number }
   | { type: 'RESTORE_REMOVED'; expectedRevision: number }
-  | { type: 'COMMIT_TAIL'; items: readonly QueueItem[]; sessionId: string; expectedRevision: number }
+  | { type: 'COMMIT_TAIL'; items: readonly QueueItem[]; sessionId: string; expectedRevision: number; warnings?: readonly string[] }
   | { type: 'SET_DJ'; enabled: boolean }
   | { type: 'DEVICE_LOST' }
   | { type: 'RECONCILE' }

@@ -11,6 +11,9 @@ import { IconButton } from '../../ui/Button';
 import styles from './sheets.module.css';
 
 const STATUS: Record<Phase, string> = {
+  manual_ready: '請在 Spotify app 自己點歌',
+  manual_playing: '外部播放中（由你確認）',
+  feedback: '等待回饋',
   empty: '',
   ready: '尚未開始播放',
   loading_speech: '準備介紹…',
@@ -41,7 +44,7 @@ export function MiniPlayer({ state }: { state: EngineState }) {
         icon={audible ? 'pause' : 'play'}
         label={audible ? '暫停' : '播放'}
         tone="inverse"
-        disabled={state.phase === 'recoverable_error'}
+        disabled={state.phase === 'recoverable_error' || state.phase === 'feedback' || state.phase === 'manual_ready' || state.phase === 'manual_playing'}
         onClick={() => getEngine().toggle()}
         data-testid="mini-toggle"
       />

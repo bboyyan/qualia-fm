@@ -8,7 +8,7 @@ export function candidate(n: number, transitionFrom: number | null = null): Cand
     versionHint: null,
     seedBridge: `seed bridge ${n}`,
     transitionBridge: transitionFrom ? { fromCandidateId: `c${transitionFrom}`, text: `transition ${transitionFrom}→${n}`, djLine: `接續 ${n}` } : null,
-    vibe: ['溫暖', '留白', '夜行'],
+    vibe: ['TEST 一', 'TEST 二', 'TEST 三'],
     djLine: `介紹 ${n}`,
     evidenceLevel: 'unknown',
     evidenceRefs: [],

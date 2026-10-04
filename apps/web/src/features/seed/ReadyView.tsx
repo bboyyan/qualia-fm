@@ -2,7 +2,9 @@
  * S03 準備好／尚未播放. Ready is not playing: nothing moves until the user taps. Shows the real
  * playable count; 0 tracks keeps the analysis and the unconfirmed list with "修改感覺".
  */
+import { useAppStore } from '../../app/appStore';
 import type { ShowPlan } from '@qualia/contracts';
+import { LedgerWarnings } from '../player/LedgerWarnings';
 import { Button } from '../../ui/Button';
 import { Eyebrow, InlineRecovery } from '../../ui/Feedback';
 import { SonicDnaCard } from './SonicDna';
@@ -62,9 +64,11 @@ function ZeroNotice({ show, onEdit }: { show: ShowPlan; onEdit: () => void }) {
 }
 
 export function ReadyView({ show, hasActiveShow, onStart, onBackToListen, onEdit, onRegenerate }: ReadyViewProps) {
+  const playbackMode = useAppStore((s) => s.settings.playbackMode);
   const count = show.segments.length;
   return (
     <section className={styles.ready} aria-labelledby="ready-title" data-testid="ready-view">
+      <LedgerWarnings warnings={show.warnings} />
       <Eyebrow>{count > 0 ? 'YOUR SHOW IS READY' : 'NOTHING PLAYABLE YET'}</Eyebrow>
       <h1 id="ready-title">{count > 0 ? '節目準備好了。' : '這次還沒有可播的曲目。'}</h1>
       <blockquote className={styles.seedQuote}>{show.seed.text}</blockquote>
@@ -88,7 +92,7 @@ export function ReadyView({ show, hasActiveShow, onStart, onBackToListen, onEdit
           <Button block variant="text" className={styles.secondary} onClick={onEdit}>
             再調整一下感覺
           </Button>
-          <p className={styles.genNote}>曲目皆為虛構；按下後只會播放合成測試音（MOCK），不是真實音樂。</p>
+          <p className={styles.genNote}>{playbackMode === 'manual' ? 'B 手動模式：曲目為 MOCK 虛構資料。介紹只有文字與合成提示音；音樂請自行在 Spotify app 點歌，本站不播放或控制 Spotify。' : '曲目皆為虛構；按下後只會播放合成測試音（MOCK），不是真實音樂。'}</p>
         </>
       )}
     </section>

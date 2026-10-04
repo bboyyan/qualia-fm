@@ -15,7 +15,7 @@ import { useGeneration } from '../seed/useGeneration';
 import { captureTuneContext, pendingTune, tuneRequest } from './tuneFlow';
 import styles from './sheets.module.css';
 
-const QUICK = ['更放鬆', '更有推進', '多點人聲', '更陌生'] as const;
+const QUICK = ['TEST 微調一', 'TEST 微調二', 'TEST 微調三', 'TEST 微調四'] as const;
 
 const PHASE_TEXT: Record<string, string> = {
   queued: '排隊中…',
@@ -65,7 +65,7 @@ export function TuneSheet() {
         id={fieldId}
         className={styles.field}
         value={text}
-        placeholder="例如：節奏保留，但聲音再柔一點。"
+        placeholder="TEST：請輸入假微調。"
         onChange={(e) => setText(e.target.value)}
         maxLength={1000}
         disabled={running}

@@ -7,6 +7,7 @@ import { useEngineState } from '../../audio/useEngine';
 import { Button } from '../../ui/Button';
 import { Chip, SegmentedControl, Switch } from '../../ui/controls';
 import { CapabilityBadge, Eyebrow } from '../../ui/Feedback';
+import { PlaybackModeSettings } from './PlaybackModeSettings';
 import styles from './settings.module.css';
 
 function DjSettings() {
@@ -162,6 +163,10 @@ function ScenarioSettings() {
 }
 
 export function SettingsPage() {
+  const settings = useAppStore((s) => s.settings);
+  const setSettings = useAppStore((s) => s.setSettings);
+  const engineState = useEngineState();
+  const feedbackPending = engineState.phase === 'feedback';
   const resetSettings = useAppStore((s) => s.resetSettings);
   const showToast = useAppStore((s) => s.showToast);
   return (
@@ -170,18 +175,24 @@ export function SettingsPage() {
         <Eyebrow>MAKE IT YOURS</Eyebrow>
         <h1>剛剛好的陪伴。</h1>
       </header>
+      <PlaybackModeSettings mode={settings.playbackMode} disabled={feedbackPending} onChange={(playbackMode) => {
+        getEngine().setPlaybackMode(playbackMode);
+        setSettings({ playbackMode });
+        showToast('播放模式已切換，請重新開始目前曲目。');
+      }} />
       <DjSettings />
       <EnvironmentSettings />
       <ScenarioSettings />
       <section className={styles.info} aria-labelledby="data-title">
         <h3 id="data-title">關於聲音與資料</h3>
         <p>
-          你的輸入只用於這次節目，存在伺服器記憶體中，重新啟動即消失；本機只記住 DJ 設定。MOCK 模式不呼叫任何 AI 或音樂服務。正式版的 AI 語音會清楚標示。
+          你的輸入只用於這次節目，存在伺服器記憶體中，重新啟動即消失；回饋只寫入 TEST 假帳本，請填假資料；重啟即清除。本機只記住 DJ 與播放模式設定。MOCK 模式不呼叫任何 AI 或音樂服務。正式版的 AI 語音會清楚標示。
         </p>
       </section>
       <Button
         variant="text"
         block
+        disabled={feedbackPending}
         onClick={() => {
           resetSettings();
           showToast('已清除本機設定。');

@@ -1,0 +1,15 @@
+.card {
+  padding: 18px;
+  border: 1px solid var(--q-border);
+  border-radius: 16px;
+  background: var(--q-surface);
+  min-width: 0;
+}
+.card h2 { font-size: 20px; margin: 0 0 10px; }
+.card p { font-size: 13px; line-height: 1.6; margin: 8px 0 12px; }
+.card label { display: block; font-size: 14px; margin: 14px 0 8px; }
+.card textarea { display: block; width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--q-border); background: transparent; color: inherit; font: inherit; resize: vertical; }
+.ratings { display: flex; gap: 8px; }
+.ratings button { flex: 1; min-height: 48px; border: 1px solid var(--q-border); border-radius: 10px; color: inherit; background: transparent; font: inherit; }
+.ratings button[aria-pressed='true'] { background: var(--q-primary); color: var(--q-on-primary); }
+.actions { display: grid; gap: 8px; margin-top: 12px; }

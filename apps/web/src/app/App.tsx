@@ -35,6 +35,10 @@ function BootError() {
 
 /** Engine-wide side effects: DJ setting, lock-screen controls, foreground reconcile. */
 function useEngineBindings(): void {
+  const playbackMode = useAppStore((s) => s.settings.playbackMode);
+  useEffect(() => {
+    getEngine().setPlaybackMode(playbackMode);
+  }, [playbackMode]);
   const djEnabled = useAppStore((s) => s.settings.djEnabled);
   useEffect(() => {
     getEngine().setDjEnabled(djEnabled);

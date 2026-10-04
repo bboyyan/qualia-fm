@@ -33,7 +33,7 @@ export async function bootstrap(app: Express): Promise<Client> {
 }
 
 export const planRequest = (overrides: Partial<PlanRequest> = {}): PlanRequest => ({
-  seed: { kind: 'feeling', text: '深夜，還不想睡；暖一點，別太躁。', artist: null },
+  seed: { kind: 'feeling', text: 'TEST fake seed', artist: null },
   requestedCount: 5,
   dj: { enabled: true, length: 'short' },
   tuning: null,

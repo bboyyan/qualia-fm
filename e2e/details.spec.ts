@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { expectNoHorizontalOverflow, expectNotCoveredByBottomBar, generate, openApp } from './support';
+import { expectNoHorizontalOverflow, expectNotCoveredByBottomBar, generate, openApp, skipFeedback } from './support';
 
 async function startListening(page: Page): Promise<void> {
-  await openApp(page);
+  await openApp(page, 'mock');
   await generate(page);
   await page.getByTestId('start-listening').click();
   await page.getByTestId('skip-intro').click();
@@ -52,6 +52,7 @@ test.describe('T05 收聽與細節', () => {
     await expect(page.getByTestId('track-title')).toHaveText('微光偏航');
     await page.getByRole('button', { name: '現在播放 低空漂浮' }).click();
     await expect(page.getByRole('dialog')).toBeHidden();
+    await skipFeedback(page);
     await expect(page.getByTestId('track-title')).toHaveText('低空漂浮');
   });
 
@@ -62,7 +63,7 @@ test.describe('T05 收聽與細節', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('next-up')).toContainText('柔焦公路');
     await page.getByTestId('count-pill').click();
-    await expect(page.getByTestId('queue-row').nth(1)).toContainText('保留柔和的輪廓');
+    await expect(page.getByTestId('queue-row').nth(1)).toContainText('TEST 假推薦');
   });
 
   test('Tune replaces only the upcoming tail and never interrupts the current song (AC22)', async ({ page }) => {
@@ -70,7 +71,7 @@ test.describe('T05 收聽與細節', () => {
     await page.getByTestId('open-tune').click();
     const sheet = page.getByRole('dialog', { name: '把接下來，調近一點' });
     await expect(sheet).toContainText('不打斷這首');
-    await sheet.getByRole('button', { name: '更放鬆' }).click();
+    await sheet.getByRole('button', { name: 'TEST 微調一' }).click();
     await sheet.getByTestId('tune-apply').click();
     await expect(sheet.getByTestId('tune-running')).toBeVisible();
     expect(await audioPaused(page)).toBe(false);
@@ -84,7 +85,7 @@ test.describe('T05 收聽與細節', () => {
     await startListening(page);
     await page.getByTestId('open-tune').click();
     const sheet = page.getByRole('dialog', { name: '把接下來，調近一點' });
-    await sheet.getByTestId('tune-input').fill('節奏保留，但聲音再柔一點');
+    await sheet.getByTestId('tune-input').fill('TEST fake tuning');
     await sheet.getByTestId('tune-apply').click();
     await sheet.getByTestId('tune-cancel').click();
     await page.waitForTimeout(2_500);
@@ -113,7 +114,7 @@ test.describe('T05 收聽與細節', () => {
     await startListening(page);
     await page.getByTestId('tab-home').click();
     await expect(page.getByTestId('generate')).toHaveText(/建立下一段/);
-    await generate(page, '換一段：更陌生一點');
+    await generate(page, 'TEST fake next seed');
     await expect(page.getByTestId('start-listening')).toHaveText(/現在切換至新節目/);
     expect(await audioPaused(page)).toBe(false);
     await page.getByRole('button', { name: '先回到正在收聽' }).click();
@@ -135,6 +136,7 @@ test.describe('T05 收聽與細節', () => {
     await page.getByRole('switch', { name: 'DJ 介紹' }).click();
     await page.getByTestId('tab-listen').click();
     await page.getByTestId('next').click();
+    await skipFeedback(page);
     await expect(page.getByTestId('dj-strip')).toHaveCount(0);
     await expect(page.getByTestId('phase-label')).toContainText('MOCK 合成測試音播放中', { timeout: 8_000 });
   });

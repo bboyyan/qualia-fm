@@ -5,7 +5,9 @@
 import { createHash, randomBytes } from 'node:crypto';
 import {
   PlanDraftSchema,
+  CONFIRMED_SEED,
   type Candidate,
+  type FeedbackRequest,
   type JobInfo,
   type JobPhase,
   type MockScenario,
@@ -13,6 +15,7 @@ import {
   type PlanRequest,
   type ShowPlan,
 } from '@qualia/contracts';
+import type { FeedbackLedger } from '../ledger/types.js';
 import type { ServerConfig } from '../config/env.js';
 import { AppError, errorEnvelope, newRequestId } from '../http/errors.js';
 import type { CatalogResolver, EditorialPlanner, PhaseClock } from '../providers/types.js';
@@ -28,6 +31,7 @@ const GLOBAL_PLAN_CAP_PER_HOUR = 1_000;
 const TARGET_SEGMENTS = 5;
 
 export interface PlanServiceDeps {
+  readonly ledger: FeedbackLedger;
   readonly config: ServerConfig;
   readonly planner: EditorialPlanner;
   readonly resolver: CatalogResolver;
@@ -107,6 +111,19 @@ export class PlanService {
     return plan;
   }
 
+  async feedback(ownerId: string, request: FeedbackRequest) {
+    const show = this.show(ownerId, request.showId);
+    const segment = show.segments.find((s) => s.segmentId === request.segmentId);
+    if (!segment) throw new AppError('NOT_FOUND');
+    return this.deps.ledger.append({
+      date: new Date(this.deps.now()).toISOString(),
+      seed: [show.seed.artist, show.seed.text].filter(Boolean).join(' — '),
+      recommendation: `${segment.candidate.artist} — ${segment.candidate.title}`,
+      rating: request.rating,
+      reason: request.reason,
+    });
+  }
+
   /** Logout / session end: abort in-flight work and forget everything the owner had. */
   forgetOwner(ownerId: string): void {
     for (const job of this.deps.store.ownedBy(ownerId)) job.controller.abort('cancel');
@@ -133,7 +150,20 @@ export class PlanService {
     const deadline = setTimeout(() => job.controller.abort('timeout'), this.deps.config.limits.planDeadlineMs);
     deadline.unref?.();
     try {
-      const plan = await this.pipeline(job.jobId, toEditorialInput(input.request), input, signal);
+      let request = input.request;
+      let warning: string | null = null;
+      let history: EditorialInput['history'] = [];
+      try {
+        history = await this.deps.ledger.read(signal);
+      } catch {
+        if (signal.aborted) throw signal.reason;
+        request = { ...request, seed: { ...CONFIRMED_SEED }, tuning: null };
+        warning = '未讀到帳本：本輪只用種子曲。';
+      }
+      if (signal.aborted) throw signal.reason;
+      const editorial = { ...toEditorialInput(request), history };
+      const result = await this.pipeline(job.jobId, editorial, { ...input, request }, signal);
+      const plan = warning ? { ...result, warnings: [...result.warnings, warning] } : result;
       this.deps.store.putShow(job.ownerId, plan, this.deps.now());
       this.finish(job, plan);
     } catch (error: unknown) {

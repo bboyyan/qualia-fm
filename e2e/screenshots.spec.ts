@@ -36,7 +36,7 @@ const SCREENS: readonly Screen[] = [
   {
     name: '01b-home-filled',
     prepare: async (page) => {
-      await fillSeed(page, '深夜，還不想睡；暖一點，別太躁。');
+      await fillSeed(page, 'TEST fake seed');
     },
   },
   {
@@ -153,7 +153,7 @@ const SCREENS: readonly Screen[] = [
     prepare: async (page) => {
       await startPlaying(page);
       await page.getByTestId('open-tune').click();
-      await page.getByTestId('tune-sheet').getByRole('button', { name: '更放鬆' }).click();
+      await page.getByTestId('tune-sheet').getByRole('button', { name: 'TEST 微調一' }).click();
     },
   },
   {
@@ -200,7 +200,7 @@ for (const size of SIZES) {
     for (const screen of SCREENS) {
       test(screen.name, async ({ page }) => {
         await page.emulateMedia({ reducedMotion: 'reduce' });
-        await openApp(page);
+        await openApp(page, 'mock');
         await screen.prepare(page);
         await page.waitForTimeout(300);
         await page.screenshot({ path: `${OUT}/${screen.name}-${size.width}x${size.height}.png` });

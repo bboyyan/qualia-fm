@@ -5,6 +5,9 @@
 import type { z } from 'zod';
 import {
   CapabilitiesSchema,
+  FeedbackReceiptSchema,
+  type FeedbackRequest,
+  type FeedbackReceipt,
   ERROR_MESSAGES,
   ErrorEnvelopeSchema,
   HEADERS,
@@ -46,6 +49,7 @@ export interface StartPlanOptions {
 }
 
 export interface ApiClient {
+  feedback(request: FeedbackRequest): Promise<FeedbackReceipt>;
   ensureSession(force?: boolean): Promise<SessionInfo>;
   capabilities(signal?: AbortSignal): Promise<Capabilities>;
   startPlan(request: PlanRequest, options: StartPlanOptions): Promise<JobInfo>;
@@ -97,6 +101,10 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
   }
 
   return {
+    feedback: async (request) => {
+      await ensureSession();
+      return mutate('/api/feedback', FeedbackReceiptSchema, 'POST', {}, request);
+    },
     ensureSession,
     capabilities: (signal) => send('/api/capabilities', CapabilitiesSchema, { signal }),
     startPlan: async (request, options) => {

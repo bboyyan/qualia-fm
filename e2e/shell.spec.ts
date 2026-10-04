@@ -53,8 +53,8 @@ test.describe('T02 shell and design foundation', () => {
 
   test('example chip only fills the composer and never starts generation', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: '深夜，還不想睡' }).click();
-    await expect(page.getByTestId('seed-input')).toHaveValue('深夜，還不想睡');
+    await page.getByRole('button', { name: 'TEST 假起點一' }).click();
+    await expect(page.getByTestId('seed-input')).toHaveValue('TEST 假起點一');
     await expect(page.getByRole('heading', { name: /不是同類型/ })).toBeVisible();
   });
 
@@ -80,7 +80,7 @@ test.describe('T02 shell and design foundation', () => {
 
   test('primary CTA is never covered by the bottom navigation', async ({ page }) => {
     await openApp(page);
-    await fillSeed(page, '暖一點，別太躁');
+    await fillSeed(page, 'TEST fake seed');
     await expectNotCoveredByBottomBar(page, 'generate');
   });
 
