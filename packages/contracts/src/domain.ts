@@ -112,6 +112,7 @@ export const AudioLocatorSchema = z.discriminatedUnion('kind', [
 export type AudioLocator = z.infer<typeof AudioLocatorSchema>;
 
 export const SpeechLocatorSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('ai_audio'), aiVoice: z.literal(true), url: z.string().regex(/^\/api\/media\/tts\/[A-Za-z0-9_/-]+$/) }),
   z.strictObject({ kind: z.literal('none') }),
   z.strictObject({
     kind: z.literal('mock_chime'),
@@ -119,6 +120,14 @@ export const SpeechLocatorSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 export type SpeechLocator = z.infer<typeof SpeechLocatorSchema>;
+
+/** 真實供應商降級提示的固定開頭；server 只用這些開頭寫入 warnings，前端據此顯示，不猜字串。 */
+export const PROVIDER_NOTICES = {
+  llm: 'AI 選歌本輪改用 MOCK 示範',
+  tts: 'AI 語音本輪改為文字介紹＋提示音',
+} as const;
+export const isProviderNotice = (warning: string): boolean =>
+  Object.values(PROVIDER_NOTICES).some((prefix) => warning.startsWith(prefix));
 
 export const ResolvedTrackSchema = z.strictObject({
   provider: ModeSchema,

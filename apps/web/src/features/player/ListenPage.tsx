@@ -15,6 +15,7 @@ import { FeedbackStep } from './FeedbackStep';
 import { ManualControls } from './ManualControls';
 import { LedgerWarnings } from './LedgerWarnings';
 import { PlaybackBanner } from './PlaybackBanner';
+import { ProviderNotices, SpeechFallbackNotice } from './ProviderNotices';
 import { DjStrip, SeekBar, Transport, isSpeechPhase } from './PlayerControls';
 import styles from './player.module.css';
 
@@ -137,7 +138,11 @@ export function ListenPage() {
   return (
     <section className={styles.listen} aria-label="正在收聽" data-testid="listen-page">
       <LedgerWarnings warnings={state.show?.warnings ?? []} />
+      <ProviderNotices warnings={state.show?.warnings ?? []} />
       <PlaybackBanner state={state} />
+      {state.speechFallbackId === item.segment.segmentId && (
+        <SpeechFallbackNotice djLine={currentBridge(state)?.djLine ?? candidate.djLine} onRetry={() => engine.replayIntro()} />
+      )}
       <ListenHeader state={state} />
       {!feedback && <SoundscapeArt palette={palette} spinning={state.phase === 'track_playing'} kicker="THE TEXTURE OF TONIGHT" />}
       <div className={styles.songHeading}>

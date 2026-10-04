@@ -9,7 +9,8 @@ import { isAudible } from '../../audio/engine';
 import { currentBridge, currentItem, nextItem } from '../../audio/queue';
 import type { EngineState, Phase } from '../../audio/types';
 import { usePlaybackPosition } from '../../audio/useEngine';
-import { Button, IconButton } from '../../ui/Button';
+import { DjIntroduction } from './DjIntroduction';
+import { IconButton } from '../../ui/Button';
 import styles from './player.module.css';
 
 export const formatTime = (ms: number): string => {
@@ -46,20 +47,7 @@ export function isSpeechPhase(state: EngineState): boolean {
 export function DjStrip({ state }: { state: EngineState }) {
   const bridge = currentBridge(state);
   if (!isSpeechPhase(state) || !bridge) return null;
-  return (
-    <section className={styles.djStrip} aria-label="DJ 介紹" data-testid="dj-strip">
-      <div className={styles.djHead}>
-        <p>
-          {state.phase === 'paused' ? '介紹已暫停' : 'DJ 正在介紹'}
-          <span> · MOCK 提示音，非 AI 語音</span>
-        </p>
-        <Button variant="text" trailingIcon="chevron" onClick={() => getEngine().skipIntro()} data-testid="skip-intro">
-          跳過介紹
-        </Button>
-      </div>
-      <p className={styles.djLine}>「{bridge.djLine}」</p>
-    </section>
-  );
+  return <DjIntroduction djLine={bridge.djLine} paused={state.phase === 'paused'} aiVoice={currentItem(state)?.segment.speech.kind === 'ai_audio'} onSkip={() => getEngine().skipIntro()} />;
 }
 
 export function SeekBar({ state }: { state: EngineState }) {
@@ -106,7 +94,7 @@ export function SeekBar({ state }: { state: EngineState }) {
       />
       <div className={styles.timeRow}>
         <span data-testid="elapsed">{formatTime(shown)}</span>
-        <span>{formatTime(durationMs)} · {speech ? 'MOCK 提示音' : 'MOCK 合成音'}</span>
+        <span>{formatTime(durationMs)} · {speech ? (item.segment.speech.kind === 'ai_audio' ? 'AI 合成語音' : 'MOCK 提示音') : 'MOCK 合成音'}</span>
       </div>
     </div>
   );

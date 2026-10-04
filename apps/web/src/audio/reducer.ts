@@ -31,6 +31,7 @@ export const initialEngineState = (djEnabled = true, canSeek = true): EngineStat
   error: null,
   removed: null,
   previousPlayedId: null,
+  speechFallbackId: null,
 });
 
 const ACTIVE: ReadonlySet<Phase> = new Set(['loading_speech', 'speaking', 'loading_track', 'track_playing']);
@@ -69,6 +70,7 @@ function startSegment(state: EngineState, index: number): Reduction {
     positionMs: 0,
     trackResumeMs: 0,
     error: null,
+    speechFallbackId: null,
     statuses: withStatus({ ...state, currentIndex: index }, index, 'playing'),
   };
   if (owner === 'track' && state.playbackMode === 'manual') return startTrack(next, 0);
@@ -202,7 +204,7 @@ function replayIntro(state: EngineState, trackPositionMs: number): Reduction {
   const attemptId = state.attemptId + 1;
   const resumeAt = inTrack(state) ? Math.max(0, trackPositionMs) : 0;
   return ok(
-    { ...state, attemptId, phase: 'loading_speech', activeOwner: 'speech', resumePhase: null, pendingOwner: null, positionMs: 0, trackResumeMs: resumeAt, error: null },
+    { ...state, attemptId, phase: 'loading_speech', activeOwner: 'speech', resumePhase: null, pendingOwner: null, positionMs: 0, trackResumeMs: resumeAt, error: null, speechFallbackId: null },
     [{ type: 'start', owner: 'speech', segment: item.segment, fromMs: 0, attemptId }],
   );
 }
@@ -287,8 +289,15 @@ function ownerFailed(state: EngineState, owner: OwnerKind, code: 'AUTOPLAY_BLOCK
     );
   }
   if (owner === 'speech') {
+    // 介紹失敗不擋音樂（AC17）；AI 語音失敗另記下本段，讓 UI 顯示文字介紹與重試，不靜默。
+    const item = state.queue[state.currentIndex];
+    const aiFailed = item?.segment.speech.kind === 'ai_audio';
     const fallback = startTrack(state, state.trackResumeMs);
-    return { ...fallback, effects: [...fallback.effects, announce('介紹暫時無法播放，直接進歌')] };
+    return {
+      ...fallback,
+      state: aiFailed ? { ...fallback.state, speechFallbackId: item.segment.segmentId } : fallback.state,
+      effects: [...fallback.effects, announce(aiFailed ? 'AI 語音暫時無法播放，已顯示文字介紹並直接進歌' : '介紹暫時無法播放，直接進歌')],
+    };
   }
   const failures = state.consecutiveFailures + 1;
   const failed: EngineState = { ...state, consecutiveFailures: failures, statuses: withStatus(state, state.currentIndex, 'failed'), previousPlayedId: null };

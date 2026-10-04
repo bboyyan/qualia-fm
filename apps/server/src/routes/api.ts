@@ -1,5 +1,6 @@
 /** /api routes (docs/08 端點). Everything except health, session and gated auth needs a session. */
 import { Router, type Request } from 'express';
+import { z } from 'zod';
 import {
   HEADERS,
   FeedbackRequestSchema,
@@ -8,6 +9,8 @@ import {
   type MockScenario,
   type SessionInfo,
 } from '@qualia/contracts';
+import type { RealProviderRuntime } from '../budget/runtime.js';
+import type { OpenAITtsProvider } from '../providers/openai/tts.js';
 import type { ServerConfig } from '../config/env.js';
 import { AppError } from '../http/errors.js';
 import { assertAllowedOrigin, requireCsrf, requireSession, sessionOf } from '../security/guards.js';
@@ -24,6 +27,8 @@ import { assertFeatureAllowed, buildCapabilities } from '../services/capabilitie
 import type { PlanService } from '../services/planService.js';
 
 export interface ApiDeps {
+  readonly runtime: RealProviderRuntime;
+  readonly tts: OpenAITtsProvider;
   readonly config: ServerConfig;
   readonly sessions: SessionStore;
   readonly plans: PlanService;
@@ -100,10 +105,30 @@ function planRoutes(router: Router, deps: ApiDeps): void {
 
 function sessionRoutes(router: Router, deps: ApiDeps): void {
   router.get('/capabilities', (_req, res) => {
-    res.json(buildCapabilities(deps.config));
+    res.json(buildCapabilities(deps.config, deps.runtime.statusReason()));
   });
-  router.use('/tts', () => assertFeatureAllowed(deps.config, 'tts'));
-  router.use('/media/tts', () => assertFeatureAllowed(deps.config, 'tts'));
+  router.post('/tts', async (req, res) => {
+    if (deps.config.openai.tts !== 'openai') assertFeatureAllowed(deps.config, 'tts');
+    const reason = deps.runtime.reason();
+    if (reason) throw new AppError('FEATURE_RESTRICTED', { message: reason });
+    const body = z.strictObject({ showId: z.string().min(1).max(100), segmentId: z.string().min(1).max(100), variant: z.literal('seed'), voiceId: z.string().max(100).optional() }).safeParse(req.body);
+    if (!body.success) throw new AppError('INVALID_INPUT');
+    res.json(await deps.plans.speech(sessionOf(res).id, body.data.showId, body.data.segmentId));
+  });
+  router.get('/media/tts/:showId/:segmentId/:key', (req, res, next) => {
+    const showId = param(req, 'showId');
+    const segmentId = param(req, 'segmentId');
+    const key = param(req, 'key');
+    const segment = deps.plans.show(sessionOf(res).id, showId).segments.find((item) => item.segmentId === segmentId);
+    if (!segment || segment.speech.kind !== 'ai_audio' || segment.speech.url !== `/api/media/tts/${showId}/${segmentId}/${key}`) throw new AppError('NOT_FOUND');
+    const file = deps.tts.cachedFile(key);
+    if (!file) throw new AppError('NOT_FOUND');
+    res.setHeader('Cache-Control', 'private, no-store');
+    // sendFile 支援 Range／206：iPhone Safari 播放 <audio> 會先送 Range 請求，純 send() 會讓播放失敗。
+    res.sendFile(file, { cacheControl: false, lastModified: false, dotfiles: 'deny', headers: { 'Content-Type': 'audio/mpeg' } }, (error) => {
+      if (error && !res.headersSent) next(new AppError('NOT_FOUND'));
+    });
+  });
   router.post('/auth/logout', (_req, res) => {
     const session = sessionOf(res);
     deps.plans.forgetOwner(session.id);

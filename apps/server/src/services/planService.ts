@@ -6,6 +6,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import {
   PlanDraftSchema,
   CONFIRMED_SEED,
+  PROVIDER_NOTICES,
   type Candidate,
   type FeedbackRequest,
   type JobInfo,
@@ -15,6 +16,8 @@ import {
   type PlanRequest,
   type ShowPlan,
 } from '@qualia/contracts';
+import type { RealProviderRuntime } from '../budget/runtime.js';
+import type { OpenAITtsProvider } from '../providers/openai/tts.js';
 import type { FeedbackLedger } from '../ledger/types.js';
 import type { ServerConfig } from '../config/env.js';
 import { AppError, errorEnvelope, newRequestId } from '../http/errors.js';
@@ -29,8 +32,15 @@ const HOUR_MS = 60 * 60 * 1000;
 const MAX_ACTIVE_JOBS_PER_SESSION = 3;
 const GLOBAL_PLAN_CAP_PER_HOUR = 1_000;
 const TARGET_SEGMENTS = 5;
+/** TTS 階段結束後留給組裝節目的餘裕；開始下一段前剩餘時間須 ≥ TTS 單次逾時＋此餘裕。 */
+const SPEECH_DEADLINE_MARGIN_MS = 250;
+const monotonicNow = (): number => performance.now();
 
 export interface PlanServiceDeps {
+  readonly runtime?: RealProviderRuntime;
+  /** 啟用真實 LLM 時的降級來源（MOCK）；未設定時維持原行為：無效兩次即 PLAN_INVALID。 */
+  readonly fallbackPlanner?: EditorialPlanner;
+  readonly tts?: OpenAITtsProvider;
   readonly ledger: FeedbackLedger;
   readonly config: ServerConfig;
   readonly planner: EditorialPlanner;
@@ -112,6 +122,14 @@ export class PlanService {
     return plan;
   }
 
+  async speech(ownerId: string, showId: string, segmentId: string) {
+    if (!this.deps.tts) throw new AppError('FEATURE_RESTRICTED');
+    const segment = this.show(ownerId, showId).segments.find((item) => item.segmentId === segmentId);
+    if (!segment || segment.speech.kind !== 'ai_audio') throw new AppError('NOT_FOUND');
+    const speech = await this.deps.tts.synthesize(segment.candidate.djLine, new AbortController().signal);
+    return { ...speech, url: `/api/media/tts/${showId}/${segmentId}/${speech.url.split('/').at(-1)!}` };
+  }
+
   async feedback(ownerId: string, request: FeedbackRequest) {
     const show = this.show(ownerId, request.showId);
     const segment = show.segments.find((s) => s.segmentId === request.segmentId);
@@ -149,6 +167,7 @@ export class PlanService {
 
   private async run(job: JobRecord, input: StartPlanInput): Promise<void> {
     const { signal } = job.controller;
+    const deadlineAt = monotonicNow() + this.deps.config.limits.planDeadlineMs;
     const deadline = setTimeout(() => job.controller.abort('timeout'), this.deps.config.limits.planDeadlineMs);
     deadline.unref?.();
     try {
@@ -164,7 +183,7 @@ export class PlanService {
       }
       if (signal.aborted) throw signal.reason;
       const editorial = { ...toEditorialInput(request), history };
-      const result = await this.pipeline(job.jobId, editorial, { ...input, request }, signal);
+      const result = await this.pipeline(job.jobId, editorial, { ...input, request }, signal, deadlineAt);
       const plan = warning ? { ...result, warnings: [...result.warnings, warning] } : result;
       this.deps.store.putShow(job.ownerId, plan, this.deps.now());
       this.finish(job, plan);
@@ -175,15 +194,26 @@ export class PlanService {
     }
   }
 
-  private async pipeline(jobId: string, editorial: EditorialInput, input: StartPlanInput, signal: AbortSignal): Promise<ShowPlan> {
+  private async pipeline(jobId: string, editorial: EditorialInput, input: StartPlanInput, signal: AbortSignal, deadlineAt: number): Promise<ShowPlan> {
     const { phaseMs, slowPhaseMs, speechMs } = this.deps.config.mock;
     await this.enter(jobId, 'understanding', phaseMs, signal);
-    const draft = await this.draftWithRepair(editorial, input.scenario, signal);
+    // 供應商降級提示一律放在 warnings 最前面，模型自己的 warnings 再多也不會把它擠掉。
+    const notices: string[] = [];
+    let realReason: string | null = null;
+    if (this.deps.runtime) {
+      try { await this.deps.runtime.claimPlan(signal); }
+      catch (error) {
+        if (signal.aborted) throw signal.reason;
+        realReason = safeReason(error, '真實供應商無法使用。');
+      }
+    }
+    const draft = await this.draftWithFallback(editorial, input.scenario, signal, realReason, notices);
+    if (this.deps.tts && realReason) notices.push(`${PROVIDER_NOTICES.tts}：${realReason}`);
     await this.enter(jobId, 'matching', input.scenario === 'slow' ? slowPhaseMs : phaseMs, signal);
     await this.enter(jobId, 'resolving', phaseMs, signal);
     const { playable, unavailable } = await this.resolveAll(draft.candidates, input.scenario, signal);
     await this.enter(jobId, 'preparing', phaseMs, signal);
-    return buildShowPlan({
+    const plan = buildShowPlan({
       seed: input.request.seed,
       draft,
       playable,
@@ -191,6 +221,60 @@ export class PlanService {
       speech: editorial.djEnabled ? { kind: 'mock_chime', durationMs: speechMs } : { kind: 'none' },
       now: this.deps.now(),
     });
+    const segments = editorial.djEnabled && this.deps.tts && !realReason ? await this.withAiSpeech(plan, signal, notices, deadlineAt) : plan.segments;
+    return { ...plan, segments, warnings: [...new Set([...notices, ...plan.warnings])].slice(0, 10) };
+  }
+
+  /**
+   * 逐段合成 seed 台詞；成功的段落退回 seed Bridge。第一次失敗後本輪不再嘗試（避免逾時連鎖或重複扣預扣），
+   * 失敗與未嘗試的段落保留文字介紹＋提示音（mock_chime，UI 如實標示非 AI 語音）。
+   * 整輪 deadline：剩餘時間不足一次完整 TTS 逾時就不再開始下一段（不預扣、不發請求），節目照常完成；
+   * 已開始的段落另以剩餘時間為上限，排隊或請求超時只降級該段，不讓整輪 PLAN_TIMEOUT。
+   */
+  private async withAiSpeech(plan: ShowPlan, signal: AbortSignal, notices: string[], deadlineAt: number): Promise<ShowPlan['segments']> {
+    const segments: ShowPlan['segments'] = [];
+    const stageEnd = deadlineAt - SPEECH_DEADLINE_MARGIN_MS;
+    let stopped = false;
+    for (const segment of plan.segments) {
+      if (stopped || !this.deps.tts) { segments.push(segment); continue; }
+      const remaining = stageEnd - monotonicNow();
+      if (remaining < this.deps.config.openai.ttsTimeoutMs) {
+        stopped = true;
+        notices.push(`${PROVIDER_NOTICES.tts}：節目準備時間不足，其餘 ${plan.segments.length - segments.length} 段改為文字介紹。`);
+        segments.push(segment);
+        continue;
+      }
+      const stageSignal = AbortSignal.any([signal, AbortSignal.timeout(Math.floor(remaining))]);
+      try {
+        const speech = await this.deps.tts.synthesize(segment.candidate.djLine, stageSignal);
+        const key = speech.url.split('/').at(-1)!;
+        segments.push({ ...segment, candidate: { ...segment.candidate, transitionBridge: null }, speech: { ...speech, url: `/api/media/tts/${plan.showId}/${segment.segmentId}/${key}` } });
+      } catch (error) {
+        if (signal.aborted) throw signal.reason;
+        stopped = true;
+        const reason = stageSignal.aborted ? '節目準備時間不足，其餘段落改為文字介紹。' : safeReason(error, 'AI 語音合成失敗。');
+        notices.push(`${PROVIDER_NOTICES.tts}：${reason}`);
+        segments.push(segment);
+      }
+    }
+    return segments;
+  }
+
+  /** 真實 LLM 失敗、拒答或兩次輸出都無效時，改用 fallback（MOCK）並明示；不額外增加真實呼叫次數。 */
+  private async draftWithFallback(input: EditorialInput, scenario: MockScenario, signal: AbortSignal, realReason: string | null, notices: string[]): Promise<PlanDraft> {
+    const fallback = this.deps.fallbackPlanner;
+    if (!fallback) return this.draftWithRepair(this.deps.planner, input, scenario, signal, realReason === null);
+    if (realReason) {
+      notices.push(`${PROVIDER_NOTICES.llm}：${realReason}`);
+      return this.draftWithRepair(fallback, input, scenario, signal, false);
+    }
+    try {
+      return await this.draftWithRepair(this.deps.planner, input, scenario, signal, true);
+    } catch (error) {
+      if (signal.aborted) throw signal.reason;
+      notices.push(`${PROVIDER_NOTICES.llm}：${safeReason(error, 'AI 選歌暫時無法使用。')}`);
+      return this.draftWithRepair(fallback, input, scenario, signal, false);
+    }
   }
 
   private async enter(jobId: string, phase: JobPhase, waitMs: number, signal: AbortSignal): Promise<void> {
@@ -200,9 +284,9 @@ export class PlanService {
   }
 
   /** At most MAX_LLM_CALLS_PER_PLAN calls: the initial draft plus one repair. */
-  private async draftWithRepair(input: EditorialInput, scenario: MockScenario, signal: AbortSignal): Promise<PlanDraft> {
+  private async draftWithRepair(planner: EditorialPlanner, input: EditorialInput, scenario: MockScenario, signal: AbortSignal, realAllowed: boolean): Promise<PlanDraft> {
     for (let attempt = 1; attempt <= this.deps.config.limits.maxLlmCallsPerPlan; attempt += 1) {
-      const raw = await this.deps.planner.draft(input, { signal, scenario, attempt });
+      const raw = await planner.draft(input, { signal, scenario, attempt, realAllowed });
       const parsed = PlanDraftSchema.safeParse(raw);
       if (parsed.success && hasConsistentIds(parsed.data.candidates)) return parsed.data;
     }
@@ -240,6 +324,12 @@ export class PlanService {
     const code = signal.aborted && signal.reason === 'timeout' ? 'PLAN_TIMEOUT' : error instanceof AppError ? error.code : 'INTERNAL';
     this.deps.store.update(jobId, { status: 'failed', error: errorEnvelope(code, newRequestId()).error });
   }
+}
+
+/** 只取 AppError 的固定訊息（不含供應商本文或金鑰）；其他例外一律用通用說明。 */
+function safeReason(error: unknown, fallback: string): string {
+  if (!(error instanceof AppError)) return fallback;
+  return error.code === 'PLAN_INVALID' ? '模型回應兩次都未通過格式驗證。' : error.code === 'MODEL_REFUSED' ? '模型拒絕這次請求。' : error.message;
 }
 
 function hasConsistentIds(candidates: readonly Candidate[]): boolean {
