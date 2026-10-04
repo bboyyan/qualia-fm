@@ -1,0 +1,40 @@
+.hero { padding: 14px 0 22px; }
+.hero h1 { margin-top: 12px; }
+.hero h1 em { font-style: normal; color: var(--q-accent); }
+.hero p:last-child { margin-top: 12px; max-width: 330px; color: var(--q-muted); font-size: 15px; line-height: 1.7; }
+
+.composer { display: block; }
+.card {
+  border: 1px solid var(--q-border); background: var(--q-surface); border-radius: 22px;
+  padding: 14px 16px 12px; box-shadow: var(--q-shadow-soft);
+}
+.card > [role='radiogroup'] { margin-bottom: 16px; }
+.fieldLabel { display: block; font-size: 14px; font-weight: 650; margin-bottom: 6px; }
+.seedField {
+  display: block; width: 100%; min-height: 84px; resize: vertical; border: 0; padding: 0;
+  background: none; font-size: 18px; line-height: 1.6; outline-offset: 6px; border-radius: 4px;
+}
+.seedField[rows='1'] { min-height: 44px; }
+.seedField::placeholder, .artistField::placeholder { color: #69786F; }
+.artistField {
+  width: 100%; min-height: var(--q-tap); margin-bottom: 4px; padding: 11px 12px;
+  border: 1px solid var(--q-border-strong); border-radius: 12px; background: var(--q-surface); font-size: 16px;
+}
+.counter { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 13px; color: var(--q-muted); }
+.over { color: var(--q-danger); font-weight: 650; }
+.error { min-height: 0; color: var(--q-danger); font-size: 13px; line-height: 1.6; }
+.error:empty { display: none; }
+.error:not(:empty) { margin-top: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.cta { margin-top: 22px; }
+.ctaNote { margin-top: 10px; text-align: center; font-size: 13px; color: var(--q-muted); }
+
+.note { display: flex; gap: 12px; align-items: flex-start; margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--q-border); }
+.noteIcon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 12px; background: var(--q-subtle); flex-shrink: 0; margin-top: 2px; }
+.note strong { display: block; font-size: 14px; font-weight: 650; }
+.note p { font-size: 13px; color: var(--q-muted); margin-top: 3px; }
+
+@media (max-height: 740px) {
+  .hero { padding-top: 6px; padding-bottom: 16px; }
+  .note { margin-top: 20px; }
+}

@@ -12,7 +12,7 @@ Spec: `handoff/docs/10_IMPLEMENTATION_PLAN.md`. Remove this file when all stages
 **Goal**: tokens, AppShell, tabs, Button, inputs, BottomSheet, Toast, CapabilityBadge.
 **Success Criteria**: 360/390/430 no overlap; keyboard/focus usable.
 **Tests**: E2E layout overflow + focus/escape on sheets.
-**Status**: Not Started
+**Status**: Complete
 
 ## Stage 3: T03 開台與生成 UI
 **Goal**: Seed composer, examples, Sonic DNA, real-phase progress, ready, partial/error.

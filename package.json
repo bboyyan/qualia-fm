@@ -11,10 +11,11 @@
     "build": "pnpm -r build",
     "start": "node --env-file-if-exists=.env apps/server/dist/index.js",
     "lint": "eslint .",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.e2e.json",
     "test": "vitest run",
     "e2e": "pnpm build && playwright test --project=mobile-360 --project=mobile-390 --project=mobile-430",
-    "screenshots": "pnpm build && playwright test --project=screenshots"
+    "screenshots": "pnpm build && playwright test --project=screenshots",
+    "e2e:webkit": "pnpm build && playwright test --project=webkit-390"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

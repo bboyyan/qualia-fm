@@ -1,42 +1,40 @@
-/** T01 boot shell: proves the page opens in mock mode with no keys. Replaced by AppShell in T02. */
-import { useEffect, useState } from 'react';
-import type { Capabilities } from '@qualia/contracts';
-import { createApiClient } from '../api/client';
+import { HomePage } from '../features/seed/HomePage';
+import { ListenPage } from '../features/player/ListenPage';
+import { SettingsPage } from '../features/settings/SettingsPage';
+import { InlineRecovery } from '../ui/Feedback';
+import { Button } from '../ui/Button';
+import { AppShell } from './AppShell';
+import { EnvironmentSheet } from './EnvironmentSheet';
+import { useAppStore } from './appStore';
+import { useBoot, usePopStateNavigation } from './hooks';
 
-const api = createApiClient();
-
-type Boot = { status: 'loading' } | { status: 'ready'; caps: Capabilities } | { status: 'error'; message: string };
+function BootError() {
+  return (
+    <InlineRecovery
+      tone="offline"
+      title="暫時連不上電台服務"
+      actions={
+        <Button variant="outline" block onClick={() => window.location.reload()}>
+          重新連線
+        </Button>
+      }
+    >
+      請確認服務已啟動（pnpm dev 或 pnpm start），你的輸入不會遺失。
+    </InlineRecovery>
+  );
+}
 
 export function App() {
-  const [boot, setBoot] = useState<Boot>({ status: 'loading' });
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .ensureSession()
-      .then(() => api.capabilities(controller.signal))
-      .then((caps) => setBoot({ status: 'ready', caps }))
-      .catch((error: unknown) => {
-        if (!controller.signal.aborted) setBoot({ status: 'error', message: (error as Error).message });
-      });
-    return () => controller.abort();
-  }, []);
-
+  useBoot();
+  usePopStateNavigation();
+  const tab = useAppStore((s) => s.tab);
+  const boot = useAppStore((s) => s.boot);
   return (
-    <main>
-      <h1>Qualia FM</h1>
-      {boot.status === 'loading' && <p>正在連線…</p>}
-      {boot.status === 'error' && <p role="alert">{boot.message}</p>}
-      {boot.status === 'ready' && (
-        <section aria-label="播放環境">
-          <p data-testid="mode-badge">MOCK 模式</p>
-          <ul>
-            {boot.caps.restrictions.map((r) => (
-              <li key={r}>{r}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </main>
+    <AppShell sheets={<EnvironmentSheet />}>
+      {boot === 'error' && <BootError />}
+      {tab === 'home' && <HomePage />}
+      {tab === 'listen' && <ListenPage />}
+      {tab === 'settings' && <SettingsPage />}
+    </AppShell>
   );
 }

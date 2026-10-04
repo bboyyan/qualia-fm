@@ -1,0 +1,4 @@
+.empty { padding-top: 64px; text-align: center; display: grid; justify-items: center; gap: 14px; }
+.empty p { color: var(--q-muted); font-size: 15px; max-width: 300px; }
+.empty button { margin-top: 14px; }
+.emptyIcon { width: 76px; height: 76px; border-radius: 50%; background: var(--q-subtle); display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
