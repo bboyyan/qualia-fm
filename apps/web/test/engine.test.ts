@@ -155,3 +155,22 @@ describe('classifyPlayError', () => {
     expect(classifyPlayError(new DOMException('x', name))).toBe(expected);
   });
 });
+
+it('B mode never starts track audio and waits for feedback before next introduction', () => {
+  const adapter = new FakeAdapter();
+  const engine = new PlaybackEngine(adapter, { djEnabled: true, canSeek: true, playbackMode: 'manual', feedbackEnabled: true });
+  engine.loadShow(makeShow());
+  engine.play();
+  adapter.confirm();
+  adapter.end(engine.getState().attemptId, 'speech');
+  expect(engine.getState().phase).toBe('manual_ready');
+  expect(adapter.starts.map((s) => s.owner)).toEqual(['speech']);
+  engine.manualStarted();
+  expect(engine.getState().phase).toBe('manual_playing');
+  engine.manualFinished();
+  expect(engine.getState().phase).toBe('feedback');
+  expect(engine.getState().currentIndex).toBe(0);
+  engine.completeFeedback();
+  expect(engine.getState().currentIndex).toBe(1);
+  expect(adapter.starts.map((s) => s.owner)).toEqual(['speech', 'speech']);
+});

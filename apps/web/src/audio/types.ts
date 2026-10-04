@@ -5,6 +5,9 @@
 import type { ErrorCode, Segment, ShowPlan } from '@qualia/contracts';
 
 export type Phase =
+  | 'manual_ready'
+  | 'manual_playing'
+  | 'feedback'
   | 'empty'
   | 'ready'
   | 'loading_speech'
@@ -37,6 +40,9 @@ export interface RemovedEntry {
 }
 
 export interface EngineState {
+  readonly playbackMode: 'manual' | 'mock';
+  readonly feedbackEnabled: boolean;
+  readonly feedbackNextIndex: number | null;
   readonly sessionId: string | null;
   readonly show: ShowPlan | null;
   readonly queue: readonly QueueItem[];
@@ -72,6 +78,10 @@ export interface ProviderState {
 
 export type Action =
   | { type: 'LOAD_SHOW'; show: ShowPlan; sessionId: string }
+  | { type: 'SET_MODE'; mode: 'manual' | 'mock' }
+  | { type: 'MANUAL_STARTED' }
+  | { type: 'MANUAL_FINISHED' }
+  | { type: 'COMPLETE_FEEDBACK' }
   | { type: 'PLAY' }
   | { type: 'PAUSE'; positionMs?: number }
   | { type: 'NEXT' }

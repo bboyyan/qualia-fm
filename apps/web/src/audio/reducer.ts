@@ -9,6 +9,9 @@ import type { Action, Effect, EngineState, OwnerKind, Phase, QueueItem, Reductio
 export const MAX_AUTO_SKIPS = 2;
 
 export const initialEngineState = (djEnabled = true, canSeek = true): EngineState => ({
+  playbackMode: 'mock',
+  feedbackEnabled: false,
+  feedbackNextIndex: null,
   sessionId: null,
   show: null,
   queue: [],
@@ -68,6 +71,7 @@ function startSegment(state: EngineState, index: number): Reduction {
     error: null,
     statuses: withStatus({ ...state, currentIndex: index }, index, 'playing'),
   };
+  if (owner === 'track' && state.playbackMode === 'manual') return startTrack(next, 0);
   return ok(next, [
     { type: 'start', owner, segment: item.segment, fromMs: 0, attemptId },
     announce(`${owner === 'speech' ? 'DJ 介紹：' : '現在播放：'}${item.segment.candidate.title}`),
@@ -78,6 +82,7 @@ function startTrack(state: EngineState, fromMs: number): Reduction {
   const item = state.queue[state.currentIndex];
   if (!item) return ok(state);
   const attemptId = state.attemptId + 1;
+  if (state.playbackMode === 'manual') return ok({ ...state, attemptId, phase: 'manual_ready', activeOwner: 'none', resumePhase: null, pendingOwner: null, positionMs: 0 }, [{ type: 'stop' }]);
   return ok(
     { ...state, attemptId, phase: 'loading_track', activeOwner: 'track', resumePhase: null, pendingOwner: null, positionMs: fromMs, trackResumeMs: 0, error: null },
     [{ type: 'start', owner: 'track', segment: item.segment, fromMs, attemptId }],
@@ -108,6 +113,8 @@ function loadShow(state: EngineState, action: Extract<Action, { type: 'LOAD_SHOW
   const base = initialEngineState(state.djEnabled, state.canSeek);
   const next: EngineState = {
     ...base,
+    playbackMode: state.playbackMode,
+    feedbackEnabled: state.feedbackEnabled,
     sessionId: action.sessionId,
     show: action.show,
     queue,
@@ -145,6 +152,8 @@ function pause(state: EngineState, positionMs: number | undefined): Reduction {
 
 function next(state: EngineState): Reduction {
   if (state.queue.length === 0) return ok(state);
+  if (state.phase === 'feedback') return ok(state);
+  if (state.feedbackEnabled && state.phase !== 'ready' && state.phase !== 'completed') return awaitFeedback(leaveCurrent(state), state.currentIndex + 1);
   const left = leaveCurrent(state);
   if (state.currentIndex >= state.queue.length - 1) return complete(left);
   return startSegment({ ...left, previousPlayedId: null, consecutiveFailures: 0 }, state.currentIndex + 1);
@@ -154,6 +163,8 @@ function jump(state: EngineState, segmentId: string): Reduction {
   const index = state.queue.findIndex((q) => q.segment.segmentId === segmentId);
   if (index < 0) return reject(state, 'not_allowed');
   if (index === state.currentIndex && state.phase !== 'ready' && state.phase !== 'completed') return ok(state);
+  if (state.phase === 'feedback') return reject(state, 'not_allowed');
+  if (state.feedbackEnabled && state.phase !== 'ready' && state.phase !== 'completed') return awaitFeedback(leaveCurrent(state), index);
   return startSegment({ ...leaveCurrent(state), previousPlayedId: null, consecutiveFailures: 0 }, index);
 }
 
@@ -262,6 +273,7 @@ function ownerEnded(state: EngineState, owner: OwnerKind): Reduction {
     statuses: withStatus(state, state.currentIndex, 'played'),
     previousPlayedId: item?.segment.segmentId ?? null,
   };
+  if (state.feedbackEnabled) return awaitFeedback(played, state.currentIndex + 1);
   return state.currentIndex < state.queue.length - 1 ? startSegment(played, state.currentIndex + 1) : complete(played);
 }
 
@@ -299,8 +311,25 @@ function adapterEvent(state: EngineState, action: Extract<Action, { attemptId: n
   }
 }
 
+function awaitFeedback(state: EngineState, nextIndex: number): Reduction {
+  return ok({ ...state, phase: 'feedback', feedbackNextIndex: nextIndex, activeOwner: 'none', pendingOwner: null, resumePhase: null, attemptId: state.attemptId + 1 }, [{ type: 'stop' }, announce('這首聽完了，留下回饋或略過')]);
+}
+
 export function reduce(state: EngineState, action: Action): Reduction {
   switch (action.type) {
+    case 'SET_MODE':
+      if (state.playbackMode === action.mode) return ok(state);
+      return ok({ ...state, playbackMode: action.mode, phase: state.queue.length ? 'ready' : 'empty', activeOwner: 'none', resumePhase: null, pendingOwner: null, feedbackNextIndex: null, attemptId: state.attemptId + 1 }, [{ type: 'stop' }]);
+    case 'MANUAL_STARTED':
+      return state.phase === 'manual_ready' ? ok({ ...state, phase: 'manual_playing' }) : reject(state, 'not_allowed');
+    case 'MANUAL_FINISHED':
+      return state.phase === 'manual_playing' ? awaitFeedback({ ...state, statuses: withStatus(state, state.currentIndex, 'played'), previousPlayedId: state.queue[state.currentIndex]?.segment.segmentId ?? null }, state.currentIndex + 1) : reject(state, 'not_allowed');
+    case 'COMPLETE_FEEDBACK': {
+      if (state.phase !== 'feedback') return reject(state, 'not_allowed');
+      const index = state.feedbackNextIndex ?? state.currentIndex + 1;
+      const updated = { ...state, feedbackNextIndex: null };
+      return index < state.queue.length ? startSegment(updated, index) : complete(updated);
+    }
     case 'LOAD_SHOW':
       return loadShow(state, action);
     case 'PLAY':
@@ -339,7 +368,7 @@ export function reduce(state: EngineState, action: Action): Reduction {
     case 'RECONCILE_RESULT':
       return reconcileResult(state, action.state);
     case 'RESET':
-      return ok({ ...initialEngineState(state.djEnabled, state.canSeek), attemptId: state.attemptId + 1 }, [{ type: 'stop' }]);
+      return ok({ ...initialEngineState(state.djEnabled, state.canSeek), playbackMode: state.playbackMode, feedbackEnabled: state.feedbackEnabled, attemptId: state.attemptId + 1 }, [{ type: 'stop' }]);
     default:
       return adapterEvent(state, action);
   }

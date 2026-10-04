@@ -38,3 +38,21 @@ it('V4 ledger failure completes with only confirmed seed and an explicit warning
   const show = await client.agent.get(`/api/shows/${job.showId}`);
   expect(show.body.warnings).toContain('未讀到帳本：本輪只用種子曲。');
 });
+
+it('V1 feedback API records five fields and empty reason, rejects invalid rating and unowned show', async () => {
+  const ledger = new InMemoryLedger();
+  const app = testApp({}, { ledger }).app;
+  const client = await bootstrap(app);
+  const job = await waitForJob(client, (await postPlan(client, planRequest())).body.jobId);
+  const show = (await client.agent.get(`/api/shows/${job.showId}`)).body;
+  const body = { showId: show.showId, segmentId: show.segments[0].segmentId, rating: '愛', reason: '' };
+  const send = (data: object) => client.agent.post('/api/feedback').set('Origin', 'http://127.0.0.1:5173').set('X-CSRF-Token', client.csrf).send(data);
+  const receipt = await send(body);
+  expect(receipt.status).toBe(201);
+  expect(receipt.body.mode).toBe('fake');
+  expect(await ledger.read()).toEqual([{ date: expect.any(String), seed: show.seed.text, recommendation: `${show.segments[0].candidate.artist} — ${show.segments[0].candidate.title}`, rating: '愛', reason: '' }]);
+  expect((await send({ ...body, rating: 'TEST invalid' })).status).toBe(400);
+  expect((await send({ ...body, showId: 'TEST nonexistent' })).status).toBe(404);
+  const other = await bootstrap(app);
+  expect((await other.agent.post('/api/feedback').set('Origin', 'http://127.0.0.1:5173').set('X-CSRF-Token', other.csrf).send(body)).status).toBe(404);
+});

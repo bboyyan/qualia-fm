@@ -2,6 +2,7 @@
 import { Router, type Request } from 'express';
 import {
   HEADERS,
+  FeedbackRequestSchema,
   MockScenarioSchema,
   PlanRequestSchema,
   type MockScenario,
@@ -68,6 +69,11 @@ function publicRoutes(router: Router, deps: ApiDeps): void {
 }
 
 function planRoutes(router: Router, deps: ApiDeps): void {
+  router.post('/feedback', async (req, res) => {
+    const parsed = FeedbackRequestSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError('INVALID_INPUT');
+    res.status(201).json(await deps.plans.feedback(sessionOf(res).id, parsed.data));
+  });
   router.post('/plan', (req, res) => {
     const key = req.get(HEADERS.idempotencyKey) ?? '';
     if (!IDEMPOTENCY_KEY.test(key)) throw new AppError('INVALID_INPUT', { message: '缺少有效的 Idempotency-Key。' });

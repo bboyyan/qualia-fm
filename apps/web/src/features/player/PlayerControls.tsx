@@ -18,6 +18,9 @@ export const formatTime = (ms: number): string => {
 };
 
 const PHASE_LABEL: Record<Phase, string> = {
+  manual_ready: '請在 Spotify app 自己點歌',
+  manual_playing: '外部播放中（由你確認）',
+  feedback: '等待回饋',
   empty: '尚無節目',
   ready: '尚未開始播放',
   loading_speech: '準備介紹…',

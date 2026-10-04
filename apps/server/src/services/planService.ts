@@ -7,6 +7,7 @@ import {
   PlanDraftSchema,
   CONFIRMED_SEED,
   type Candidate,
+  type FeedbackRequest,
   type JobInfo,
   type JobPhase,
   type MockScenario,
@@ -108,6 +109,19 @@ export class PlanService {
     const plan = this.deps.store.getShow(showId, ownerId);
     if (!plan) throw new AppError('NOT_FOUND');
     return plan;
+  }
+
+  async feedback(ownerId: string, request: FeedbackRequest) {
+    const show = this.show(ownerId, request.showId);
+    const segment = show.segments.find((s) => s.segmentId === request.segmentId);
+    if (!segment) throw new AppError('NOT_FOUND');
+    return this.deps.ledger.append({
+      date: new Date(this.deps.now()).toISOString(),
+      seed: [show.seed.artist, show.seed.text].filter(Boolean).join(' — '),
+      recommendation: `${segment.candidate.artist} — ${segment.candidate.title}`,
+      rating: request.rating,
+      reason: request.reason,
+    });
   }
 
   /** Logout / session end: abort in-flight work and forget everything the owner had. */

@@ -8,6 +8,8 @@ import { initialEngineState, reduce } from './reducer';
 import type { Action, AdapterEvent, Effect, EngineState, MediaAdapter, QueueItem, Reduction } from './types';
 
 export interface EngineOptions {
+  playbackMode?: 'manual' | 'mock';
+  feedbackEnabled?: boolean;
   djEnabled: boolean;
   canSeek: boolean;
   onAnnounce?: (message: string) => void;
@@ -45,7 +47,7 @@ export class PlaybackEngine {
     private readonly adapter: MediaAdapter,
     private readonly options: EngineOptions,
   ) {
-    this.state = initialEngineState(options.djEnabled, options.canSeek);
+    this.state = { ...initialEngineState(options.djEnabled, options.canSeek), playbackMode: options.playbackMode ?? 'mock', feedbackEnabled: options.feedbackEnabled ?? false };
     this.unsubscribe = adapter.subscribe((event) => this.dispatch(toAction(event)));
   }
 
@@ -79,6 +81,10 @@ export class PlaybackEngine {
     return sessionId;
   }
 
+  setPlaybackMode = (mode: 'manual' | 'mock'): Reduction => this.dispatch({ type: 'SET_MODE', mode });
+  manualStarted = (): Reduction => this.dispatch({ type: 'MANUAL_STARTED' });
+  manualFinished = (): Reduction => this.dispatch({ type: 'MANUAL_FINISHED' });
+  completeFeedback = (): Reduction => this.dispatch({ type: 'COMPLETE_FEEDBACK' });
   play = (): Reduction => this.dispatch({ type: 'PLAY' });
   /** Captures the live provider position so the paused UI never flashes a stale value. */
   pause = (): Reduction => this.dispatch({ type: 'PAUSE', positionMs: this.positionMs() });
