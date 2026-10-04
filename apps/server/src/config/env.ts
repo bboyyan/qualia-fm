@@ -1,6 +1,7 @@
 /** 後端環境設定：不支援的播放模式／Spotify gate 拒絕啟動；OpenAI 缺設定明示降級。
  * 金鑰不進錯誤、日誌或 Vite。
  */
+import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import type { BudgetLimits } from '../budget/ledger.js';
 
@@ -41,7 +42,7 @@ const EnvSchema = z.object({
   OPENAI_REAL_CALLS_APPROVED: flag,
   REAL_PROVIDERS_KILL_SWITCH: flag,
   OPENAI_MAX_OUTPUT_TOKENS: int(4096, 256, 16384),
-  PROVIDER_TIMEOUT_MS: int(8000, 1, 60000),
+  PROVIDER_TIMEOUT_MS: int(30000, 1, 60000),
   TTS_TIMEOUT_MS: int(30000, 1, 60000),
   BUDGET_DAILY_USD: z.preprocess(emptyToUndefined, z.coerce.number().positive().max(1).default(1)),
   BUDGET_TOTAL_USD: z.preprocess(emptyToUndefined, z.coerce.number().positive().max(10).default(10)),
@@ -135,7 +136,9 @@ export function loadConfig(source: Record<string, string | undefined> = process.
       (env.TTS_PROVIDER === 'openai' && (!env.OPENAI_TTS_MODEL || !env.OPENAI_TTS_VOICE || !ttsPrice))
       ? 'OpenAI 模型、voice 或單價設定不完整，已降級為 mock。'
     : env.TTS_PROVIDER === 'openai' && TTS_MODELS_WITHOUT_INSTRUCTIONS.has(env.OPENAI_TTS_MODEL ?? '')
-      ? 'OPENAI_TTS_MODEL 不支援 instructions（台灣國語聲線指示），已降級為 mock。' : null;
+      ? 'OPENAI_TTS_MODEL 不支援 instructions（台灣國語聲線指示），已降級為 mock。'
+    // 相對路徑會隨啟動目錄改變，換目錄重啟等於拿到新的零帳本；真實呼叫一律要求絕對路徑。
+    : !isAbsolute(env.BUDGET_LEDGER_PATH) ? 'BUDGET_LEDGER_PATH 必須是絕對路徑，已降級為 mock。' : null;
   return {
     openai: {
       llm: env.LLM_PROVIDER, tts: env.TTS_PROVIDER, apiKey: env.OPENAI_API_KEY,

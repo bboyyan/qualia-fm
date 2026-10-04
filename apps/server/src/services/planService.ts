@@ -32,6 +32,9 @@ const HOUR_MS = 60 * 60 * 1000;
 const MAX_ACTIVE_JOBS_PER_SESSION = 3;
 const GLOBAL_PLAN_CAP_PER_HOUR = 1_000;
 const TARGET_SEGMENTS = 5;
+/** TTS 階段結束後留給組裝節目的餘裕；開始下一段前剩餘時間須 ≥ TTS 單次逾時＋此餘裕。 */
+const SPEECH_DEADLINE_MARGIN_MS = 250;
+const monotonicNow = (): number => performance.now();
 
 export interface PlanServiceDeps {
   readonly runtime?: RealProviderRuntime;
@@ -164,6 +167,7 @@ export class PlanService {
 
   private async run(job: JobRecord, input: StartPlanInput): Promise<void> {
     const { signal } = job.controller;
+    const deadlineAt = monotonicNow() + this.deps.config.limits.planDeadlineMs;
     const deadline = setTimeout(() => job.controller.abort('timeout'), this.deps.config.limits.planDeadlineMs);
     deadline.unref?.();
     try {
@@ -179,7 +183,7 @@ export class PlanService {
       }
       if (signal.aborted) throw signal.reason;
       const editorial = { ...toEditorialInput(request), history };
-      const result = await this.pipeline(job.jobId, editorial, { ...input, request }, signal);
+      const result = await this.pipeline(job.jobId, editorial, { ...input, request }, signal, deadlineAt);
       const plan = warning ? { ...result, warnings: [...result.warnings, warning] } : result;
       this.deps.store.putShow(job.ownerId, plan, this.deps.now());
       this.finish(job, plan);
@@ -190,7 +194,7 @@ export class PlanService {
     }
   }
 
-  private async pipeline(jobId: string, editorial: EditorialInput, input: StartPlanInput, signal: AbortSignal): Promise<ShowPlan> {
+  private async pipeline(jobId: string, editorial: EditorialInput, input: StartPlanInput, signal: AbortSignal, deadlineAt: number): Promise<ShowPlan> {
     const { phaseMs, slowPhaseMs, speechMs } = this.deps.config.mock;
     await this.enter(jobId, 'understanding', phaseMs, signal);
     // 供應商降級提示一律放在 warnings 最前面，模型自己的 warnings 再多也不會把它擠掉。
@@ -217,27 +221,39 @@ export class PlanService {
       speech: editorial.djEnabled ? { kind: 'mock_chime', durationMs: speechMs } : { kind: 'none' },
       now: this.deps.now(),
     });
-    const segments = editorial.djEnabled && this.deps.tts && !realReason ? await this.withAiSpeech(plan, signal, notices) : plan.segments;
+    const segments = editorial.djEnabled && this.deps.tts && !realReason ? await this.withAiSpeech(plan, signal, notices, deadlineAt) : plan.segments;
     return { ...plan, segments, warnings: [...new Set([...notices, ...plan.warnings])].slice(0, 10) };
   }
 
   /**
    * 逐段合成 seed 台詞；成功的段落退回 seed Bridge。第一次失敗後本輪不再嘗試（避免逾時連鎖或重複扣預扣），
    * 失敗與未嘗試的段落保留文字介紹＋提示音（mock_chime，UI 如實標示非 AI 語音）。
+   * 整輪 deadline：剩餘時間不足一次完整 TTS 逾時就不再開始下一段（不預扣、不發請求），節目照常完成；
+   * 已開始的段落另以剩餘時間為上限，排隊或請求超時只降級該段，不讓整輪 PLAN_TIMEOUT。
    */
-  private async withAiSpeech(plan: ShowPlan, signal: AbortSignal, notices: string[]): Promise<ShowPlan['segments']> {
+  private async withAiSpeech(plan: ShowPlan, signal: AbortSignal, notices: string[], deadlineAt: number): Promise<ShowPlan['segments']> {
     const segments: ShowPlan['segments'] = [];
-    let failed = false;
+    const stageEnd = deadlineAt - SPEECH_DEADLINE_MARGIN_MS;
+    let stopped = false;
     for (const segment of plan.segments) {
-      if (failed || !this.deps.tts) { segments.push(segment); continue; }
+      if (stopped || !this.deps.tts) { segments.push(segment); continue; }
+      const remaining = stageEnd - monotonicNow();
+      if (remaining < this.deps.config.openai.ttsTimeoutMs) {
+        stopped = true;
+        notices.push(`${PROVIDER_NOTICES.tts}：節目準備時間不足，其餘 ${plan.segments.length - segments.length} 段改為文字介紹。`);
+        segments.push(segment);
+        continue;
+      }
+      const stageSignal = AbortSignal.any([signal, AbortSignal.timeout(Math.floor(remaining))]);
       try {
-        const speech = await this.deps.tts.synthesize(segment.candidate.djLine, signal);
+        const speech = await this.deps.tts.synthesize(segment.candidate.djLine, stageSignal);
         const key = speech.url.split('/').at(-1)!;
         segments.push({ ...segment, candidate: { ...segment.candidate, transitionBridge: null }, speech: { ...speech, url: `/api/media/tts/${plan.showId}/${segment.segmentId}/${key}` } });
       } catch (error) {
         if (signal.aborted) throw signal.reason;
-        failed = true;
-        notices.push(`${PROVIDER_NOTICES.tts}：${safeReason(error, 'AI 語音合成失敗。')}`);
+        stopped = true;
+        const reason = stageSignal.aborted ? '節目準備時間不足，其餘段落改為文字介紹。' : safeReason(error, 'AI 語音合成失敗。');
+        notices.push(`${PROVIDER_NOTICES.tts}：${reason}`);
         segments.push(segment);
       }
     }

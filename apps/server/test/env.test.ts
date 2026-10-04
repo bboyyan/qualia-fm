@@ -23,7 +23,7 @@ describe('loadConfig', () => {
     const config = loadConfig(env);
     expect(config.openai).toMatchObject({ llm: 'mock', tts: 'mock', reason: null });
     expect(config.openai.budget).toEqual({ dailyUsd: 1, totalUsd: 10, plansPerDay: 20, graphemesPerDay: 4000 });
-    expect(config.openai).toMatchObject({ ttsTimeoutMs: 30_000, ttsInstructions: undefined });
+    expect(config.openai).toMatchObject({ providerTimeoutMs: 30_000, ttsTimeoutMs: 30_000, ttsInstructions: undefined });
   });
 
   it('treats empty env values (as in .env.example) as defaults', () => {
@@ -67,6 +67,13 @@ describe('loadConfig', () => {
     expect(loadConfig({}).openai.ttsTimeoutMs).toBe(30_000);
     expect(loadConfig({ TTS_TIMEOUT_MS: '60000' }).openai.ttsTimeoutMs).toBe(60_000);
     expect(() => loadConfig({ TTS_TIMEOUT_MS: '60001' })).toThrow(ConfigError);
+  });
+
+  it('PROVIDER_TIMEOUT_MS 預設 30000（真實 LLM 產生候選常需 15–30 秒），範圍 1–60000', () => {
+    expect(loadConfig({}).openai.providerTimeoutMs).toBe(30_000);
+    expect(loadConfig({ PROVIDER_TIMEOUT_MS: '' }).openai.providerTimeoutMs).toBe(30_000);
+    expect(loadConfig({ PROVIDER_TIMEOUT_MS: '8000' }).openai.providerTimeoutMs).toBe(8_000);
+    expect(() => loadConfig({ PROVIDER_TIMEOUT_MS: '60001' })).toThrow(ConfigError);
   });
 
   it('does not echo secret values in validation errors', () => {

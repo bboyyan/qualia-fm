@@ -1,6 +1,7 @@
 // 純 Node 產生確定性的 PNG；中央圖形位於 maskable 安全區。
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { deflateSync } from 'node:zlib';
 
 const root = new URL('../', import.meta.url);
@@ -46,7 +47,8 @@ function png(size) {
   header.writeUInt32BE(size, 0); header.writeUInt32BE(size, 4); header[8] = 8; header[9] = 2;
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
-const publicDir = new URL('apps/web/public/', root);
+// 可選第一個參數為輸出目錄（測試寫到暫存目錄，不改動已追蹤的圖示）；預設寫入 apps/web/public。
+const publicDir = process.argv[2] ? pathToFileURL(`${resolve(process.argv[2])}/`) : new URL('apps/web/public/', root);
 mkdirSync(fileURLToPath(publicDir), { recursive: true });
 for (const [name, size] of [['icon-192.png', 192], ['icon-512.png', 512], ['icon-maskable-192.png', 192], ['icon-maskable-512.png', 512], ['apple-touch-icon.png', 180]]) writeFileSync(new URL(name, publicDir), png(size));
 const icons = [192, 512].flatMap((size) => ['any', 'maskable'].map((purpose) => ({ src: `/icon-${purpose === 'maskable' ? 'maskable-' : ''}${size}.png`, sizes: `${size}x${size}`, type: 'image/png', purpose })));

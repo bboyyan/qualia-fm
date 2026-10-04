@@ -21,6 +21,7 @@ API 的 `speech.kind=ai_audio` 必須含 `aiVoice: true`，DJ 區塊顯示「AI 
 - 供應商提示以 contracts 的 `PROVIDER_NOTICES` 固定開頭寫入 ShowPlan.warnings，**一律排在最前面**（模型自己的 warnings 再多也擠不掉），web 的 `ProviderNotices` 在「準備好了」與收聽頁顯示。
 - LLM：gate／預算拒絕、HTTP 失敗、逾時、拒答、或初次＋修復兩次輸出都未通過 PlanDraftSchema，皆改用 MOCK 選歌完成本輪並顯示「AI 選歌本輪改用 MOCK 示範：原因」。不增加真實呼叫次數；僅 mock 模式維持原本「兩次無效即 PLAN_INVALID」。
 - TTS（伺服器合成）：失敗時該段保留文字介紹＋提示音（mock_chime，介紹區如實標示「MOCK 提示音，非 AI 語音」並可「跳過介紹」），顯示「AI 語音本輪改為文字介紹＋提示音：原因」；本輪第一次失敗後不再嘗試其餘段落，避免逾時連鎖與重複預扣。
+- TTS 與整輪 deadline：每段開始前檢查距 `PLAN_DEADLINE_MS` 的剩餘時間，**不足一次完整 `TTS_TIMEOUT_MS`（另留 250 ms 組裝餘裕）就不再開始下一段**——不預扣、不發請求，其餘段落沿用上面的文字介紹＋提示音並顯示「AI 語音本輪改為文字介紹＋提示音：節目準備時間不足，其餘 N 段改為文字介紹。」。已合成的段落照用，節目照常完成（不再整輪 PLAN_TIMEOUT 而白花已付的 LLM／TTS 費用與當日 plan 額度）。已開始的段落另以剩餘時間為上限（含排隊等待），超過只降級該段。deadline 若在 LLM 階段就到，仍照舊整輪 PLAN_TIMEOUT；LLM 自身逾時（`PROVIDER_TIMEOUT_MS`）照舊視為 LLM 失敗（保留預扣、改用 MOCK 選歌並明示）。
 - TTS（手機播放）：AI 音檔播放失敗（如快取過期 404、斷網）時不擋音樂（AC17），直接進曲目，同時在收聽頁顯示文字介紹全文與「重試語音」（在使用者點擊內重播介紹）。自動播放被擋則照舊顯示「點一下繼續」，介紹文字仍在。
 - iPhone 手勢：「開始收聽」的點擊同步執行 loadShow＋play，第一段 AI 介紹的 `audio.play()` 在同一個點擊內發出；之後同一個 audio 元素連續切換來源。媒體路由用 `sendFile` 回應 Range（206），iOS Safari 播放 `<audio>` 需要此行為。
 
@@ -34,7 +35,7 @@ iPhone 實測原本的聲線「不像台灣腔」。用同一段文稿比較 voi
 - **`OPENAI_TTS_INSTRUCTIONS`（選填）**：不改程式就能調整聲線。空值或只有空白都當成未設，改用上面的預設。上限 1500 個 Unicode code points，超過會讓 env 驗證失敗、服務拒絕啟動，錯誤只列欄位名稱。快取 key 用的是實際送出的 instructions，所以改指示後同一句台詞會重新合成（並重新計費），不會播到舊聲線的檔案。
 - **口語台灣用語文稿**：選歌 system prompt 的「語言與 DJ」一節加了一條規則：使用台灣用語，不寫「視頻」「質量」「信息」「質感」等大陸用語；DJ 台詞用口語短句；數字寫中文念法，但曲名原文中的數字照原樣保留；英文歌名前可以用「英文名字是」之類的說法帶出。既有硬規則（30–55 grapheme 目標、上限 80、不得引用歌詞、不模仿特定真人、djLine 可單獨依 Seed 成立）全部保留。AI 語音標示（`aiVoice: true`、「AI 合成語音」）由程式與 UI 保證，與 prompt 無關。
 
-**時長與逾時**：instructions 要求「偏慢」，試聽時 60–70 字約 12–15 秒（舊聲線約 6–8 秒）；30–55 字的台詞預計約 7–11 秒，達到 80 grapheme 上限時約 20 秒以上。speech 請求是非串流的，要等整段音訊產生完畢，因此 `TTS_TIMEOUT_MS` 預設從 15000 放寬到 30000（範圍仍是 1–60000）。注意：整輪的 `PLAN_DEADLINE_MS`（預設 60000）仍包含 LLM 加上最多五段依序合成的時間，deadline 到了整輪會中止。如果實際延遲接近上限，再評估要不要調高 deadline 或縮短台詞。
+**時長與逾時**：instructions 要求「偏慢」，試聽時 60–70 字約 12–15 秒（舊聲線約 6–8 秒）；30–55 字的台詞預計約 7–11 秒，達到 80 grapheme 上限時約 20 秒以上。speech 請求是非串流的，要等整段音訊產生完畢，因此 `TTS_TIMEOUT_MS` 預設從 15000 放寬到 30000（範圍仍是 1–60000）。整輪的 `PLAN_DEADLINE_MS`（預設 60000）包含 LLM 加上最多五段依序合成的時間；剩餘時間不足一次完整 TTS 逾時時，其餘段落改為文字介紹（見上方降級規則），節目仍完成。以預設值估算（LLM 約 20 秒＋階段約 3 秒），通常只來得及合成 1 段 AI 語音；把 `TTS_TIMEOUT_MS` 調到 20000 約可合成 2 段。前端輪詢上限 65 秒，`PLAN_DEADLINE_MS` 不宜再調高。
 
 **費用**：預算估算沒有改。TTS 仍以台詞 Unicode code points × `OPENAI_PRICE_TTS_PER_1M_CHARS`（簽收的保守全費用上界）預扣與結算，instructions 長度不算進預扣。試聽時以每百萬字元 US$60 的保守算法，每段約 US$0.0038；依官方公開價估算的實際費用約 US$0.0031–0.0040，大致都在保守值附近。若要把 instructions 調得比預設長很多，或台詞明顯變短，需重新確認字元單價仍能涵蓋 instructions 的輸入 token 與音訊輸出費用。
 
@@ -66,7 +67,7 @@ iPhone 實測原本的聲線「不像台灣腔」。用同一段文稿比較 voi
 | OPENAI_PRICE_INPUT_PER_1M_TOKENS | 無，>0 且 ≤100000 | USD／一百萬輸入 tokens，無快取折扣 |
 | OPENAI_PRICE_OUTPUT_PER_1M_TOKENS | 無，>0 且 ≤100000 | USD／一百萬輸出 tokens |
 | OPENAI_PRICE_TTS_PER_1M_CHARS | 無，>0 且 ≤100000 | USD／一百萬 Unicode code points 的保守全費用上界 |
-| PROVIDER_TIMEOUT_MS | 8000，1–60000 | LLM 單次 HTTP／讀取本文 timeout |
+| PROVIDER_TIMEOUT_MS | 30000，1–60000 | LLM 單次 HTTP／讀取本文 timeout；真實 LLM 產生候選常需 15–30 秒，從 8000 放寬 |
 | TTS_TIMEOUT_MS | 30000，1–60000 | TTS 單次 HTTP／讀取本文 timeout；B2 慢語速，從 15000 放寬 |
 | PLAN_DEADLINE_MS | 60000，1000–120000 | 沿用整輪 deadline |
 | MAX_LLM_CALLS_PER_PLAN | 2，1–2 | 初始＋唯一 repair，不能另加補位呼叫 |
@@ -74,7 +75,7 @@ iPhone 實測原本的聲線「不像台灣腔」。用同一段文稿比較 voi
 | BUDGET_TOTAL_USD | 10，>0 且 ≤10 | 所有日期累計最多 US$ 10 |
 | BUDGET_MAX_PLANS_PER_DAY | 20，1–20 | 每個台北日最多 20 輪真實供應商 plan 嘗試 |
 | TTS_GRAPHEME_BUDGET_PER_DAY | 4000，1–4000 | 每個台北日新合成文字額度，快取命中不扣字數 |
-| BUDGET_LEDGER_PATH | ./data/budget-ledger.json | 與 Notion 回饋帳本完全獨立 |
+| BUDGET_LEDGER_PATH | ./data/budget-ledger.json（僅 mock 用）| 與 Notion 回饋帳本完全獨立。**真實呼叫啟用時必須是絕對路徑**，否則降級 mock 並在 capabilities 顯示「BUDGET_LEDGER_PATH 必須是絕對路徑」；同目錄另有 sentinel `<路徑>.initialized` |
 | REAL_PROVIDERS_KILL_SWITCH | false | 每次排隊後、發請求前重新讀環境物件 |
 | KILL_SWITCH_FILE | ./data/KILL_SWITCH | 存在立即停止新真實呼叫，不需重啟 |
 | TTS_CACHE_DIR | ./data/tts | 私有 MP3 快取目錄 |
@@ -93,8 +94,20 @@ iPhone 實測原本的聲線「不像台灣腔」。用同一段文稿比較 voi
 5. 呼叫與預扣共用 concurrency=1 FIFO，LLM 與 TTS 不會同時進入 provider；每次取得鎖後再次檢查 gate。停止檔／環境停止旗標阻擋新的呼叫，不撤回已送到供應商的請求；取消與 timeout 使用 AbortSignal。
 6. **失敗、逾時、abort、拒絕或 usage 不可確認，一律保守保留完整預扣與字數。** 供應商可能已計費，不能憑本地 timeout 免費重試。即使 crash／重啟，檔案已包含預扣，不自動釋放。這可能提早用完額度，需曄對照帳單人工處理。
 7. 金額以十億分之一美元精度處理，預扣向上取整。實際 usage 超過估算時記錄實際額度並持久化 halted，停止真實供應商，重啟不解除；需要人工核對估算與單價。
-8. 帳本使用私有 tmp 檔（mode 600）＋同目錄 rename 原子替換；新目錄 mode 700。首次啟用且帳本不存在會建立零帳本；已有檔案讀不到／損毀不會覆寫重置。每次 reserve／commit 都再讀取並驗證結構、非負數與每日合計等於總額。
+8. 帳本使用私有 tmp 檔（mode 600）＋同目錄 rename 原子替換；新目錄 mode 700。已有檔案讀不到／損毀不會覆寫重置。每次 reserve／commit 都再讀取並驗證結構（含不得有多餘欄位）、非負數與每日合計等於總額；執行中一旦發現損毀，拒絕原因持續到重啟（即使檔案被改回合法內容也不放行）。
+   - **sentinel `<BUDGET_LEDGER_PATH>.initialized`**（例：`/Users/<你>/qualia-data/budget-ledger.json.initialized`，內容 `{"version":1,"initializedAt":"<ISO 時間>"}`，mode 600、同樣原子寫入）。
+   - 帳本與 sentinel **都不存在**＝首次啟用：先建立零帳本，再寫 sentinel。
+   - 帳本**存在**、sentinel 不存在＝舊版升級：帳本驗證合法後補寫 sentinel；帳本不合法則不補寫、fail closed。
+   - 帳本**不存在**、sentinel 存在＝帳本遺失：一律 fail closed（capabilities 顯示「預算帳本遺失…」），**不自動重建**，避免誤刪／換目錄後靜默歸零重新取得額度。
+   - sentinel 無法讀取或寫入（權限等）也 fail closed。
 9. 讀取、驗證或寫入失敗都 fail closed，沒有成功持久化的預扣就不發請求；/api/capabilities 呈現安全原因。檔案錯誤本文、金鑰與使用者輸入不出現在回應／日誌。寫入失敗即停用該程序；重啟前須人工確認帳本、未完成請求及權限，不可刪帳本取得新額度。
+
+### 帳本遺失的人工處理（sentinel 存在、帳本不見）
+
+1. 停止服務；**不要**刪除 sentinel 來「解鎖」。
+2. 從備份或 Time Machine 找回 `BUDGET_LEDGER_PATH` 原檔，放回原路徑、權限 600，重啟即可（內容會再驗證）。
+3. 找不到備份時：登入 OpenAI 帳單頁，記下本服務啟用以來的實際花費；以 mode 600 手寫帳本 `{"version":1,"halted":false,"totalUsd":<累計>,"days":{"<台北日期 YYYY-MM-DD>":{"usd":<當日>,"plans":<當日 plan 數，不確定就填上限>,"graphemes":<當日字數，不確定就填上限>}}}`，總額須等於各日 usd 合計（寧可高估）。
+4. 重啟後確認 `/api/capabilities` 的 `providers.reason` 為 null；若仍有原因，依原因處理，不要改用相對路徑或新路徑繞過。
 
 此設計只支援單一 Node 程序、一個 runtime 寫同一帳本；不要讓多 instance／程序共用路徑。環境變數的動態檢查是讀取程序的 process.env；外部 shell export 不會修改既有程序，運行中緊急停止優先使用停止檔。預算拒絕的安全理由保留至台北換日（或重啟），供設定頁辨認；總額仍受持久帳本限制。
 
@@ -118,19 +131,19 @@ touch ~/.config/qualia/openai.env && chmod 600 ~/.config/qualia/openai.env
 #   OPENAI_PRICE_INPUT_PER_1M_TOKENS=<當期單價>
 #   OPENAI_PRICE_OUTPUT_PER_1M_TOKENS=<當期單價>
 #   OPENAI_PRICE_TTS_PER_1M_CHARS=<涵蓋文字＋音訊的保守全費用上界>
-#   PROVIDER_TIMEOUT_MS=30000
+#   BUDGET_LEDGER_PATH=/Users/<你>/qualia-data/budget-ledger.json   # 真實呼叫必須是絕對路徑
 ls -l ~/.config/qualia/openai.env   # 應為 -rw-------
 
-# 2. 建置後，在 repo 根目錄啟動（相對路徑 ./data/... 以目前目錄為準）
+# 2. 建置後，在 repo 根目錄啟動（帳本為絕對路徑；其他相對路徑 ./data/... 以目前目錄為準）
 pnpm build
 node --env-file-if-exists=.env --env-file=$HOME/.config/qualia/openai.env apps/server/dist/index.js
 ```
 
 - 多個 `--env-file` 時後面的檔案覆寫前面的值；shell 已 export 的變數優先於檔案。不要在 shell export 金鑰，以免留在歷史紀錄。
 - 啟動後先打開設定頁或 `GET /api/capabilities`：`providers` 應為 `{ llm: 'openai', tts: 'openai', reason: null }`。若有 reason（未簽收、缺單價、帳本損毀、停止檔……），代表已降級，不會發出任何 OpenAI 請求。
-- 逾時建議：真實 LLM 產生 5–7 首中文候選常需 15–30 秒，預設 `PROVIDER_TIMEOUT_MS=8000` 幾乎必定逾時（逾時的預扣會保守保留）。建議 `PROVIDER_TIMEOUT_MS=30000`。前端輪詢上限是 65 秒，所以 `PLAN_DEADLINE_MS` 維持 60000；修復重試加上 5 段 TTS 可能超過，可把 `MOCK_PHASE_MS` 降到 200 以騰出時間。
+- 逾時：真實 LLM 產生 5–7 首中文候選常需 15–30 秒，`PROVIDER_TIMEOUT_MS` 預設已是 30000（原 8000 幾乎必定逾時，逾時的預扣會保守保留）。前端輪詢上限是 65 秒，所以 `PLAN_DEADLINE_MS` 維持 60000；時間不夠合成全部 5 段時其餘改為文字介紹、節目照常完成。可把 `MOCK_PHASE_MS` 降到 200、或 `TTS_TIMEOUT_MS` 降到 20000，讓更多段落來得及合成。
 - 推理型模型（reasoning tokens 也計入 `max_output_tokens`）容易在 4096 內被截斷，第一次實測建議用非推理型模型。
-- 緊急停止：`touch ./data/KILL_SWITCH`（執行中立即生效）；恢復時刪除該檔。帳本在 `./data/budget-ledger.json`，不可刪除以取得新額度。
+- 緊急停止：`touch ./data/KILL_SWITCH`（執行中立即生效）；恢復時刪除該檔。帳本在 `BUDGET_LEDGER_PATH`（絕對路徑），旁邊的 `.initialized` sentinel 讓「刪帳本取得新額度」行不通：帳本不見只會停用真實呼叫，需依上方「帳本遺失的人工處理」。
 - 服務只綁 127.0.0.1；手機實測需要的 HTTPS 入口不在本 PR 範圍，也不要在這裡變更既有的 launchd／tailscale 設定。
 
 ## 曄的啟用檢查表
@@ -170,5 +183,16 @@ node --env-file-if-exists=.env --env-file=$HOME/.config/qualia/openai.env apps/s
 | 金鑰 | 無需修改程式；以測試鎖定 | `openaiSecrets.test.ts`：假金鑰經 throw／401／500／成功四種情境，掃描 API 回應與標頭、job、show、capabilities、/api/tts、日誌、帳本、快取檔名、直接例外與啟動日誌 |
 | API 形狀 | 送出的 schema 移除 `minLength`／`maxLength` | `openaiApiShape.test.ts`：欄位集合完全相等、strict schema 規則、reasoning item 與 incomplete 處理 |
 | .env.example | 還原原範例值，新增變數以空值／安全預設列出 | `env.test.ts`：直接載入 `.env.example` 得到 mock、未簽收、預算上限、金鑰空白 |
+
+## PR #5 審查修正（2026-10-05，Sylphy）
+
+| 項目 | 修正 | 測試 |
+|---|---|---|
+| deadline 與逐段 TTS | 剩餘時間 < `TTS_TIMEOUT_MS`＋250 ms 即停止開始新段落，其餘降級文字介紹並明示；已開始的段落以剩餘時間為上限；節目 completed | `speechDeadline.test.ts`：PLAN_DEADLINE_MS=1500、TTS 假延遲 500 ms → 原本 failed/PLAN_TIMEOUT（紅）→ completed、AI 前綴＋文字降級＋warning、帳本只計實際合成段落；一開始就不足則 0 次 TTS；LLM 階段 deadline 照舊 PLAN_TIMEOUT；LLM 自身逾時照舊降級 |
+| `PROVIDER_TIMEOUT_MS` | 預設 8000→30000 | `env.test.ts`（預設、空值、範圍、`.env.example`） |
+| 帳本路徑 | 真實呼叫啟用時須絕對路徑，否則降級 mock 並標明；帳本類別本身也拒絕相對路徑 | `ledgerSentinel.test.ts` |
+| 帳本 sentinel | `<路徑>.initialized`：首次建立、舊版補寫、帳本遺失 fail closed 不重建 | `ledgerSentinel.test.ts`（含 capabilities 降級原因、0 次 HTTP） |
+| 變異測試倖存者 | 無需改程式，以測試鎖定 | `ledgerTamperRetention.test.ts`：執行中改壞帳本（垃圾／總和不符／多餘欄位）→ 拒絕且 sticky、不覆寫檔案；LLM（HTTP 500／逾時／缺 usage）與 TTS（HTTP 500／逾時／空音訊）失敗時預扣逐次累計、跨重啟保留，失敗重試累積到日額即 QUOTA_EXCEEDED 不再發請求。已手動套用「check() 的 catch 不設原因」與「失敗改 commit(…,0)」兩個變異，分別有 3 與 7 個測試轉紅 |
+| PWA 測試 | `generate-icons.mjs` 接受輸出目錄參數；測試寫暫存目錄，比對確定性、與已追蹤檔案一致，並斷言 public 圖示的 mtime 與位元組不變 | `pwa.test.ts` |
 
 後續（不在本 PR）：service worker 與離線頁、截圖瘦身、iPhone 真機（主畫面、背景、鎖屏）驗證、手機可達的 HTTPS 入口、strict 模式支援關鍵字的原文查證、首次真實呼叫後依帳單校正單價與 TTS 每字元上界。
