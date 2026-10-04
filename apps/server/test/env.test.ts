@@ -28,7 +28,7 @@ describe('loadConfig', () => {
   });
 
   it('does not echo secret values in validation errors', () => {
-    const secret = 'sk-should-never-appear';
+    const secret = 'TEST-fake-key-should-never-appear';
     let message = '';
     try {
       loadConfig({ OPENAI_API_KEY: secret, PORT: 'not-a-port' });

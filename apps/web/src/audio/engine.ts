@@ -110,7 +110,7 @@ export class PlaybackEngine {
 
   commitTail(show: ShowPlan, sessionId: string, expectedRevision: number): Reduction {
     const items: QueueItem[] = show.segments.map((segment) => ({ segment, showId: show.showId }));
-    return this.dispatch({ type: 'COMMIT_TAIL', items, sessionId, expectedRevision });
+    return this.dispatch({ type: 'COMMIT_TAIL', items, sessionId, expectedRevision, warnings: show.warnings });
   }
 
   destroy(): void {

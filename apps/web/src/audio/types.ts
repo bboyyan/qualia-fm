@@ -92,7 +92,7 @@ export type Action =
   | { type: 'SEEK'; positionMs: number }
   | { type: 'REMOVE_UPCOMING'; segmentId: string; expectedRevision: number }
   | { type: 'RESTORE_REMOVED'; expectedRevision: number }
-  | { type: 'COMMIT_TAIL'; items: readonly QueueItem[]; sessionId: string; expectedRevision: number }
+  | { type: 'COMMIT_TAIL'; items: readonly QueueItem[]; sessionId: string; expectedRevision: number; warnings?: readonly string[] }
   | { type: 'SET_DJ'; enabled: boolean }
   | { type: 'DEVICE_LOST' }
   | { type: 'RECONCILE' }

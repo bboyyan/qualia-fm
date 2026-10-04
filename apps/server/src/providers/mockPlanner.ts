@@ -24,10 +24,10 @@ function analysisFor(input: EditorialInput): SonicDNA {
       ? `以你提供的歌名「${excerpt(input.seedText)}」${input.seedArtist ? `（${excerpt(input.seedArtist)}）` : '（未提供藝人）'}為起點；MOCK 不認識任何歌曲`
       : `從「${excerpt(input.seedText)}」出發`;
   return {
-    hookOfFeeling: `MOCK 示意：${from}——有溫度的低頻，放鬆但不完全靜止。`,
-    spatialSignature: '依你的描述設想：貼近、留有空間',
-    emotionalVelocity: '放鬆但不完全靜止（不是 BPM）',
-    timbralPalette: ['柔和低頻', '輕薄聲景'],
+    hookOfFeeling: `TEST MOCK 示意：${from}；不推測質地或偏好。`,
+    spatialSignature: null,
+    emotionalVelocity: null,
+    timbralPalette: [],
     lyricalContext: null,
     basis: 'user_description',
     caveat: '以下全為 MOCK 示意，沒有分析任何真實音樂或音訊。',
@@ -57,7 +57,7 @@ function toCandidate(entry: MockEntry, index: number, input: EditorialInput, pre
 
 function candidatesFor(input: EditorialInput): Candidate[] {
   if (input.tuning === null) return BASE_POOL.map((e, i) => toCandidate(e, i, input, ''));
-  const prefix = `依你的微調「${excerpt(input.tuning)}」：`;
+  const prefix = `TEST 依你的微調「${excerpt(input.tuning)}」：`;
   return TUNE_POOL.map((e, i) => toCandidate(e, i, input, prefix));
 }
 

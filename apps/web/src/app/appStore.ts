@@ -5,15 +5,12 @@
  */
 import { create } from 'zustand';
 import type { Capabilities, MockScenario, SeedKind } from '@qualia/contracts';
+import { DEFAULT_SETTINGS, parseSettings, type Settings } from '../features/settings/settings';
+export type { Settings } from '../features/settings/settings';
 import type { ToastData } from '../ui/Toast';
 
 export type Tab = 'home' | 'listen' | 'settings';
 export type SheetKind = 'bridge' | 'queue' | 'tune' | 'environment';
-
-export interface Settings {
-  djEnabled: boolean;
-  djLength: 'short' | 'standard';
-}
 
 export interface Draft {
   kind: SeedKind;
@@ -22,17 +19,12 @@ export interface Draft {
 }
 
 const SETTINGS_KEY = 'qfm.settings.v1';
-const DEFAULT_SETTINGS: Settings = { djEnabled: true, djLength: 'short' };
 
 function loadSettings(): Settings {
   try {
     const raw = window.localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<Settings>;
-    return {
-      djEnabled: typeof parsed.djEnabled === 'boolean' ? parsed.djEnabled : DEFAULT_SETTINGS.djEnabled,
-      djLength: parsed.djLength === 'standard' ? 'standard' : 'short',
-    };
+    return parseSettings(JSON.parse(raw));
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -110,7 +102,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   announce: (message) => set({ live: message }),
   setDraft: (patch) => set({ draft: { ...get().draft, ...patch } }),
   setSettings: (patch) => {
-    const settings = { ...get().settings, ...patch };
+    const settings = parseSettings({ ...get().settings, ...patch });
     saveSettings(settings);
     set({ settings });
   },

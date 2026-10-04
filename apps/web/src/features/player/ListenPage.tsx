@@ -11,6 +11,9 @@ import { Button } from '../../ui/Button';
 import { VibeList } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
 import { SoundscapeArt } from '../../ui/SoundscapeArt';
+import { FeedbackStep } from './FeedbackStep';
+import { ManualControls } from './ManualControls';
+import { LedgerWarnings } from './LedgerWarnings';
 import { PlaybackBanner } from './PlaybackBanner';
 import { DjStrip, SeekBar, Transport, isSpeechPhase } from './PlayerControls';
 import styles from './player.module.css';
@@ -127,23 +130,30 @@ export function ListenPage() {
   const { candidate, track } = item.segment;
   // Vibe chips step aside during the intro so the transport stays on the first screen.
   const inIntro = isSpeechPhase(state);
+  const manualTrack = state.phase === 'manual_ready' || state.phase === 'manual_playing';
+  const feedback = state.phase === 'feedback';
+  const engine = getEngine();
   const palette = track.audioLocator.kind === 'mock_tone' ? track.audioLocator.palette : state.currentIndex;
   return (
     <section className={styles.listen} aria-label="正在收聽" data-testid="listen-page">
+      <LedgerWarnings warnings={state.show?.warnings ?? []} />
       <PlaybackBanner state={state} />
       <ListenHeader state={state} />
-      <SoundscapeArt palette={palette} spinning={state.phase === 'track_playing'} kicker="THE TEXTURE OF TONIGHT" />
+      {!feedback && <SoundscapeArt palette={palette} spinning={state.phase === 'track_playing'} kicker="THE TEXTURE OF TONIGHT" />}
       <div className={styles.songHeading}>
         <h1 data-testid="track-title">{candidate.title}</h1>
         <p>
           {candidate.artist} <span className={styles.mockTag}>MOCK 虛構曲目</span>
         </p>
       </div>
-      {!inIntro && <VibeList vibes={candidate.vibe} />}
-      <BridgeCard state={state} />
+      {!inIntro && !feedback && <VibeList vibes={candidate.vibe} />}
+      {!feedback && <BridgeCard state={state} />}
       <DjStrip state={state} />
-      {state.phase === 'completed' ? <CompletedCard /> : <SeekBar state={state} />}
-      {state.phase !== 'completed' && <Transport state={state} />}
+      {feedback ? <FeedbackStep key={`${state.sessionId}-${state.attemptId}`} state={state} /> :
+        state.phase === 'completed' ? <CompletedCard /> :
+        manualTrack ? <ManualControls phase={state.phase} onStart={() => engine.manualStarted()} onFinish={() => engine.manualFinished()} onSkip={() => engine.next()} /> :
+        <><SeekBar state={state} /><Transport state={state} /></>}
+
       <NextUp state={state} />
     </section>
   );

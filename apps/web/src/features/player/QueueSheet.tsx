@@ -23,7 +23,7 @@ const STATUS_LABEL: Record<SegmentStatus, string> = {
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
 function statusOf(state: EngineState, item: QueueItem, index: number): SegmentStatus {
-  if (index === state.currentIndex && state.phase !== 'ready' && state.phase !== 'completed') return 'playing';
+  if (index === state.currentIndex && state.phase !== 'ready' && state.phase !== 'completed' && state.phase !== 'feedback') return 'playing';
   return state.statuses[item.segment.segmentId] === 'playing' ? 'queued' : (state.statuses[item.segment.segmentId] ?? 'queued');
 }
 
@@ -58,6 +58,7 @@ function QueueRow({ state, item, index }: { state: EngineState; item: QueueItem;
               engine.jump(item.segment.segmentId);
               closeSheet();
             }}
+            disabled={state.phase === 'feedback'}
             aria-label={`現在播放 ${title}`}
           >
             現在播放

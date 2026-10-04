@@ -128,7 +128,7 @@ export function Transport({ state }: { state: EngineState }) {
         data-testid="restart"
       />
       <IconButton icon={audible ? 'pause' : 'play'} label={playLabel} tone="primary" size="lg" onClick={() => engine.toggle()} data-testid="play-toggle" />
-      <IconButton icon="next" label={hasNext ? '下一首' : '已是最後一首'} disabled={!hasNext} onClick={() => engine.next()} data-testid="next" />
+      <IconButton icon="next" label={hasNext ? '下一首' : '略過最後一首'} onClick={() => engine.next()} data-testid="next" />
     </div>
   );
 }

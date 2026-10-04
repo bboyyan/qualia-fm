@@ -56,3 +56,18 @@ it('V1 feedback API records five fields and empty reason, rejects invalid rating
   const other = await bootstrap(app);
   expect((await other.agent.post('/api/feedback').set('Origin', 'http://127.0.0.1:5173').set('X-CSRF-Token', other.csrf).send(body)).status).toBe(404);
 });
+
+it('saved fake feedback enters the next planner call through the ledger read', async () => {
+  const inputs: EditorialInput[] = [];
+  const mock = new MockEditorialPlanner();
+  const client = await bootstrap(testApp({}, {
+    ledger: new InMemoryLedger(),
+    planner: { draft: async (input, context) => { inputs.push(input); return mock.draft(input, context); } },
+  }).app);
+  const job = await waitForJob(client, (await postPlan(client, planRequest())).body.jobId);
+  const show = (await client.agent.get(`/api/shows/${job.showId}`)).body;
+  await client.agent.post('/api/feedback').set('Origin', 'http://127.0.0.1:5173').set('X-CSRF-Token', client.csrf).send({ showId: show.showId, segmentId: show.segments[0].segmentId, rating: '不對', reason: 'TEST fake reason' }).expect(201);
+  await waitForJob(client, (await postPlan(client, planRequest())).body.jobId);
+  expect(inputs[0]?.history).toEqual([]);
+  expect(inputs[1]?.history).toEqual([{ date: expect.any(String), seed: 'TEST fake seed', recommendation: expect.stringContaining('Qualia Mock'), rating: '不對', reason: 'TEST fake reason' }]);
+});

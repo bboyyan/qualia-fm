@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { expectNoHorizontalOverflow, expectNotCoveredByBottomBar, expectOnFirstScreen, generate, openApp } from './support';
+import { expectNoHorizontalOverflow, expectNotCoveredByBottomBar, expectOnFirstScreen, generate, openApp, skipFeedback } from './support';
 
 /**
  * Audio probe: counts every <audio> ever created and the maximum number of media elements
@@ -38,7 +38,7 @@ const elapsed = (page: Page) => page.getByTestId('elapsed').innerText();
 
 async function startListening(page: Page): Promise<void> {
   await page.addInitScript(PROBE);
-  await openApp(page);
+  await openApp(page, 'mock');
   await generate(page);
   await page.getByTestId('start-listening').click();
   await expect(page.getByTestId('listen-page')).toBeVisible();
@@ -89,7 +89,10 @@ test.describe('T04 播放引擎', () => {
 
   test('rapid next taps never double-play and use a single audio element (AC13, AC23)', async ({ page }) => {
     await startListening(page);
-    for (let i = 0; i < 3; i += 1) await page.getByTestId('next').click();
+    for (let i = 0; i < 3; i += 1) {
+      await page.getByTestId('next').click();
+      await skipFeedback(page);
+    }
     await expect(page.getByTestId('track-title')).toHaveText('低空漂浮');
     await page.waitForTimeout(800);
     const p = await probe(page);
@@ -111,11 +114,15 @@ test.describe('T04 播放引擎', () => {
   test('natural end advances once and shows the transition bridge; next-skip shows the seed bridge (AC18, AC21)', async ({ page }) => {
     await startListening(page);
     await page.getByTestId('skip-intro').click();
-    await expect(page.getByTestId('track-title')).toHaveText('雨後的底片', { timeout: 12_000 });
+    await expect(page.getByTestId('feedback-card')).toBeVisible({ timeout: 12_000 });
+    await expect(page.getByTestId('track-title')).toHaveText('微光偏航');
+    await skipFeedback(page);
+    await expect(page.getByTestId('track-title')).toHaveText('雨後的底片');
     await expect(page.getByTestId('bridge-card')).toHaveAttribute('data-bridge-kind', 'transition');
     await expect(page.getByTestId('bridge-card')).toContainText('接續：微光偏航 → 這一首');
     await expect(page.getByTestId('count-pill')).toHaveText('02 / 05');
     await page.getByTestId('next').click();
+    await skipFeedback(page);
     await expect(page.getByTestId('track-title')).toHaveText('柔焦公路');
     await expect(page.getByTestId('bridge-card')).toHaveAttribute('data-bridge-kind', 'seed');
   });

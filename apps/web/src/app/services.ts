@@ -5,9 +5,11 @@ import { HtmlAudioAdapter } from '../audio/adapters/htmlAudioAdapter';
 import { PlaybackEngine } from '../audio/engine';
 import type { MediaAdapter } from '../audio/types';
 import { GenerationController, type GenerationDeps } from '../features/seed/generationController';
+import { FeedbackFormStore } from '../features/player/feedbackForm';
 import { useAppStore } from './appStore';
 
 export const api = createApiClient();
+export const feedbackForms = new FeedbackFormStore();
 
 const deps: GenerationDeps = {
   api,
@@ -43,6 +45,8 @@ export function getEngine(): PlaybackEngine {
   const caps = store.capabilities ?? { mode: 'mock' as const, spotifyEnabled: false, canSeek: true };
   adapter = createAdapter(caps);
   engine = new PlaybackEngine(adapter, {
+    playbackMode: store.settings.playbackMode,
+    feedbackEnabled: true,
     djEnabled: store.settings.djEnabled,
     canSeek: caps.canSeek,
     onAnnounce: (message) => useAppStore.getState().announce(message),

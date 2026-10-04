@@ -32,9 +32,10 @@ export async function expectOnFirstScreen(page: Page, testId: string): Promise<v
   expect((box?.y ?? 0) + (box?.height ?? 0), `${testId} bottom vs bar top (no scroll)`).toBeLessThanOrEqual(barTop + 0.5);
 }
 
-export async function openApp(page: Page): Promise<void> {
+export async function openApp(page: Page, playbackMode?: 'mock'): Promise<void> {
   await page.goto('/');
   await expect(page.getByTestId('mode-badge')).toContainText('MOCK');
+  if (playbackMode === 'mock') await choosePlaybackMode(page, 'mock');
 }
 
 export async function fillSeed(page: Page, text: string): Promise<void> {
@@ -47,8 +48,18 @@ export async function chooseScenario(page: Page, label: string): Promise<void> {
   await page.getByTestId('tab-home').click();
 }
 
-export async function generate(page: Page, text = '深夜，還不想睡；暖一點，別太躁。'): Promise<void> {
+export async function generate(page: Page, text = 'TEST fake seed'): Promise<void> {
   await fillSeed(page, text);
   await page.getByTestId('generate').click();
   await expect(page.getByTestId('generation-view')).toBeVisible();
+}
+
+export async function choosePlaybackMode(page: Page, mode: 'manual' | 'mock'): Promise<void> {
+  await page.getByTestId('tab-settings').click();
+  await page.getByRole('radio', { name: mode === 'manual' ? 'B · 手動（預設）' : 'MOCK · 合成測試音', exact: true }).check();
+  await page.getByTestId('tab-home').click();
+}
+
+export async function skipFeedback(page: Page): Promise<void> {
+  await page.getByRole('button', { name: '略過回饋', exact: true }).click();
 }

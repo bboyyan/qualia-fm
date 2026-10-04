@@ -22,12 +22,12 @@ const LABEL: Record<SeedKind, string> = {
 };
 
 const PLACEHOLDER: Record<SeedKind, string> = {
-  feeling: '深夜，還不想睡。\n想要暖一點，但別太安靜。',
+  feeling: 'TEST：請輸入假資料，僅用於測試。',
   song: '輸入歌名',
-  sound: '像隔著霧聽見的吉他，\n有空間，卻不遙遠。',
+  sound: 'TEST：請輸入假聲音描述。',
 };
 
-export const EXAMPLES = ['深夜，還不想睡', '暖一點，別太躁', '剛練完舞，累但很爽'] as const;
+export const EXAMPLES = ['TEST 假起點一', 'TEST 假起點二', 'TEST 假起點三'] as const;
 
 interface SeedComposerProps {
   submitLabel: string;

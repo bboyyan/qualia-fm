@@ -44,7 +44,7 @@ export function MiniPlayer({ state }: { state: EngineState }) {
         icon={audible ? 'pause' : 'play'}
         label={audible ? '暫停' : '播放'}
         tone="inverse"
-        disabled={state.phase === 'recoverable_error'}
+        disabled={state.phase === 'recoverable_error' || state.phase === 'feedback' || state.phase === 'manual_ready' || state.phase === 'manual_playing'}
         onClick={() => getEngine().toggle()}
         data-testid="mini-toggle"
       />

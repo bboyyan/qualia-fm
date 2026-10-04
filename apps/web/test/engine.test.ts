@@ -174,3 +174,54 @@ it('B mode never starts track audio and waits for feedback before next introduct
   expect(engine.getState().currentIndex).toBe(1);
   expect(adapter.starts.map((s) => s.owner)).toEqual(['speech', 'speech']);
 });
+
+it('mock natural completion and next-skip wait for feedback, including the final song', () => {
+  const adapter = new FakeAdapter();
+  const engine = new PlaybackEngine(adapter, { djEnabled: false, canSeek: true, playbackMode: 'mock', feedbackEnabled: true });
+  engine.loadShow(makeShow('TEST-show', 2, false));
+  engine.play();
+  adapter.confirm();
+  const firstAttempt = engine.getState().attemptId;
+  adapter.end(firstAttempt, 'track');
+  adapter.end(firstAttempt, 'track');
+  expect([engine.getState().phase, engine.getState().currentIndex]).toEqual(['feedback', 0]);
+  engine.next();
+  expect(engine.getState().currentIndex).toBe(0);
+  engine.completeFeedback();
+  engine.next();
+  expect([engine.getState().phase, engine.getState().currentIndex]).toEqual(['feedback', 1]);
+  engine.completeFeedback();
+  expect(engine.getState().phase).toBe('completed');
+});
+
+it('feedback cannot be bypassed by replaying an intro or changing playback mode', () => {
+  const adapter = new FakeAdapter();
+  const engine = new PlaybackEngine(adapter, { djEnabled: true, canSeek: true, feedbackEnabled: true });
+  engine.loadShow(makeShow());
+  engine.play();
+  engine.next();
+  expect(engine.replayIntro().rejected).toBe('not_allowed');
+  expect(engine.setPlaybackMode('manual').rejected).toBe('not_allowed');
+  expect(engine.getState().phase).toBe('feedback');
+});
+
+it('manual mode with DJ disabled is silent and repeated finish does not advance before feedback', () => {
+  const adapter = new FakeAdapter();
+  const engine = new PlaybackEngine(adapter, { djEnabled: false, canSeek: true, playbackMode: 'manual', feedbackEnabled: true });
+  engine.loadShow(makeShow('TEST-show', 1));
+  engine.play();
+  expect([engine.getState().phase, adapter.starts.length]).toEqual(['manual_ready', 0]);
+  expect(engine.manualFinished().rejected).toBe('not_allowed');
+  engine.manualStarted();
+  engine.manualFinished();
+  expect(engine.manualFinished().rejected).toBe('not_allowed');
+  engine.completeFeedback();
+  expect(engine.getState().phase).toBe('completed');
+});
+
+it('a tuned round ledger failure remains visible in the current show UI warnings', () => {
+  const { engine } = setup();
+  const state = engine.getState();
+  engine.commitTail({ ...makeShow('TEST-tail'), warnings: ['未讀到帳本：本輪只用種子曲。'] }, state.sessionId!, state.queueRevision);
+  expect(engine.getState().show?.warnings).toContain('未讀到帳本：本輪只用種子曲。');
+});

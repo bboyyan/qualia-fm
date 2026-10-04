@@ -11,7 +11,7 @@ test.describe('T03 開台與生成', () => {
     await expect(page.getByText('尚未開始播放')).toBeVisible();
     await expect(page.getByTestId('start-listening')).toHaveText(/開始收聽/);
     await expect(page.getByText('感覺鉤子')).toBeVisible();
-    await expect(page.getByText('尚無資料，不做推測')).toBeVisible();
+    await expect(page.getByText('尚無資料，不做推測').first()).toBeVisible();
     const playing = await page.evaluate(() => [...document.querySelectorAll('audio')].some((a) => !a.paused));
     expect(playing).toBe(false);
     await expectNoHorizontalOverflow(page);
@@ -43,7 +43,7 @@ test.describe('T03 開台與生成', () => {
     await expect(page.getByTestId('zero-notice')).toContainText('待確認');
     await expect(page.getByTestId('start-listening')).toHaveCount(0);
     await page.getByRole('button', { name: '修改感覺' }).click();
-    await expect(page.getByTestId('seed-input')).toHaveValue('深夜，還不想睡；暖一點，別太躁。');
+    await expect(page.getByTestId('seed-input')).toHaveValue('TEST fake seed');
   });
 
   test('error: shows reason and retry inline, input preserved (AC06)', async ({ page }) => {
@@ -53,7 +53,7 @@ test.describe('T03 開台與生成', () => {
     await expect(page.getByTestId('generation-error')).toContainText('這次編排沒有成功');
     await expect(page.getByRole('button', { name: '再試一次' })).toBeVisible();
     await page.getByRole('button', { name: '修改感覺' }).click();
-    await expect(page.getByTestId('seed-input')).toHaveValue('深夜，還不想睡；暖一點，別太躁。');
+    await expect(page.getByTestId('seed-input')).toHaveValue('TEST fake seed');
   });
 
   test('song mode sends title and artist through the same pipeline (AC03)', async ({ page }) => {

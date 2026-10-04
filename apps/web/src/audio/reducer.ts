@@ -196,7 +196,7 @@ function seek(state: EngineState, positionMs: number): Reduction {
 
 function replayIntro(state: EngineState, trackPositionMs: number): Reduction {
   const item = state.queue[state.currentIndex];
-  if (!item || !state.djEnabled || item.segment.speech.kind === 'none' || state.phase === 'ready' || state.phase === 'completed') {
+  if (!item || !state.djEnabled || item.segment.speech.kind === 'none' || state.phase === 'ready' || state.phase === 'completed' || state.phase === 'feedback') {
     return reject(state, 'not_allowed');
   }
   const attemptId = state.attemptId + 1;
@@ -231,9 +231,10 @@ function commitTail(state: EngineState, action: Extract<Action, { type: 'COMMIT_
   if (action.sessionId !== state.sessionId) return reject(state, 'stale_session');
   if (action.expectedRevision !== state.queueRevision) return reject(state, 'stale_revision');
   const keep = state.queue.slice(0, state.currentIndex + 1);
+  const show = state.show && action.warnings ? { ...state.show, warnings: [...new Set([...state.show.warnings, ...action.warnings])].slice(0, 10) } : state.show;
   const statuses = { ...state.statuses, ...Object.fromEntries(action.items.map((q) => [q.segment.segmentId, 'queued' as const])) };
   return ok(
-    { ...state, queue: [...keep, ...action.items], statuses, removed: null, queueRevision: state.queueRevision + 1 },
+    { ...state, show, queue: [...keep, ...action.items], statuses, removed: null, queueRevision: state.queueRevision + 1 },
     [announce(`已更新接下來的 ${action.items.length} 首，目前這首不中斷`)],
   );
 }
@@ -318,6 +319,7 @@ function awaitFeedback(state: EngineState, nextIndex: number): Reduction {
 export function reduce(state: EngineState, action: Action): Reduction {
   switch (action.type) {
     case 'SET_MODE':
+      if (state.phase === 'feedback') return reject(state, 'not_allowed');
       if (state.playbackMode === action.mode) return ok(state);
       return ok({ ...state, playbackMode: action.mode, phase: state.queue.length ? 'ready' : 'empty', activeOwner: 'none', resumePhase: null, pendingOwner: null, feedbackNextIndex: null, attemptId: state.attemptId + 1 }, [{ type: 'stop' }]);
     case 'MANUAL_STARTED':
