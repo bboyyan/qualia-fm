@@ -24,7 +24,7 @@ Spec: `handoff/docs/10_IMPLEMENTATION_PLAN.md`. Remove this file when all stages
 **Goal**: reducer/commands, adapter, queue, single audio owner.
 **Success Criteria**: pause/next/cancel/late results/no double play.
 **Tests**: reducer + engine with fake adapter; E2E concurrent-playing probe.
-**Status**: Not Started
+**Status**: Complete
 
 ## Stage 5: T05 收聽與細節
 **Goal**: Bridge, Queue, Tune, mini-player, settings.

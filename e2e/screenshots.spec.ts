@@ -2,7 +2,7 @@
  * Captures review screenshots at the required sizes into docs/implementation/screenshots/.
  * Browser-rendered evidence only — not real-device evidence.
  */
-import { test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { chooseScenario, fillSeed, generate, openApp } from './support';
 
 const SIZES = [
@@ -13,6 +13,12 @@ const SIZES = [
 ] as const;
 
 const OUT = 'docs/implementation/screenshots';
+
+async function startShow(page: Page): Promise<void> {
+  await generate(page);
+  await page.getByTestId('start-listening').click();
+  await page.getByTestId('listen-page').waitFor();
+}
 
 interface Screen {
   name: string;
@@ -64,6 +70,51 @@ const SCREENS: readonly Screen[] = [
       await chooseScenario(page, '編排失敗');
       await generate(page);
       await page.getByTestId('generation-error').waitFor();
+    },
+  },
+  {
+    name: '10-listen-speech',
+    prepare: async (page) => {
+      await startShow(page);
+      await page.getByTestId('dj-strip').waitFor();
+    },
+  },
+  {
+    name: '11-listen-playing',
+    prepare: async (page) => {
+      await startShow(page);
+      await page.getByTestId('skip-intro').click();
+      await expect(page.getByTestId('phase-label')).toContainText('播放中', { timeout: 10_000 });
+      await page.waitForTimeout(1_600);
+    },
+  },
+  {
+    name: '12-listen-paused',
+    prepare: async (page) => {
+      await startShow(page);
+      await page.getByTestId('skip-intro').click();
+      await expect(page.getByTestId('phase-label')).toContainText('播放中', { timeout: 10_000 });
+      await page.waitForTimeout(1_200);
+      await page.getByTestId('play-toggle').click();
+      await expect(page.getByTestId('phase-label')).toContainText('已暫停');
+    },
+  },
+  {
+    name: '13-autoplay-blocked',
+    prepare: async (page) => {
+      await page.evaluate(() => {
+        const play = HTMLMediaElement.prototype.play;
+        let blocked = false;
+        HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+          if (!blocked) {
+            blocked = true;
+            return Promise.reject(new DOMException('blocked for screenshot', 'NotAllowedError'));
+          }
+          return play.call(this);
+        };
+      });
+      await startShow(page);
+      await page.getByTestId('autoplay-blocked').waitFor();
     },
   },
   {

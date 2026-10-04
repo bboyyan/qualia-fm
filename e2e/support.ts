@@ -20,6 +20,18 @@ export async function expectNotCoveredByBottomBar(page: Page, testId: string): P
   expect((box?.y ?? 0) + (box?.height ?? 0), `${testId} bottom vs bar top`).toBeLessThanOrEqual(barTop + 0.5);
 }
 
+/** Like expectNotCoveredByBottomBar but without scrolling: the control must be on the first screen. */
+export async function expectOnFirstScreen(page: Page, testId: string): Promise<void> {
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const box = await page.getByTestId(testId).boundingBox();
+  const barTop = await page.evaluate(() => {
+    const bar = document.querySelector('nav[aria-label="主要導覽"]')?.parentElement;
+    return bar ? bar.getBoundingClientRect().top : window.innerHeight;
+  });
+  expect(box, `${testId} has a box`).not.toBeNull();
+  expect((box?.y ?? 0) + (box?.height ?? 0), `${testId} bottom vs bar top (no scroll)`).toBeLessThanOrEqual(barTop + 0.5);
+}
+
 export async function openApp(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.getByTestId('mode-badge')).toContainText('MOCK');

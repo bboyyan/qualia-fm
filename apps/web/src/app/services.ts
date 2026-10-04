@@ -1,5 +1,9 @@
-/** App-wide singletons: exactly one API client, one generation per purpose (and, from T04, one playback engine). */
+/** App-wide singletons: exactly one API client, one generation per purpose and exactly one playback engine. */
 import { createApiClient, newIdempotencyKey } from '../api/client';
+import { createAdapter } from '../audio/adapters/createAdapter';
+import { HtmlAudioAdapter } from '../audio/adapters/htmlAudioAdapter';
+import { PlaybackEngine } from '../audio/engine';
+import type { MediaAdapter } from '../audio/types';
 import { GenerationController, type GenerationDeps } from '../features/seed/generationController';
 import { useAppStore } from './appStore';
 
@@ -25,3 +29,29 @@ document.addEventListener('visibilitychange', () => {
   generation.onVisibilityChange();
   tuneGeneration.onVisibilityChange();
 });
+
+let adapter: MediaAdapter | null = null;
+let engine: PlaybackEngine | null = null;
+
+/**
+ * The single PlaybackEngine, created on first use from the server capability report (mock in
+ * this build). Pages never construct audio themselves (AGENTS.md rule 6).
+ */
+export function getEngine(): PlaybackEngine {
+  if (engine) return engine;
+  const store = useAppStore.getState();
+  const caps = store.capabilities ?? { mode: 'mock' as const, spotifyEnabled: false, canSeek: true };
+  adapter = createAdapter(caps);
+  engine = new PlaybackEngine(adapter, {
+    djEnabled: store.settings.djEnabled,
+    canSeek: caps.canSeek,
+    onAnnounce: (message) => useAppStore.getState().announce(message),
+  });
+  return engine;
+}
+
+/** MOCK-only review hooks (Settings → 情境預覽); undefined for any non-mock adapter. */
+export function mockAudioControls(): Pick<HtmlAudioAdapter, 'simulateAutoplayBlockOnce' | 'simulateDeviceLost' | 'reconnect'> | undefined {
+  getEngine();
+  return adapter instanceof HtmlAudioAdapter ? adapter : undefined;
+}
