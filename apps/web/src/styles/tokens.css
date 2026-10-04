@@ -1,0 +1,53 @@
+/*
+ * Qualia FM design tokens. Base palette, spacing, radii and motion are copied verbatim from
+ * handoff/design/tokens.css (2026-10-04); the block below "Extensions" adds layout, type and
+ * elevation tokens used by the engineering build.
+ */
+:root {
+  --q-bg: #F6F4ED;
+  --q-surface: #FFFEFA;
+  --q-subtle: #ECEFE7;
+  --q-ink: #1F302A;
+  --q-muted: #586A60;
+  --q-primary: #294F42;
+  --q-on-primary: #FFFFFF;
+  --q-accent: #985339;
+  --q-border: #CED5CB;
+  --q-focus: #1E695E;
+  --q-danger: #A63030;
+  --q-space-1: 4px; --q-space-2: 8px; --q-space-3: 12px;
+  --q-space-4: 16px; --q-space-5: 20px; --q-space-6: 24px;
+  --q-space-8: 32px; --q-space-10: 40px; --q-space-12: 48px;
+  --q-radius-card: 20px; --q-radius-input: 16px;
+  --q-radius-sheet: 28px; --q-radius-button: 999px;
+  --q-tap: 48px; --q-play: 64px; --q-content-max: 480px;
+  --q-font: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans CJK TC", "Microsoft JhengHei", sans-serif;
+  --q-page-motion: 180ms; --q-sheet-motion: 240ms; --q-press-motion: 100ms;
+
+  /* Extensions */
+  --q-font-display: Georgia, "Times New Roman", "Songti TC", serif;
+  --q-ink-strong: #14231D;
+  --q-border-strong: #82988B;
+  --q-accent-wash: #F3EBDD;
+  --q-accent-line: #B79980;
+  --q-danger-wash: #F6E6E3;
+  --q-primary-wash: #E6EBDF;
+  --q-scrim: rgba(20, 39, 31, 0.38);
+  --q-shadow-soft: 0 5px 20px rgba(31, 48, 42, 0.035);
+  --q-shadow-lift: 0 10px 28px rgba(31, 48, 42, 0.12);
+  --q-shadow-sheet: 0 -12px 70px rgba(0, 0, 0, 0.12);
+  --q-gutter: 20px;
+  --q-nav-height: 64px;
+  --q-mini-height: 72px;
+  --q-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --q-text-h1: 32px; --q-text-h2: 24px; --q-text-title: 24px;
+  --q-text-body: 16px; --q-text-meta: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --q-page-motion: 0ms; --q-sheet-motion: 0ms; --q-press-motion: 0ms; }
+}
+
+@media (max-width: 359px) {
+  :root { --q-gutter: 16px; }
+}

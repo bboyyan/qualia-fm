@@ -1,0 +1,86 @@
+.empty { padding-top: 64px; text-align: center; display: grid; justify-items: center; gap: 14px; }
+.empty p { color: var(--q-muted); font-size: 15px; max-width: 300px; }
+.empty button { margin-top: 14px; }
+.emptyIcon { width: 76px; height: 76px; border-radius: 50%; background: var(--q-subtle); display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+
+/* ---------- Listen (S04) ---------- */
+.listen { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; padding-top: 6px; }
+.listen > section[role] { margin-bottom: 14px; }
+.listenTop { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.listenContext { min-width: 0; }
+.kicker { font-size: 12px; letter-spacing: 0.06em; color: var(--q-muted); font-weight: 550; }
+.seedLine { margin-top: 2px; font-size: 13px; color: var(--q-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.countPill {
+  flex-shrink: 0; min-height: var(--q-tap); min-width: var(--q-tap); padding: 6px 14px;
+  border: 0; border-radius: 999px; background: var(--q-subtle); font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.countPill:hover { background: var(--q-primary-wash); }
+.songHeading { margin-top: 14px; }
+.songHeading h1 { font-size: var(--q-text-title); line-height: 1.3; letter-spacing: -0.02em; }
+.songHeading p { margin-top: 3px; font-size: 13px; color: var(--q-muted); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.mockTag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--q-accent); background: var(--q-accent-wash); border-radius: 6px; padding: 1px 6px; }
+.songHeading + ul { margin-top: 10px; }
+
+.bridgeCard {
+  display: block; width: 100%; margin-top: 12px; padding: 12px 14px;
+  border: 0; border-radius: 16px; background: var(--q-subtle); text-align: left;
+  transition: background-color 160ms ease, transform var(--q-press-motion) ease;
+}
+.bridgeCard:hover { background: var(--q-primary-wash); }
+.bridgeCard:active { transform: scale(0.99); }
+.bridgeTitle { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; font-weight: 650; letter-spacing: 0.02em; }
+.bridgeTitle > span:first-child { display: inline-flex; gap: 6px; align-items: center; min-width: 0; }
+.bridgeMore { display: inline-flex; align-items: center; gap: 2px; color: var(--q-primary); font-weight: 600; white-space: nowrap; }
+.bridgeCopy { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 6px; font-size: 16px; line-height: 1.65; }
+.bridgeCard[data-bridge-kind='transition'] .bridgeTitle > span:first-child { color: var(--q-accent); }
+
+.djStrip { margin-top: 10px; padding: 2px 4px 10px 14px; border-radius: 14px; background: var(--q-primary-wash); border-left: 3px solid var(--q-primary); }
+.djHead { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.djHead p { min-width: 0; font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.djHead p span { font-weight: 450; color: var(--q-muted); }
+.djHead button { flex-shrink: 0; white-space: nowrap; padding-left: 8px; padding-right: 8px; }
+.djLine { margin-top: 0; padding-right: 8px; font-size: 15px; line-height: 1.55; color: var(--q-ink); }
+.listen figure { height: clamp(112px, 16dvh, 156px); }
+
+.progress { margin-top: 14px; }
+.progressLabel { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--q-muted); }
+.range {
+  --fill: 0%;
+  -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 44px; margin: 0; background: transparent; cursor: pointer;
+}
+.range:disabled { cursor: default; }
+.range::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(to right, var(--q-primary) var(--fill), #D5DCD1 var(--fill)); }
+.range::-moz-range-track { height: 4px; border-radius: 4px; background: #D5DCD1; }
+.range::-moz-range-progress { height: 4px; border-radius: 4px; background: var(--q-primary); }
+.range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--q-primary); border: 2px solid var(--q-surface); box-shadow: 0 1px 4px rgba(31, 48, 42, 0.25); }
+.range::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--q-primary); border: 2px solid var(--q-surface); }
+.range:disabled::-webkit-slider-thumb { background: var(--q-border-strong); box-shadow: none; }
+.timeRow { display: flex; justify-content: space-between; gap: 8px; margin-top: -6px; font-size: 12px; color: var(--q-muted); font-variant-numeric: tabular-nums; }
+
+.transport { display: flex; align-items: center; justify-content: center; gap: 32px; margin-top: 10px; }
+
+.listenBottom { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--q-border); }
+.nextPreview { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: var(--q-tap); padding: 0; border: 0; background: none; text-align: left; border-radius: 12px; }
+.queueIcon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 42px; height: 42px; border: 1px solid var(--q-border); border-radius: 12px; }
+.nextCopy { min-width: 0; }
+.nextCopy small { display: block; font-size: 12px; color: var(--q-muted); }
+.nextCopy strong { display: block; font-size: 14px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tuneLink { padding-right: 4px; }
+
+.completed { margin-top: 14px; padding: 16px; border-radius: 16px; background: var(--q-surface); border: 1px solid var(--q-border); }
+.completed h2 { font-size: 20px; }
+.completed p { margin-top: 6px; font-size: 14px; color: var(--q-muted); }
+.completedActions { display: grid; gap: 8px; margin-top: 12px; }
+
+@media (max-height: 820px) {
+  .listenTop { margin-bottom: 10px; }
+  .songHeading { margin-top: 10px; }
+  .bridgeCard { margin-top: 10px; }
+  .djStrip { margin-top: 8px; }
+  .progress { margin-top: 8px; }
+  .transport { margin-top: 2px; }
+  .listenBottom { margin-top: 10px; }
+}
+@media (max-width: 359px) {
+  .transport { gap: 22px; }
+}
