@@ -71,7 +71,8 @@ export class PlaybackEngine {
   /** Live provider position while audible; otherwise the last confirmed position. */
   positionMs(): number {
     const live = this.state.phase === 'speaking' || this.state.phase === 'track_playing' ? this.adapter.getState() : null;
-    return live ? live.positionMs : this.state.positionMs;
+    if (live) this.dispatch({ type: 'POSITION_UPDATED', attemptId: this.state.attemptId, positionMs: live.positionMs });
+    return this.state.positionMs;
   }
 
   loadShow(show: ShowPlan): string {

@@ -71,3 +71,28 @@ it('saved fake feedback enters the next planner call through the ledger read', a
   expect(inputs[0]?.history).toEqual([]);
   expect(inputs[1]?.history).toEqual([{ date: expect.any(String), seed: 'TEST fake seed', recommendation: expect.stringContaining('Qualia Mock'), rating: '不對', reason: 'TEST fake reason' }]);
 });
+
+// 同一意圖重送（含同時到達）只能產生一列，舊客戶端也依曲目去重。
+it.each([undefined, 'TEST-feedback-intent'])('回饋重送回傳相同收據且帳本只有一列：%s', async (clientRequestId) => {
+  const ledger = new InMemoryLedger();
+  const client = await bootstrap(testApp({}, { ledger }).app);
+  const job = await waitForJob(client, (await postPlan(client, planRequest())).body.jobId);
+  const show = (await client.agent.get(`/api/shows/${job.showId}`)).body;
+  const body = { showId: show.showId, segmentId: show.segments[0].segmentId, rating: '愛', reason: 'TEST', clientRequestId };
+  const send = () => client.agent.post('/api/feedback').set('Origin', 'http://127.0.0.1:5173').set('X-CSRF-Token', client.csrf).send(body);
+  const [first, second] = await Promise.all([send(), send()]);
+  expect([first.status, second.status]).toEqual([201, 201]);
+  expect(second.body).toEqual(first.body);
+  expect((await send()).body).toEqual(first.body);
+  expect(await ledger.read()).toHaveLength(1);
+});
+
+it('存在的 show 搭配不存在的 segment 回 404，且不寫帳本', async () => {
+  const ledger = new InMemoryLedger();
+  const client = await bootstrap(testApp({}, { ledger }).app);
+  const job = await waitForJob(client, (await postPlan(client, planRequest())).body.jobId);
+  await client.agent.get(`/api/shows/${job.showId}`).expect(200);
+  await client.agent.post('/api/feedback').set('Origin', 'http://127.0.0.1:5173').set('X-CSRF-Token', client.csrf)
+    .send({ showId: job.showId, segmentId: 'TEST-missing-segment', rating: '愛', reason: '' }).expect(404);
+  expect(await ledger.read()).toEqual([]);
+});

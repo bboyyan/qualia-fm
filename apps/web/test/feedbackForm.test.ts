@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import type { FeedbackRequest } from '@qualia/contracts';
 import { FeedbackFormModel } from '../src/features/player/feedbackForm';
 
 it('requires a rating, records an empty reason and ignores repeated submits while pending', async () => {
@@ -18,7 +19,7 @@ it('requires a rating, records an empty reason and ignores repeated submits whil
   await form.submit();
   form.skip();
   expect(form.getState().busy).toBe(true);
-  expect(rows).toEqual([{ showId: 'TEST-show', segmentId: 'TEST-segment', rating: '還行', reason: '' }]);
+  expect(rows).toEqual([{ showId: 'TEST-show', segmentId: 'TEST-segment', rating: '還行', reason: '', clientRequestId: expect.any(String) }]);
   release();
   await first;
   expect(completions).toEqual(['TEST-row']);
@@ -75,4 +76,29 @@ it('navigation back to the same attempt keeps the draft and the pending submit',
   expect(created).toBe(2);
   release();
   await submitting;
+});
+
+it('同一張回饋卡重試沿用 key，重新填寫或換曲目才建立新意圖', async () => {
+  const requests: FeedbackRequest[] = [];
+  const create = (segmentId: string) => new FeedbackFormModel({ showId: 'TEST-show', segmentId }, async (request) => {
+    requests.push(request);
+    throw new Error('TEST lost response');
+  }, () => undefined, () => undefined);
+  const form = create('TEST-segment');
+  form.setRating('愛');
+  form.setReason('TEST reason');
+  await form.submit();
+  await form.submit();
+  expect(requests[0]?.clientRequestId).toEqual(expect.stringMatching(/^[A-Za-z0-9_-]{8,100}$/));
+  expect(requests[1]?.clientRequestId).toBe(requests[0]?.clientRequestId);
+  form.setReason('TEST new reason');
+  await form.submit();
+  expect(requests[2]?.clientRequestId).not.toBe(requests[0]?.clientRequestId);
+  form.setRating('不對');
+  await form.submit();
+  expect(requests[3]?.clientRequestId).not.toBe(requests[2]?.clientRequestId);
+  const next = create('TEST-next');
+  next.setRating('愛');
+  await next.submit();
+  expect(requests[4]?.clientRequestId).not.toBe(requests[3]?.clientRequestId);
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { getEngine } from '../app/services';
 import type { EngineState } from './types';
 
@@ -15,13 +15,14 @@ const POSITION_TICK_MS = 250;
  */
 export function usePlaybackPosition(active: boolean): number {
   const engine = getEngine();
-  const [, setTick] = useState(0);
+  const state = useSyncExternalStore(engine.subscribe, engine.getState, engine.getState);
   useEffect(() => {
     if (!active) return;
+    engine.positionMs();
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') setTick((n) => n + 1);
+      if (document.visibilityState === 'visible') engine.positionMs();
     }, POSITION_TICK_MS);
     return () => window.clearInterval(timer);
-  }, [active]);
-  return engine.positionMs();
+  }, [active, engine]);
+  return state.positionMs;
 }

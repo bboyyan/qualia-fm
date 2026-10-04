@@ -6,7 +6,7 @@
 
 ## 需求
 
-- Node.js ≥ 22（`.nvmrc` 為 24；本機以 v25.5 驗證）
+- Node.js `^22.13.0 || ^24.0.0 || >=26.0.0`（`.nvmrc` 為 24）
 - pnpm 10（`packageManager: pnpm@10.28.2`）
 
 ## 安裝

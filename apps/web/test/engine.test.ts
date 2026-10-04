@@ -225,3 +225,33 @@ it('a tuned round ledger failure remains visible in the current show UI warnings
   engine.commitTail({ ...makeShow('TEST-tail'), warnings: ['未讀到帳本：本輪只用種子曲。'] }, state.sessionId!, state.queueRevision);
   expect(engine.getState().show?.warnings).toContain('未讀到帳本：本輪只用種子曲。');
 });
+
+it('回饋期間拒絕移除接下來，結束回饋後保持正確下一首且可移除', () => {
+  const adapter = new FakeAdapter();
+  const engine = new PlaybackEngine(adapter, { djEnabled: false, canSeek: true, feedbackEnabled: true });
+  engine.loadShow(makeShow());
+  engine.play();
+  engine.next();
+  const before = engine.getState();
+  expect(engine.removeUpcoming('showA_2').rejected).toBe('not_allowed');
+  expect(engine.getState()).toBe(before);
+  engine.completeFeedback();
+  expect(engine.getState().queue[engine.getState().currentIndex]?.segment.segmentId).toBe('showA_2');
+  expect(engine.removeUpcoming('showA_3').rejected).toBeUndefined();
+  expect(engine.getState().queue.map((item) => item.segment.segmentId)).toEqual(['showA_1', 'showA_2', 'showA_4', 'showA_5']);
+});
+
+it('輪詢 positionMs 會保存進度，provider 消失後復原仍從最後位置開始', async () => {
+  const { adapter, engine } = setup(false);
+  engine.play();
+  adapter.confirm();
+  adapter.getState = () => ({ positionMs: 14_000, durationMs: 30_000, paused: false, ready: true });
+  expect(engine.positionMs()).toBe(14_000);
+  expect(engine.getState().positionMs).toBe(14_000);
+  adapter.getState = () => null;
+  engine.deviceLost();
+  await flush();
+  expect(engine.getState().error?.code).toBe('DEVICE_UNAVAILABLE');
+  engine.play();
+  expect(adapter.starts.at(-1)).toMatchObject({ owner: 'track', fromMs: 14_000 });
+});

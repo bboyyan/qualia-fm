@@ -5,6 +5,7 @@ export const FeedbackRatingSchema = z.enum(['愛', '還行', '不對']);
 export const FeedbackRequestSchema = z.strictObject({
   showId: z.string().min(1).max(100),
   segmentId: z.string().min(1).max(100),
+  clientRequestId: z.string().regex(/^[A-Za-z0-9_-]{8,100}$/).optional(),
   rating: FeedbackRatingSchema,
   reason: z.string().trim().max(200),
 });

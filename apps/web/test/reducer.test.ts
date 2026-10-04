@@ -251,3 +251,15 @@ describe('bridge adjacency (AC21)', () => {
     expect(bridgeAt(committed, 1)?.kind).toBe('seed');
   });
 });
+
+it('輪詢保存最後位置，裝置斷線後從該位置復原', () => {
+  const playingState = trackPlaying();
+  // positionMs() 的輪詢結果透過 action 存入 reducer。
+  const polled = reduce(playingState, { type: 'POSITION_UPDATED', attemptId: playingState.attemptId, positionMs: 12_000 }).state;
+  expect(polled.positionMs).toBe(12_000);
+  const stale = reduce(polled, { type: 'POSITION_UPDATED', attemptId: polled.attemptId - 1, positionMs: 500 }).state;
+  expect(stale.positionMs).toBe(12_000);
+  const lost = reduce(polled, { type: 'DEVICE_LOST' }).state;
+  const unavailable = reduce(lost, { type: 'RECONCILE_RESULT', state: null }).state;
+  expect(reduce(unavailable, { type: 'PLAY' }).effects[0]).toMatchObject({ type: 'start', owner: 'track', fromMs: 12_000 });
+});

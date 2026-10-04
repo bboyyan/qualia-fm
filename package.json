@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@10.28.2",
   "engines": {
-    "node": ">=22"
+    "node": "^22.13.0 || ^24.0.0 || >=26.0.0"
   },
   "scripts": {
     "dev": "pnpm --filter @qualia/contracts build && pnpm -r --parallel --filter \"./apps/*\" dev",

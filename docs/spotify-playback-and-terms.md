@@ -2,7 +2,7 @@
 
 查證日期：**2026-10-04**（本機 `date '+%Y-%m-%d %H:%M:%S %Z'`：2026-10-04 20:05:12 CST）。本頁是工程風險說明，**不是法律意見，也不是 Spotify 核可或啟用授權**。標記「官方文件明文」「我們的推論」「待曄決定」分別代表來源事實、產品判讀與尚未授權的選項。
 
-現況依 [README](../README.md)、[Provider gates](../handoff/docs/05_PROVIDER_GATES.md)、[播放引擎](../handoff/docs/06_PLAYBACK_ENGINE.md)、[T04](implementation/reports/T04.md)、[T05](implementation/reports/T05.md) 與 [decision log](implementation/decision-log.md)：BRA-97／PR #1 的 T01–T05 只有 MOCK 合成測試音＋DJ 提示音／串詞文字，沒有真實歌曲、LLM 或 TTS；喜歡／不合適回饋按鈕尚未實作。兩個 Spotify 開關預設 `false`，本版設成 `true` 會拒絕啟動；設定頁 DJ 開關只控制 MOCK，不能開啟 Spotify。
+現況依 [README](../README.md)、[Provider gates](../handoff/docs/05_PROVIDER_GATES.md)、[播放引擎](../handoff/docs/06_PLAYBACK_ENGINE.md)、[T04](implementation/reports/T04.md)、[T05](implementation/reports/T05.md) 與 [decision log](implementation/decision-log.md)：main 的 B 手動播放模式與回饋閉環已實作：介紹文字與 MOCK 提示音後，由使用者自行在 Spotify app 點歌，再於本站選「愛／還行／不對」與原因，送出或略過後進下一首；目前只寫 TEST 假帳本。MOCK 另可播放合成測試音，沒有真實歌曲、LLM 或 TTS。E 模式仍停用，`SPOTIFY_ENABLED` 與 `SPOTIFY_DJ_APPROVED` 維持 `false`，本版設成 `true` 會拒絕啟動；設定頁 DJ 開關只控制 MOCK，不能開啟 Spotify。
 
 本票只新增文件，不花錢、不放金鑰、不接真實 API、不要求任何登入。唯一已確認的偏好是種子曲 **Evan Call〈Time Flows Ever Onward〉**（不推定其他偏好，也不宣稱已聽音分析）。本頁所有 Spotify／平台路徑均**依官方文件，未實測**；MOCK 的既有自動化證據也不是 iPhone 真機證據。
 
@@ -13,7 +13,7 @@
 | 平台／路徑 | 官方能力（依官方文件，未實測） | Qualia FM 本版實際交付與邊界 |
 |---|---|---|
 | 電腦瀏覽器 | SDK 可在瀏覽器建立 Connect 播放裝置；需 Premium 使用者 token。[SDK](https://developer.spotify.com/documentation/web-playback-sdk)、[Reference](https://developer.spotify.com/documentation/web-playback-sdk/reference)（2026-10-04） | 只播 MOCK 測試音；SDK adapter 停用。純音樂整合與 DJ 都未交付。 |
-| iPhone 瀏覽器 | 官方列 mobile iOS 支援，但轉移後需互動；iOS 音量不可用 JavaScript 設定。[SDK](https://developer.spotify.com/documentation/web-playback-sdk)、[Reference／setVolume](https://developer.spotify.com/documentation/web-playback-sdk/reference)（2026-10-04） | 只有 MOCK 提示音／文字與控制。手機「語音介紹＋回饋」是目標，真實語音／回饋尚未完成；不承諾背景串接。 |
+| iPhone 瀏覽器 | 官方列 mobile iOS 支援，但轉移後需互動；iOS 音量不可用 JavaScript 設定。[SDK](https://developer.spotify.com/documentation/web-playback-sdk)、[Reference／setVolume](https://developer.spotify.com/documentation/web-playback-sdk/reference)（2026-10-04） | 已提供 B 手動播放、MOCK 提示音／文字與回饋閉環。真實語音尚未完成；不承諾背景串接。 |
 | iPhone Spotify app／Connect | Connect 是以一個裝置遙控另一裝置；app 可選播放裝置。API 的 Start/Resume 可控制 active device，需 Premium 及 OAuth 權限。[Connect](https://support.spotify.com/us/article/spotify-connect/)、[Start/Resume](https://developer.spotify.com/documentation/web-api/reference/start-a-users-playback)（2026-10-04） | app 與網頁是不同音訊來源；本站沒有 Connect 控制、裝置轉移或同步。若曄自行操作既有 app，本站不讀取狀態。 |
 | 曄手動點歌單 | 由 Spotify app 自行播放／選裝置。[Connect 操作說明](https://support.spotify.com/us/article/spotify-connect/)（2026-10-04） | 不使用本站 Spotify API／授權；曄自行找歌單、選曲與播放，本站不知道進度或是否出聲。指定歌曲能否按需播放，依帳號／地區／app 狀態待確認，不把 SDK Premium 規則直接套到所有手動 app 行為。 |
 
@@ -29,7 +29,7 @@
 | 電腦 SDK 純音樂（未實作） | 未來若核可，只由明確播放操作進歌曲；DJ gate 關閉時不執行介紹音訊。若另取得 DJ 許可，才可評估「介紹 ended → 確認停止 → 啟歌 → 確認播放事件」；不能只看連線成功就宣稱出聲。[Reference／ready、state、autoplay_failed](https://developer.spotify.com/documentation/web-playback-sdk/reference)（2026-10-04，依官方文件，未實測）。 |
 | iPhone 網頁 SDK（未實作） | 即使完成介紹，轉移後仍可能需要新的使用者互動；不能承諾單次點擊可跨整段自動播放。SDK 的 activateElement 用於互動路徑；鎖屏／背景接續待確認。[SDK](https://developer.spotify.com/documentation/web-playback-sdk)、[Reference／activateElement](https://developer.spotify.com/documentation/web-playback-sdk/reference)（2026-10-04，依官方文件，未實測）。 |
 | iPhone app／Connect（未實作） | 現在只能由曄自行停歌 → 回網頁讀文字（未來才有真實語音）→ 結束後自行回 app 選曲／播放。未來自動控制 app 必須另走 L2／G0；Player API 與其他 Player 端點的執行順序不保證，不能假設送出 pause 就能安全開始語音。[Start/Resume](https://developer.spotify.com/documentation/web-api/reference/start-a-users-playback)（2026-10-04，依官方文件，未實測）。 |
-| 曄手動點歌單 | 曄自行停歌 → 讀介紹文字（或日後經核可的獨立語音）→ 自己回 app 點歌單；每曲想先讀介紹就重複操作。本站不協調、不中斷外部播放，無法保證無雙播或曲間自動接續。回饋現階段由曄自行記錄，非已存在的本站按鈕。 |
+| 曄手動點歌單 | 曄自行停歌 → 讀介紹文字（或日後經核可的獨立語音）→ 自己回 app 點歌單；每曲想先讀介紹就重複操作。本站不協調、不中斷外部播放，無法保證無雙播或曲間自動接續。本站已提供「愛／還行／不對」與原因回饋，寫入 TEST 假帳本；送出或略過後進下一首。 |
 
 **我們的推論：**「不重疊」是必要的工程邊界，仍不能推導「先暫停再念」必然合規；Policy III.5／III.7 包含其他服務整合及 segue，不只禁止疊音。[Developer Policy](https://developer.spotify.com/policy)（查證：2026-10-04）。
 
@@ -49,24 +49,24 @@
 
 ## 4. 替代方案與各自取捨
 
-以下是**我們的推論／提案**，本票不實作；所有選項都維持兩個 Spotify 開關 `false`。
+以下保留**我們的推論／提案**與取捨；B 手動播放與本站回饋已在 main 實作，其餘整合仍未交付，所有選項都維持兩個 Spotify 開關 `false`。
 
 | 方案 | 得到什麼 | 取捨／邊界 |
 |---|---|---|
-| 不開本站 Spotify：曄手動點歌單＋自行回饋 | 用既有 app 聽歌，依本站文字理由自行判斷 | 需切 app／手動選曲；本站回饋按鈕尚未做，先自行記錄；不讀 Spotify 歷史、不建立真實偏好檔案、不保證同步。 |
+| 不開本站 Spotify：曄手動點歌單＋自行回饋 | 用既有 app 聽歌，依本站文字理由自行判斷 | 需切 app／手動選曲；本站回饋按鈕已實作，目前寫入 TEST 假帳本；不讀 Spotify 歷史、不建立真實偏好檔案、不保證同步。 |
 | 只出推薦與理由 | 先核對 Seed／Bridge 是否有用，無播放整合 | 現在只有 MOCK 虛構推薦；真實推薦須另核對獨立資料來源，標示推測，不能聲稱聽過或分析 Spotify 音訊。[Terms／AI 限制](https://developer.spotify.com/terms)（2026-10-04） |
 | 繼續 MOCK，日後用自有／明確授權的其他來源 | MOCK 可驗流程；權利允許時才可能在本站做完整介紹→歌曲 | MOCK 不是音樂體驗；其他音源須逐項確認串流、語音串接與分析權利，曲庫／費用／手機背景表現都待確認。本票不挑付費供應商、不抓平台音檔，也不承諾其他服務沒有條款限制。 |
 
 ## 5. 請曄決定：選項與建議
 
-**建議（我們的推論）：**今天先保留 MOCK，或由曄自行手動點歌單／記錄回饋；這最符合不花錢、不登入、不接 API 的限制。先確認文字理由與手動流程是否值得繼續，再另票研究已授權音源。這是建議，**不替曄決定，也不把任何選項視為已同意**。
+**建議（我們的推論）：**今天先保留 MOCK，或由曄自行手動點歌單／使用本站 TEST 回饋；這最符合不花錢、不登入、不接 API 的限制。先確認文字理由與手動流程是否值得繼續，再另票研究已授權音源。這是建議，**不替曄決定，也不把任何選項視為已同意**。
 
 未驗證：iPhone／電腦 SDK、Spotify app／Connect、Premium／allowlist／端點、iPhone 暫停休眠與鎖屏／背景恢復、真實語音與無雙播、個案用途核可。PR 供 **Sylphy** 審查，BRA-101 止於開 PR／In Review；Done 由專案管家或曄關閉，本次不操作 Linear。依賴 BRA-97／PR #1，base 是 `qualia/mvp-t01-t05`；PR #1 合併後需 retarget 到 `main`。本頁可用 git revert 或刪分支回滾。
 
 ### 待曄決定
 
 - [ ] A｜維持 MOCK／只評估文字推薦與理由，兩開關 `false`：**L1**（僅文件與 mock 評估；真實服務另票）。
-- [ ] B｜本站不接 Spotify，曄自行用既有 app 手動點歌單＋自行記錄回饋，兩開關 `false`：**L1**（本站無登入／控制；新增回饋功能另票）。
+- [ ] B｜本站不接 Spotify，曄自行用既有 app 手動點歌單＋本站 TEST 回饋，兩開關 `false`：**L1**（本站無登入／控制；B 手動播放與回饋閉環已實作）。
 - [ ] C｜先研究自有／明確授權的其他音源，兩開關 `false`：**L1**（只做文件研究；任何購買、金鑰、真實服務接入須另行授權，不在今天範圍）。
 - [ ] D｜另票評估 Spotify 純音樂整合：**L2**（本站授權登入／開啟 `SPOTIFY_ENABLED` 前需曄當次明確同意及 G0 證據；DJ gate 維持關閉）。
 - [ ] E｜另票評估 Spotify＋DJ 依序串接：**L2**（兩開關各需曄當次明確同意；還需獨立用途／權利核可與真機驗證；不代表准許疊歌或 AI ingestion）。
