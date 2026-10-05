@@ -4,13 +4,12 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { DJ_LINE_MAX_GRAPHEMES, countGraphemes } from '@qualia/contracts';
+import { CandidateSchema, SeedSchema, DJ_LINE_MAX_GRAPHEMES, countGraphemes } from '@qualia/contracts';
 import {
   CAPSULE_OUTRO_MAX_GRAPHEMES,
   EMPTY_JOURNEY,
   GEMS_PER_CAPSULE,
   addSeedGem,
-  composeOutro,
   inlayTrack,
   markCapsuleOpened,
   moodTags,
@@ -22,8 +21,10 @@ import { JourneyTracker } from '../src/features/journey/journeyTracker';
 import { CapsuleCard } from '../src/features/journey/CapsuleCard';
 import { GemSlots } from '../src/features/journey/GemTray';
 import { reduce, initialEngineState } from '../src/audio/reducer';
-import type { EngineState } from '../src/audio/types';
-import { makeShow } from './fixtures';
+import { PlaybackEngine } from '../src/audio/engine';
+import { useAppStore } from '../src/app/appStore';
+import type { EngineState, MediaAdapter } from '../src/audio/types';
+import { candidate, makeShow } from './fixtures';
 
 const track = (n: number, vibe: readonly string[] = ['溫柔', '夜色', '微光']): TrackInput => ({
   key: `s1:seg${n}`,
@@ -140,10 +141,35 @@ describe('膠囊內容：更長結語＋情緒標籤', () => {
     expect(outro).toContain('溫柔');
   });
 
-  it('曲名極長時仍不超過結語上限', () => {
-    const long = (n: number): TrackGem => ({ kind: 'track', source: 'listened', rating: '愛', key: `k${n}`, title: '長'.repeat(200), artist: 'a', vibe: ['很長的感覺標籤很長的感覺標籤', 'b', 'c'] });
-    const outro = composeOutro(['種'.repeat(500)], [long(1), long(2), long(3), long(4)], ['標籤一', '標籤二']);
+  it('合法短資料的結語仍超過單段 DJ 上限', () => {
+    const seed = SeedSchema.parse({ kind: 'feeling', text: '雨', artist: null });
+    let journey = addSeedGem(EMPTY_JOURNEY, { key: 'seed:short', seed: seed.text });
+    ['雨', '風', '夜', '月'].forEach((title, index) => {
+      const input = CandidateSchema.parse({ ...candidate(index + 1), title, artist: '甲', vibe: ['夜', '雨', '風'] });
+      journey = inlayTrack(journey, { ...input, key: `short:${index}` }, 'listened');
+    });
+    const outro = journey.capsule!.outro;
+    expect(countGraphemes(outro)).toBeGreaterThan(DJ_LINE_MAX_GRAPHEMES);
     expect(countGraphemes(outro)).toBeLessThanOrEqual(CAPSULE_OUTRO_MAX_GRAPHEMES);
+    for (const title of ['雨', '風', '夜', '月']) expect(outro).toContain(`「${title}」`);
+  });
+
+  it('合法極長資料會縮短結語，仍保留曲名且符合上下限', () => {
+    const seed = SeedSchema.parse({ kind: 'feeling', text: '種'.repeat(200), artist: null });
+    let journey = addSeedGem(EMPTY_JOURNEY, { key: 'seed:long', seed: seed.text });
+    for (let index = 0; index < 4; index += 1) {
+      const input = CandidateSchema.parse({
+        ...candidate(index + 1), title: String(index) + '曲'.repeat(199), artist: '藝'.repeat(12),
+        vibe: [String(index) + '感'.repeat(19), '雨'.repeat(20), '風'.repeat(20)],
+      });
+      journey = inlayTrack(journey, { ...input, key: `long:${index}` }, 'feedback', index < 2 ? '愛' : '不對');
+    }
+    const outro = journey.capsule!.outro;
+    expect(countGraphemes(outro)).toBeGreaterThan(DJ_LINE_MAX_GRAPHEMES);
+    expect(countGraphemes(outro)).toBeLessThanOrEqual(CAPSULE_OUTRO_MAX_GRAPHEMES);
+    for (let index = 0; index < 4; index += 1) expect(outro).toContain(`「${index}${'曲'.repeat(22)}…」`);
+    expect(outro).not.toContain('藝'.repeat(12));
+    expect(outro).toContain('下一次，從你留下的感覺再出發。');
   });
 
   it('情緒標籤依出現次數排序、去重，最多 4 個', () => {
@@ -190,6 +216,45 @@ describe('JourneyTracker：接播放引擎與回饋', () => {
     const state = loaded('s1');
     tracker.recordFeedback('s1', state.queue[0]!, '還行');
     expect(tracker.getState().gems[0]).toMatchObject({ kind: 'track', rating: '還行', source: 'feedback' });
+  });
+
+  it('真實引擎完成第 5 顆時，appStore 朗讀區保留膠囊公告', () => {
+    const adapter: MediaAdapter = {
+      start: async () => {}, pause: () => {}, resume: async () => {}, seek: () => {},
+      stop: () => {}, getState: () => null, subscribe: () => () => {}, destroy: () => {},
+    };
+    const capsuleMessage = '五顆寶石到齊，旅程膠囊開好了';
+    const announce = useAppStore.getState().announce;
+    const onCapsule = vi.fn(() => announce(capsuleMessage));
+    const tracker = new JourneyTracker(onCapsule);
+    const engine = new PlaybackEngine(adapter, {
+      playbackMode: 'manual', feedbackEnabled: true, djEnabled: false, canSeek: false, onAnnounce: announce,
+    });
+    engine.subscribe(() => tracker.observe(engine.getState()));
+    try {
+      engine.loadShow(makeShow('announce', 5, false));
+      engine.play();
+      for (let index = 0; index < 4; index += 1) {
+        engine.manualStarted();
+        engine.manualFinished();
+        if (index < 3) {
+          expect(useAppStore.getState().live).toBe('這首聽完了，留下回饋或略過');
+          engine.completeFeedback();
+        }
+      }
+      expect(engine.getState().phase).toBe('feedback');
+      expect(tracker.getState().capsuleCount).toBe(1);
+      expect(onCapsule).toHaveBeenCalledTimes(1);
+      expect(useAppStore.getState().live).toContain(capsuleMessage);
+      engine.completeFeedback();
+      engine.manualStarted();
+      engine.manualFinished();
+      expect(useAppStore.getState().live).toBe('這首聽完了，留下回饋或略過');
+      expect(onCapsule).toHaveBeenCalledTimes(1);
+    } finally {
+      engine.destroy();
+      announce('');
+    }
   });
 
   it('第 5 顆寶石只通知一次膠囊開好了', () => {

@@ -3,7 +3,7 @@
  * （更長的 DJ 結語＋曲目＋情緒標籤），寶石盤清空開始下一段旅程。純函式、不可變；只存在記憶體
  * （種子文字可能敏感，同 D-11 不寫 localStorage），也不送伺服器或模型。
  */
-import { countGraphemes, type FeedbackRating } from '@qualia/contracts';
+import { DJ_LINE_MAX_GRAPHEMES, countGraphemes, type FeedbackRating } from '@qualia/contracts';
 
 export const GEMS_PER_CAPSULE = 5;
 /** 結語上限：比單段 DJ 串詞（DJ_LINE_MAX_GRAPHEMES）長，但仍是一段讀得完的話。 */
@@ -181,7 +181,7 @@ function ratingLines(tracks: readonly TrackGem[]): string[] {
 
 /**
  * 旅程膠囊的 DJ 結語：開場（種子）→ 每首一句（藝人＋曲名＋感覺）→ 情緒標籤 → 評價 → 寶石由來 → 收尾。超過上限時依序改用只列曲名、
- * 拿掉評價句，最後才硬截斷；任何情況都不超過 CAPSULE_OUTRO_MAX_GRAPHEMES。
+ * 拿掉評價句，最後才硬截斷；短稿補上收聽回望，確保超過單段 DJ 上限且不超過 CAPSULE_OUTRO_MAX_GRAPHEMES。
  */
 export function composeOutro(seeds: readonly string[], tracks: readonly TrackGem[], tags: readonly string[]): string {
   const opening = openingLine(seeds, tracks.length);
@@ -196,5 +196,18 @@ export function composeOutro(seeds: readonly string[], tracks: readonly TrackGem
     [opening, titlesLine(tracks), mood, closing],
   ].map((parts) => parts.filter(Boolean).join(''));
   const fitting = drafts.find((text) => countGraphemes(text) <= CAPSULE_OUTRO_MAX_GRAPHEMES);
-  return fitting ?? clip(drafts.at(-1) ?? '', CAPSULE_OUTRO_MAX_GRAPHEMES);
+  const outro = fitting ?? clip(drafts.at(-1) ?? '', CAPSULE_OUTRO_MAX_GRAPHEMES);
+  if (countGraphemes(outro) > DJ_LINE_MAX_GRAPHEMES) return outro;
+  // 每句都短於上下限之差；補到超過下限就停，保留完整句子與原本的收尾。
+  const reflections = [
+    '回頭看，曲目之間的停留也成了這段旅程的一部分，不必急著替每一刻下結論。',
+    '你可以再看看留下的曲名，想想哪一首讓你願意多停一下，哪一首適合留待以後。',
+    '此刻先把這些片段放在一起，讓這個小小的膠囊記住你曾經在這裡聽過的聲音。',
+  ];
+  let expanded = outro.slice(0, -closing.length);
+  for (const reflection of reflections) {
+    expanded += reflection;
+    if (countGraphemes(expanded + closing) > DJ_LINE_MAX_GRAPHEMES) break;
+  }
+  return expanded + closing;
 }
