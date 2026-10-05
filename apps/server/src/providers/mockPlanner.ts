@@ -45,7 +45,7 @@ function toCandidate(entry: MockEntry, index: number, input: EditorialInput, pre
     seedBridge: `${prefix}${entry.seedBridge}`,
     transitionBridge:
       entry.transition && previousId
-        ? { fromCandidateId: previousId, text: entry.transition.text, djLine: entry.transition.djLine }
+        ? { fromCandidateId: previousId, text: entry.transition.text, djLine: input.djLength === 'standard' ? entry.transition.djStandard : entry.transition.djShort }
         : null,
     vibe: [...entry.vibe],
     djLine,
@@ -73,7 +73,9 @@ export class MockEditorialPlanner implements EditorialPlanner {
     const candidates = candidatesFor(input);
     const max = input.djLength === 'standard' ? DJ_LINE_MAX_GRAPHEMES : DJ_SHORT_MAX_GRAPHEMES;
     for (const c of candidates) {
-      if (countGraphemes(c.djLine) > max) throw new Error(`mock fixture DJ line exceeds ${max} graphemes`);
+      if (countGraphemes(c.djLine) > max || (c.transitionBridge && countGraphemes(c.transitionBridge.djLine) > max)) {
+        throw new Error(`mock fixture DJ line exceeds ${max} graphemes`);
+      }
     }
     return {
       schemaVersion: 1,

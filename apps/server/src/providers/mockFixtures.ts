@@ -6,7 +6,7 @@ export interface MockEntry {
   readonly vibe: readonly [string, string, string];
   readonly djShort: string;
   readonly djStandard: string;
-  readonly transition: { readonly text: string; readonly djLine: string } | null;
+  readonly transition: { readonly text: string; readonly djShort: string; readonly djStandard: string } | null;
 }
 function testEntry(title: string, index: number, transitions: boolean): MockEntry {
   return {
@@ -18,7 +18,8 @@ function testEntry(title: string, index: number, transitions: boolean): MockEntr
     djStandard: `TEST 接下來這首是〈${title}〉，藝人是${MOCK_ARTIST}。為什麼接這首：這只是示範用的虛構理由，沒有分析任何音樂，也不推測你的偏好。聽的時候可以留意：這是合成測試音，不是真的歌。`,
     transition: transitions && index >= 1 && index <= 3 ? {
       text: 'TEST 相鄰曲目接續示意，不推測音色或偏好。',
-      djLine: 'TEST 接續下一首虛構示範曲目。',
+      djShort: `TEST 接著是〈${title}〉，藝人是${MOCK_ARTIST}。為了示範接歌流程安排這首；聽的時候請留意，這是合成測試音。`,
+      djStandard: `TEST 接著是〈${title}〉，藝人是${MOCK_ARTIST}。為什麼接這首：為了示範上一首播完後的接歌流程，這裡安排另一段虛構曲目，沒有分析音樂或推測你的偏好。聽的時候請留意，這是合成測試音，不是真的歌，可以用來確認兩首之間的介紹與播放順序。`,
     } : null,
   };
 }

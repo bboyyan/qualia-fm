@@ -254,7 +254,7 @@ function reconcileResult(state: EngineState, provider: Extract<Action, { type: '
     );
   }
   if (provider.paused) return ok({ ...state, phase: 'paused', resumePhase: owner, positionMs: provider.positionMs });
-  return ok({ ...state, phase: PLAYING[owner], positionMs: provider.positionMs });
+  return ok({ ...state, phase: PLAYING[owner], positionMs: provider.positionMs, trackHeard: state.trackHeard || owner === 'track' });
 }
 
 function ownerStarted(state: EngineState, owner: OwnerKind): Reduction {

@@ -90,6 +90,33 @@ describe('沒聽到曲目就按下一首：直接往下，不問回饋', () => {
 });
 
 describe('聽過之後才問回饋', () => {
+  it('R1：載曲中裝置中斷，reconcile 確認在播後，下一首先問目前這首的回饋', () => {
+    const loading = run([load, { type: 'PLAY' }], { ...base('spotify'), djEnabled: false }).state;
+    expect(loading.phase).toBe('loading_track');
+    const lost = reduce(loading, { type: 'DEVICE_LOST' }).state;
+    const lateStart = reduce(lost, started(lost, 'track')).state;
+    expect(lateStart.phase).toBe('reconciling');
+    expect(lateStart.trackHeard).toBe(false);
+    const reconciled = reduce(lateStart, { type: 'RECONCILE_RESULT', state: { ready: true, paused: false, positionMs: 5_000, durationMs: 30_000 } }).state;
+    expect(reconciled.phase).toBe('track_playing');
+    expect(reconciled.trackHeard).toBe(true);
+    const next = reduce(reconciled, { type: 'NEXT' }).state;
+    expect(next.phase).toBe('feedback');
+    expect(next.currentIndex).toBe(0);
+  });
+
+  it('介紹載入中裝置中斷，reconcile 確認介紹在播仍不算聽過曲目', () => {
+    const loading = run([load, { type: 'PLAY' }], base('spotify')).state;
+    const lost = reduce(loading, { type: 'DEVICE_LOST' }).state;
+    const lateStart = reduce(lost, started(lost, 'speech')).state;
+    const reconciled = reduce(lateStart, { type: 'RECONCILE_RESULT', state: { ready: true, paused: false, positionMs: 1_000, durationMs: 2_000 } }).state;
+    expect(reconciled.phase).toBe('speaking');
+    expect(reconciled.trackHeard).toBe(false);
+    const next = reduce(reconciled, { type: 'NEXT' }).state;
+    expect(next.phase).not.toBe('feedback');
+    expect(next.currentIndex).toBe(1);
+  });
+
   it.each(['mock', 'spotify'] as const)('%s：曲目播放中按下一首 → 回饋', (mode) => {
     const reduction = reduce(trackHeard(mode), { type: 'NEXT' });
     expect(reduction.state.phase).toBe('feedback');
