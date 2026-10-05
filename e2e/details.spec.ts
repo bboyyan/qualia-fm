@@ -149,7 +149,7 @@ test.describe('T05 收聽與細節', () => {
     await page.getByTestId('count-pill').click();
     await expectNoHorizontalOverflow(page);
     await page.keyboard.press('Escape');
-    for (const tab of ['home', 'settings'] as const) {
+    for (const tab of ['home', 'mine', 'settings'] as const) {
       await page.getByTestId(`tab-${tab}`).click();
       await expectNoHorizontalOverflow(page);
     }

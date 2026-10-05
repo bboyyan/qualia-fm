@@ -8,6 +8,10 @@ import { FeedbackRatingSchema } from './feedback.js';
 export const TRACK_TITLE_MAX = 200;
 export const TRACK_ARTIST_MAX = 200;
 export const TASTE_NOTE_MAX = 200;
+/** 釘選上限（BRA-135）：同時最多釘這麼多首，與每輪開台帶上的釘選曲數相同，釘了就每輪都會出現。 */
+export const PINNED_LIMIT = 2;
+/** 「我的歌」展開單曲時回傳的帳本紀錄筆數（新到舊）。 */
+export const TASTE_HISTORY_LIMIT = 5;
 
 /** 曲目比對鍵：NFKC＋小寫＋壓空白；同一首歌大小寫或全半形不同仍視為同一首。 */
 export function trackKeyOf(artist: string, title: string): string {
@@ -79,3 +83,8 @@ export type TasteEditRequest = z.infer<typeof TasteEditRequestSchema>;
 
 export const TasteMarksResponseSchema = z.strictObject({ marks: z.array(TrackMarkSchema) });
 export type TasteMarksResponse = z.infer<typeof TasteMarksResponseSchema>;
+
+/** 單曲帳本紀錄查詢（BRA-135「我的歌」展開）：只接受帳本裡已有的 trackKey。 */
+export const TasteHistoryQuerySchema = z.strictObject({ trackKey: trackFields.trackKey });
+export const TasteHistoryResponseSchema = z.strictObject({ entries: z.array(LedgerEntrySchema).max(TASTE_HISTORY_LIMIT) });
+export type TasteHistoryResponse = z.infer<typeof TasteHistoryResponseSchema>;

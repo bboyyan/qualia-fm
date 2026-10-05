@@ -8,6 +8,7 @@
  */
 import {
   DJ_SHORT_MAX_GRAPHEMES,
+  PINNED_LIMIT,
   countGraphemes,
   trackKeyOf,
   type Candidate,
@@ -17,8 +18,8 @@ import type { TasteSnapshot } from '../ledger/tasteStore.js';
 
 /** 近 N 已播：最近播出的 N 首（不重複）不再排進新節目。 */
 export const RECENT_AIRED_WINDOW = 10;
-/** 每輪最多排入的釘選曲數。 */
-export const MAX_PINNED_PER_SHOW = 2;
+/** 每輪最多排入的釘選曲數；與「我的歌」可同時釘選的上限相同（BRA-135）。 */
+export const MAX_PINNED_PER_SHOW = PINNED_LIMIT;
 /** 「愛」往前挪的位置數（輕推，不保證進前 5）。 */
 export const LOVE_NUDGE = 1.5;
 /** 「不對」往後挪的位置數（降權，不排除）。 */

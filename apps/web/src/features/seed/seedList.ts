@@ -111,6 +111,15 @@ export function draftProblem(draft: Draft): string | null {
   return null;
 }
 
+/**
+ * 「我的歌」的「當種子開台」（BRA-135）：只用這一首當歌曲種子。不動開台頁的草稿，
+ * 使用者自己輸入到一半的內容保留；重試沿用這次的請求。
+ */
+export function songSeedRequest(title: string, artist: string, settings: Settings): PlanRequest {
+  const solo = addSongSeed({ ...DEFAULT_DRAFT, seeds: [], selectedSeedIds: [] }, title, artist);
+  return toPlanRequest(solo, settings);
+}
+
 export function toPlanRequest(draft: Draft, settings: Settings, tuning: string | null = null): PlanRequest {
   const dj = { enabled: settings.djEnabled, length: settings.djLength };
   if (draft.kind === 'song') {

@@ -6,6 +6,7 @@ import {
   FeedbackRequestSchema,
   MockScenarioSchema,
   TasteEditRequestSchema,
+  TasteHistoryQuerySchema,
   PlanRequestSchema,
   type MockScenario,
   type SessionInfo,
@@ -121,6 +122,11 @@ function tasteRoutes(router: Router, deps: ApiDeps): void {
     const { target, ...edit } = parsed.data;
     const resolved = 'trackKey' in target ? target : deps.plans.trackOf(sessionOf(res).id, target.showId, target.segmentId);
     res.json(await deps.tasteService.edit(resolved, edit));
+  });
+  router.get('/taste/history', async (req, res) => {
+    const parsed = TasteHistoryQuerySchema.safeParse(req.query);
+    if (!parsed.success) throw new AppError('INVALID_INPUT');
+    res.json({ entries: await deps.tasteService.history(parsed.data.trackKey) });
   });
 }
 

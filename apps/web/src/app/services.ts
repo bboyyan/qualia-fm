@@ -8,12 +8,15 @@ import { PlaybackEngine } from '../audio/engine';
 import { GenerationController, type GenerationDeps } from '../features/seed/generationController';
 import { FeedbackFormStore } from '../features/player/feedbackForm';
 import { LoveFlowStore } from '../features/player/loveFlow';
+import { MySongsModel } from '../features/songs/mySongsModel';
 import { useAppStore } from './appStore';
 
 export const api = createApiClient();
 export const feedbackForms = new FeedbackFormStore();
 /** 「愛」→ Qualia Loved 確認流程（每次回饋最多一個）。 */
 export const loveFlows = new LoveFlowStore();
+/** 「我的歌」：品味帳本的清單與單曲動作（BRA-135）。 */
+export const mySongs = new MySongsModel(api);
 
 const deps: GenerationDeps = {
   api: {

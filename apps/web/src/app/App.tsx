@@ -10,16 +10,19 @@ import { QueueSheet } from '../features/player/QueueSheet';
 import { TuneSheet } from '../features/player/TuneSheet';
 import { commitTune, commitTuneAnyway, pendingTune, type TuneOutcome } from '../features/player/tuneFlow';
 import { SettingsPage } from '../features/settings/SettingsPage';
+import { MySongsPage } from '../features/songs/MySongsPage';
 import { InlineRecovery } from '../ui/Feedback';
 import { Button } from '../ui/Button';
 import { AppShell } from './AppShell';
 import { EnvironmentSheet } from './EnvironmentSheet';
 import { useAppStore } from './appStore';
 import { useBoot, useEffectivePlaybackMode, usePopStateNavigation } from './hooks';
-import { generation, getEngine, tuneGeneration } from './services';
+import { generation, getEngine, mySongs, tuneGeneration } from './services';
 import { connectPlayer, syncSpotifyOutput } from './spotify';
 import { effectivePlaybackMode } from '../features/spotify/spotifyMode';
 import { pickSegments } from '../features/seed/selection';
+import { songSeedRequest } from '../features/seed/seedList';
+import type { TrackMark } from '@qualia/contracts';
 
 function BootError() {
   return (
@@ -117,6 +120,14 @@ function startReadyShow(segmentIds: readonly string[]): void {
   useAppStore.getState().setTab('listen');
 }
 
+/** 「我的歌」→ 當種子開台：只用這首當種子開始編排，回到開台頁看進度（正在播的節目不中斷）。 */
+function startFromSong(song: TrackMark): void {
+  const store = useAppStore.getState();
+  void generation.start(songSeedRequest(song.title, song.artist, store.settings));
+  store.announce(`以〈${song.title}〉當種子開台`);
+  store.setTab('home');
+}
+
 export function App() {
   useBoot();
   usePopStateNavigation();
@@ -141,6 +152,7 @@ export function App() {
       {boot === 'error' && <BootError />}
       {tab === 'home' && <HomePage hasActiveShow={hasActiveShow} onStartShow={startReadyShow} />}
       {tab === 'listen' && <ListenPage />}
+      {tab === 'mine' && <MySongsPage model={mySongs} onSeed={startFromSong} />}
       {tab === 'settings' && <SettingsPage />}
     </AppShell>
   );
