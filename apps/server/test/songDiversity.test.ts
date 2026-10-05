@@ -51,7 +51,7 @@ function seeded(start: number): () => number {
 }
 
 describe('開台候選 8–12 首、目標可播仍 5 首（BRA-127）', () => {
-  const input: EditorialInput = { history: [], seedKind: 'feeling', seedText: 'TEST', seedArtist: null, tuning: null, djEnabled: true, djLength: 'short', recentPicks: [], exploration: 0 };
+  const input: EditorialInput = { history: [], tasteHints: { avoid: [], loved: [], disliked: [] }, seedKind: 'feeling', seedText: 'TEST', seedArtist: null, tuning: null, djEnabled: true, djLength: 'short', recentPicks: [], exploration: 0 };
   const draft = (tuning: string | null) => new MockEditorialPlanner().draft({ ...input, tuning }, { signal: new AbortController().signal, scenario: 'five', attempt: 1 });
 
   it('MOCK 候選池：開台 12 首、微調 8 首，都通過草稿 schema', async () => {
@@ -115,8 +115,9 @@ describe('不可播則補抽（BRA-127）', () => {
     const unplayable = new Set(songs(2, 5, 9));
     const { resolver } = resolverWith(unplayable);
     const env = { PLAN_EXPLORATION_PCT: '100', PLAN_RECENT_RUNS: '0' };
-    const client = await bootstrap(testApp(env, { planner: nominatingPlanner(NAMES), resolver, random: seeded(11) }).app);
+    // 每輪新 app，避免品味近 N 把池子越縮越小。
     for (let round = 0; round < 8; round += 1) {
+      const client = await bootstrap(testApp(env, { planner: nominatingPlanner(NAMES), resolver, random: seeded(11 + round) }).app);
       const picked = titles(await plan(client));
       expect(picked).toHaveLength(5);
       expect(picked.some((title) => unplayable.has(title))).toBe(false);
@@ -128,9 +129,10 @@ describe('不可播則補抽（BRA-127）', () => {
 
 describe('候選池加大後抽樣（BRA-127）', () => {
   it('探索度 0：每輪都取模型前 5 首（不抽樣）', async () => {
-    const client = await bootstrap(testApp({ PLAN_RECENT_RUNS: '0' }, { planner: nominatingPlanner(NAMES), resolver: resolverWith().resolver }).app);
-    expect(titles(await plan(client))).toEqual(songs(1, 2, 3, 4, 5));
-    expect(titles(await plan(client))).toEqual(songs(1, 2, 3, 4, 5));
+    // 每輪新 app＝新品味帳本，避免近 N 已播干擾「只測探索度＝0」的斷言。
+    const start = () => bootstrap(testApp({ PLAN_RECENT_RUNS: '0' }, { planner: nominatingPlanner(NAMES), resolver: resolverWith().resolver }).app);
+    expect(titles(await plan(await start()))).toEqual(songs(1, 2, 3, 4, 5));
+    expect(titles(await plan(await start()))).toEqual(songs(1, 2, 3, 4, 5));
   });
 
   it('探索度 > 0：多輪下來會抽到模型前 5 首以外的歌', async () => {
@@ -148,7 +150,8 @@ describe('同種子排除近 N 次已選（BRA-127）', () => {
     const client = await bootstrap(testApp({}, { planner: nominatingPlanner(NAMES, seen), resolver: resolverWith().resolver }).app);
     expect(titles(await plan(client))).toEqual(songs(1, 2, 3, 4, 5));
     expect(titles(await plan(client))).toEqual(songs(6, 7, 8, 9, 10));
-    expect(titles(await plan(client))).toEqual(songs(1, 2, 3, 11, 12));
+    // 品味近 N（持久）＋ session 近期選曲並存：第 3 輪新曲只剩 11–12，再放回最早已播的 1–3。
+    expect(titles(await plan(client))).toEqual(songs(11, 12, 1, 2, 3));
     expect(seen[1]!.recentPicks.map((t) => t.title)).toEqual(songs(1, 2, 3, 4, 5));
     expect(seen.map((input) => input.exploration)).toEqual([0, 0, 0]);
   });
@@ -161,21 +164,25 @@ describe('同種子排除近 N 次已選（BRA-127）', () => {
   });
 
   it('不同種子不互相排除', async () => {
-    const client = await bootstrap(testApp({}, { planner: nominatingPlanner(NAMES), resolver: resolverWith().resolver }).app);
-    await plan(client, 'TEST 深夜');
-    expect(titles(await plan(client, 'TEST 清晨'))).toEqual(songs(1, 2, 3, 4, 5));
+    // session 近期選曲依種子隔離；品味近 N 是全域的，故用兩個 app 只驗證 session 行為。
+    const deps = { planner: nominatingPlanner(NAMES), resolver: resolverWith().resolver };
+    await plan(await bootstrap(testApp({}, deps).app), 'TEST 深夜');
+    expect(titles(await plan(await bootstrap(testApp({}, deps).app), 'TEST 清晨'))).toEqual(songs(1, 2, 3, 4, 5));
   });
 
   it('不同 session 不共用排除紀錄', async () => {
-    const app = testApp({}, { planner: nominatingPlanner(NAMES), resolver: resolverWith().resolver }).app;
-    await plan(await bootstrap(app));
-    expect(titles(await plan(await bootstrap(app)))).toEqual(songs(1, 2, 3, 4, 5));
+    // 同 app 會共用品味帳本；兩個 app 才能只驗證 session 近期選曲不共用。
+    const deps = { planner: nominatingPlanner(NAMES), resolver: resolverWith().resolver };
+    await plan(await bootstrap(testApp({}, deps).app));
+    expect(titles(await plan(await bootstrap(testApp({}, deps).app)))).toEqual(songs(1, 2, 3, 4, 5));
   });
 
   it('PLAN_RECENT_RUNS=0 時不排除', async () => {
-    const client = await bootstrap(testApp({ PLAN_RECENT_RUNS: '0' }, { planner: nominatingPlanner(NAMES), resolver: resolverWith().resolver }).app);
-    await plan(client);
-    expect(titles(await plan(client))).toEqual(songs(1, 2, 3, 4, 5));
+    // 關閉 session 近期後，仍可能被品味近 N 擋；兩個 app 只驗證 session 開關。
+    const env = { PLAN_RECENT_RUNS: '0' };
+    const deps = { planner: nominatingPlanner(NAMES), resolver: resolverWith().resolver };
+    await plan(await bootstrap(testApp(env, deps).app));
+    expect(titles(await plan(await bootstrap(testApp(env, deps).app)))).toEqual(songs(1, 2, 3, 4, 5));
   });
 
   it('MOCK 虛構曲目維持固定順序，不抽樣也不排除（E2E 可重現）', async () => {

@@ -28,3 +28,8 @@
 | D-22 | （PR #7 審查建議）路徑 C 介紹守候最多 60 秒；介紹 `<audio>` 開始被拒時立即解除 | 介紹被暫停或等點擊時，原本在前景會每 2 秒無限輪詢 `/me/player`（10 分鐘 300 次） | 守候 60 秒後才晚出聲的情況不再被偵測；晚出聲多發生在 play 生效後數秒內，真機量測在 BRA-114 |
 | D-23 | （BRA-127）選歌多樣化：模型提名 8–12 首成為候選池 → 排除同種子（種類＋文字＋藝人）最近 `PLAN_RECENT_RUNS`（預設 3）輪已選 → 依 `PLAN_EXPLORATION_PCT`（預設 50）加權不放回抽樣 → 逐首對應、不可播就補抽，最多試 `MAX_CANDIDATES_PER_PLAN`（預設 12）首；可播的依模型原順序排回 | 同一個種子每次都開出同樣 5 首；只靠模型不夠穩，伺服器端排除＋抽樣才可重現、可測 | 近期已選只存在記憶體（每 session、登出即清），只記 LLM 提名的曲名／藝人，不含 Spotify 回傳欄位；新曲不夠 5 首時才把最早那輪的拿回來補（寧可重複也不少於 5 首）。同種子每多一輪紀錄探索度＋0.15；`PLAN_EXPLORATION_PCT=0` 完全關閉抽樣。MOCK 虛構曲目不抽樣、不排除（E2E／截圖依賴固定順序） |
 | D-24 | （BRA-127）向模型要的候選數依 `OPENAI_MAX_OUTPUT_TOKENS` 調整：(上限−600)÷450 取整，夾在 8–12；預設 4096 → 8 首、8192 以上 → 12 首。prompt 要求 transitionBridge 整份最多 2 個 | 12 首加厚台詞約需 5–6k 輸出 token，超過預設 4096 會被截斷成無效 JSON（兩次都無效即改用 MOCK）；抽樣後相鄰兩首常不會同時入選，transitionBridge 多半用不到 | 想要滿 12 首候選需自行把 `OPENAI_MAX_OUTPUT_TOKENS` 調到 ≥ 6000（預扣金額隨之提高，仍受日額 10% 單次上限）；本 PR 不改預設值 |
+| D-25 | （BRA-134）品味帳本是本機 JSON 檔（`TASTE_LEDGER_PATH`），開台前必讀；BRA-98 的 `FeedbackLedger`（可接 Notion）維持原樣當單向備份與 `history` | 「開台不得只靠爬 Notion」；本機檔不需新服務、可原子寫入，沿用預算帳本的寫檔方式 | 回饋先寫品味帳本，成功才寫備份；見 docs/taste-ledger.md |
+| D-26 | （BRA-134）近 N＝10、pinned 每輪最多 2 首、愛往前 1.5 位、不對往後 4 位；pinned 不受近 N 限制；近 N 擋到不足 5 首時依最久以前播放回並明示 | 票面要求「上限明確」與「失敗明確降級」；放回比讓節目變成 partial 更符合開台體驗，且 warning 讓使用者知道 | 常數集中在 `services/tasteRules.ts`，未開 env |
+| D-27 | （BRA-134）MOCK 草稿不記播出紀錄；評價／標記仍照記 | MOCK 曲目是虛構示意，記成已播會讓示範模式每輪都被近 N 擋光 | 只有真實提名會影響近 N |
+| D-28 | （BRA-134）品味提示（`tasteHints`）放在 planner 的 user 訊息並附 `tasteGuide` 說明，不改系統 prompt | 系統 prompt 必須與唯讀 handoff 檔完全一致（openai.test 鎖定） | 屬 EditorialInput 白名單欄位，只含曲名／藝人／短評 |
+| D-29 | （BRA-134）`/api/taste/marks` 與回饋相同：任一 session＋CSRF 即可編輯（單人自用、本站沒有帳號） | 與 BRA-98 回饋權限一致 | 若日後多人使用，需改為擁有者限定 |

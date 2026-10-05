@@ -9,6 +9,8 @@ import type { EditorialInput } from '../src/services/editorialInput.js';
 import { PlanService } from '../src/services/planService.js';
 import { JobStore } from '../src/stores/jobStore.js';
 import { RecentPicks } from '../src/stores/recentPicks.js';
+import { TasteLedger, memoryPersistence } from '../src/ledger/tasteStore.js';
+import { TasteService } from '../src/services/tasteService.js';
 import { newKey, planRequest, testConfig } from './helpers.js';
 import { nominatingPlanner } from './spotifyHelpers.js';
 
@@ -27,6 +29,7 @@ function harness(count = 12) {
   const synthesize = vi.spyOn(tts, 'synthesize').mockResolvedValue(speech);
   const service = new PlanService({
     config, store, recentPicks: recent, ledger: new InMemoryLedger(),
+    tasteService: new TasteService(new TasteLedger(memoryPersistence()), Date.now),
     planner: nominatingPlanner(names.slice(0, count), seen), resolver: new MockCatalogResolver(5000),
     tts, now: Date.now, clock: { wait: async () => {} }, random: () => 0.5,
   });

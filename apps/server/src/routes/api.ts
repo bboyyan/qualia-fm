@@ -5,6 +5,7 @@ import {
   HEADERS,
   FeedbackRequestSchema,
   MockScenarioSchema,
+  TasteEditRequestSchema,
   PlanRequestSchema,
   type MockScenario,
   type SessionInfo,
@@ -25,6 +26,7 @@ import {
 } from '../security/sessions.js';
 import { assertFeatureAllowed, buildCapabilities } from '../services/capabilities.js';
 import type { PlanService } from '../services/planService.js';
+import type { TasteService } from '../services/tasteService.js';
 import { ownerSecretOf, spotifyPublicRoutes, spotifySessionRoutes, type SpotifyServices } from './spotify.js';
 
 export interface ApiDeps {
@@ -33,6 +35,7 @@ export interface ApiDeps {
   readonly config: ServerConfig;
   readonly sessions: SessionStore;
   readonly plans: PlanService;
+  readonly tasteService: TasteService;
   readonly now: () => number;
   /** 只在 SPOTIFY_ENABLED=true 時存在。 */
   readonly spotify?: SpotifyServices;
@@ -107,6 +110,20 @@ function planRoutes(router: Router, deps: ApiDeps): void {
   });
 }
 
+/** 品味帳本（BRA-134）：機器可讀清單＋手動改評價／標記。曲名一律由伺服器從自己的節目或帳本查出。 */
+function tasteRoutes(router: Router, deps: ApiDeps): void {
+  router.get('/taste/marks', async (_req, res) => {
+    res.json({ marks: await deps.tasteService.marks() });
+  });
+  router.post('/taste/marks', async (req, res) => {
+    const parsed = TasteEditRequestSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError('INVALID_INPUT');
+    const { target, ...edit } = parsed.data;
+    const resolved = 'trackKey' in target ? target : deps.plans.trackOf(sessionOf(res).id, target.showId, target.segmentId);
+    res.json(await deps.tasteService.edit(resolved, edit));
+  });
+}
+
 function sessionRoutes(router: Router, deps: ApiDeps): void {
   router.get('/capabilities', (req, res) => {
     // linked 只對擁有者為 true；其他 session 只知道「已由別的裝置連結」，不能把 E 模式打開。
@@ -151,6 +168,7 @@ export function createApiRouter(deps: ApiDeps): Router {
   sessionRoutes(router, deps);
   spotifySessionRoutes(router, deps);
   planRoutes(router, deps);
+  tasteRoutes(router, deps);
   router.use(() => {
     throw new AppError('NOT_FOUND');
   });
