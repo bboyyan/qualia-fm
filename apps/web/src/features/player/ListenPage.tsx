@@ -4,7 +4,8 @@
  */
 import { DeveloperOnly } from '../../app/developerMode';
 import { useAppStore } from '../../app/appStore';
-import { getEngine } from '../../app/services';
+import { getEngine, journey } from '../../app/services';
+import { GemTray } from '../journey/GemTray';
 import { currentBridge, currentItem, nextItem } from '../../audio/queue';
 import type { EngineState } from '../../audio/types';
 import { useEngineState } from '../../audio/useEngine';
@@ -70,15 +71,18 @@ function ListenHeader({ state }: { state: EngineState }) {
         <p className={styles.kicker}>你的私人電台</p>
         <p className={styles.seedLine}>{state.show?.seed.text}</p>
       </div>
-      <button
-        type="button"
-        className={styles.countPill}
-        onClick={() => openSheet('queue')}
-        aria-label={`查看節目單，目前第 ${position} 首，共 ${state.queue.length} 首`}
-        data-testid="count-pill"
-      >
-        {pad2(position)} / {pad2(state.queue.length)}
-      </button>
+      <div className={styles.listenTopActions}>
+        <GemTray tracker={journey} onOpen={() => openSheet('capsule')} />
+        <button
+          type="button"
+          className={styles.countPill}
+          onClick={() => openSheet('queue')}
+          aria-label={`查看節目單，目前第 ${position} 首，共 ${state.queue.length} 首`}
+          data-testid="count-pill"
+        >
+          {pad2(position)} / {pad2(state.queue.length)}
+        </button>
+      </div>
     </div>
   );
 }

@@ -11,13 +11,14 @@ import { TuneSheet } from '../features/player/TuneSheet';
 import { commitTune, commitTuneAnyway, pendingTune, type TuneOutcome } from '../features/player/tuneFlow';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { MySongsPage } from '../features/songs/MySongsPage';
+import { CapsuleSheet } from '../features/journey/CapsuleSheet';
 import { InlineRecovery } from '../ui/Feedback';
 import { Button } from '../ui/Button';
 import { AppShell } from './AppShell';
 import { EnvironmentSheet } from './EnvironmentSheet';
 import { useAppStore } from './appStore';
 import { useBoot, useEffectivePlaybackMode, usePopStateNavigation } from './hooks';
-import { generation, getEngine, mySongs, tuneGeneration } from './services';
+import { generation, getEngine, journey, mySongs, tuneGeneration } from './services';
 import { connectPlayer, syncSpotifyOutput } from './spotify';
 import { effectivePlaybackMode } from '../features/spotify/spotifyMode';
 import { pickSegments } from '../features/seed/selection';
@@ -146,6 +147,7 @@ export function App() {
           <BridgeSheet />
           <QueueSheet />
           <TuneSheet />
+          <CapsuleSheet tracker={journey} />
         </>
       }
     >

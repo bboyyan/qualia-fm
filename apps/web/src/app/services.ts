@@ -9,6 +9,7 @@ import { GenerationController, type GenerationDeps } from '../features/seed/gene
 import { FeedbackFormStore } from '../features/player/feedbackForm';
 import { LoveFlowStore } from '../features/player/loveFlow';
 import { MySongsModel } from '../features/songs/mySongsModel';
+import { JourneyTracker } from '../features/journey/journeyTracker';
 import { useAppStore } from './appStore';
 
 export const api = createApiClient();
@@ -17,6 +18,8 @@ export const feedbackForms = new FeedbackFormStore();
 export const loveFlows = new LoveFlowStore();
 /** 「我的歌」：品味帳本的清單與單曲動作（BRA-135）。 */
 export const mySongs = new MySongsModel(api);
+/** 寶石＋旅程膠囊（BRA-128）：只在記憶體；滿 5 顆時以朗讀區告知，不跳出大卡片。 */
+export const journey = new JourneyTracker(() => useAppStore.getState().announce('五顆寶石到齊，旅程膠囊開好了'));
 
 const deps: GenerationDeps = {
   api: {
@@ -66,6 +69,8 @@ export function getEngine(): PlaybackEngine {
     canSeek: caps.canSeek,
     onAnnounce: (message) => useAppStore.getState().announce(message),
   });
+  const created = engine;
+  created.subscribe(() => journey.observe(created.getState()));
   return engine;
 }
 

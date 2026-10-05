@@ -85,12 +85,15 @@ export class PlaybackEngine {
 
   dispatch(action: Action): Reduction {
     const reduction = reduce(this.state, action);
-    if (reduction.state !== this.state) {
+    const changed = reduction.state !== this.state;
+    if (changed) {
       this.state = reduction.state;
       this.syncPositionTimer();
-      this.notify();
     }
     this.run(reduction.effects);
+    // Publish the completed transition so subscriber announcements (such as a capsule)
+    // survive the same dispatch's playback/feedback announcement.
+    if (changed) this.notify();
     return reduction;
   }
 
