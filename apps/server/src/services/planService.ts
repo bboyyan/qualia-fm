@@ -281,9 +281,11 @@ export class PlanService {
     // 帳本提示排在供應商提示之後、模型 warnings 之前。
     const tasteNotices: string[] = [];
     let draft = drafted.draft;
+    let pinnedCount = 0;
     if (tasteRead.snapshot) {
       const applied = applyTasteRules(draft.candidates, tasteRead.snapshot, { target: TARGET_SEGMENTS });
       draft = { ...draft, candidates: applied.candidates };
+      pinnedCount = applied.trace.pinned.length;
       tasteNotices.push(...applied.warnings);
     } else if (tasteRead.warning) {
       tasteNotices.push(tasteRead.warning);
@@ -292,9 +294,12 @@ export class PlanService {
     await this.enter(jobId, 'resolving', phaseMs, signal);
     const spotify = !mock && input.spotifyOwner === true && this.deps.spotify?.linked() ? this.deps.spotify.resolver : null;
     // MOCK 提名是固定的虛構示意：不抽樣、不排除，保持可重現（E2E／截圖依賴固定順序）。
-    const pool = drawOrder(draft.candidates, mock
+    // 釘選曲已由品味管線置前，且不受近 N／session 近期排除；drawOrder 只抽樣其餘候選。
+    const pinnedPool = draft.candidates.slice(0, pinnedCount).map((candidate, index) => ({ candidate, index }));
+    const restDrawn = drawOrder(draft.candidates.slice(pinnedCount), mock
       ? { recentRuns: [], exploration: 0, random: this.random }
       : { recentRuns, exploration: editorial.exploration, random: this.random });
+    const pool = [...pinnedPool, ...restDrawn.map(({ candidate, index }) => ({ candidate, index: index + pinnedCount }))];
     const { playable, unavailable, failed } = await this.resolveAll(spotify ?? this.deps.resolver, pool, input.scenario, signal);
     await this.enter(jobId, 'preparing', phaseMs, signal);
     // 只說數量（提名來自 LLM），不含 token 或任何 Spotify 回傳內容。

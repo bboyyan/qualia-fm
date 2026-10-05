@@ -14,6 +14,17 @@ function realStub(inputs: EditorialInput[] = []): EditorialPlanner {
   return { draft: async (input, context) => { inputs.push(input); return mock.draft(input, context); } };
 }
 
+/** 只留前 7 首：用來測「近 N 放回」警示（12 首池播 5 首後仍有 7 首新歌，不會觸發放回）。 */
+function sevenStub(inputs: EditorialInput[] = []): EditorialPlanner {
+  const inner = realStub(inputs);
+  return {
+    draft: async (input, context) => {
+      const draft = await inner.draft(input, context) as { candidates: unknown[] };
+      return { ...draft, candidates: draft.candidates.slice(0, 7) };
+    },
+  };
+}
+
 /** 可切換讀／寫失敗的記憶體後端。 */
 function switchable() {
   const state = { body: null as string | null, failLoad: false, failSave: false };
@@ -134,12 +145,12 @@ describe('手動改評價／標記 API', () => {
 describe('開台前必讀與播出紀錄', () => {
   it('真實提名排進節目即記為已播；下一輪避開近 N，不足時放回並明示', async () => {
     const tasteLedger = new TasteLedger(memoryPersistence());
-    const client = await bootstrap(testApp({}, { planner: realStub(), tasteLedger }).app);
+    // 截成 7 首：前一輪播 5 首後只剩 2 首新歌，其餘 3 首放回並明示（12 首池不會觸發放回）。
+    const client = await bootstrap(testApp({}, { planner: sevenStub(), tasteLedger }).app);
     const first = await newShow(client);
     expect((await tasteLedger.snapshot()).recentAired).toHaveLength(first.segments.length);
     const second = await newShow(client);
     const firstKeys = first.segments.map((_, i) => keyOfSegment(first, i));
-    // MOCK 草稿固定 7 首：前一輪播了 5 首，只剩 2 首新歌排最前，其餘 3 首放回並明示。
     expect(firstKeys).not.toContain(keyOfSegment(second, 0));
     expect(firstKeys).not.toContain(keyOfSegment(second, 1));
     expect(second.warnings).toContain('近期已播的歌不夠避開：本輪重播 3 首最近 10 首內播過的歌。');
