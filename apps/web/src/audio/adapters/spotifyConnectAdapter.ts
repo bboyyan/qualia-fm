@@ -69,6 +69,8 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
   private pollTimer: unknown = null;
   private pausedAt: number | null = null;
   private localPause = false;
+  /** 本次播放曾在同裝置、同曲目的正位置播放；中途回報 playing/0 不清掉。 */
+  private playedAtPositivePosition = false;
   /** 每次 start／stop 加一；play 回來時世代不同＝已被切段。 */
   private generation = 0;
   /** 已送出、伺服器還沒回應的 play 數。 */
@@ -113,6 +115,7 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
 
   pause(): void {
     this.localPause = true;
+    this.playedAtPositivePosition = false;
     this.pausedAt = this.deps.now();
     this.clearPoll();
     this.sendPause();
@@ -239,6 +242,7 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
 
   private async play(attemptId: number, uri: string, positionMs: number, generation: number): Promise<void> {
     const attempt: Attempt = { attemptId, uri, confirmed: false, deadline: this.deps.now() + CONFIRM_TIMEOUT_MS };
+    this.playedAtPositivePosition = false;
     this.current = attempt;
     this.inflight += 1;
     try {
@@ -401,6 +405,7 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     const current = this.current;
     if (!current || this.localPause) return;
     const playback = await this.deps.remote.playback().catch(() => null);
+    if (this.localPause) return;
     if (playback && this.current === current) this.onPlayback(current, playback);
     this.schedulePoll();
   }
@@ -409,8 +414,10 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     const before = this.last;
     const durationMs = before?.durationMs ?? playback.durationMs;
     const nearEnd = before !== null && reachedEnd(before.progressMs + (before.isPlaying ? this.deps.now() - before.at : 0), durationMs);
-    const playedWithoutDuration = durationMs === null && before !== null && before.isPlaying && before.progressMs > 0
-      && before.uri === current.uri && before.deviceId === this.deps.deviceId;
+    if (playback.isPlaying && playback.progressMs > 0 && playback.uri === current.uri && playback.deviceId === this.deps.deviceId) {
+      this.playedAtPositivePosition = true;
+    }
+    const playedWithoutDuration = durationMs === null && this.playedAtPositivePosition;
     this.last = { ...playback, at: this.deps.now() };
     if (!current.confirmed) {
       if (playback.isPlaying && playback.uri === current.uri && playback.deviceId === this.deps.deviceId) {
@@ -432,7 +439,7 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
       return;
     }
     // 已知時長仍須接近尾端；時長缺失時，以同曲目曾在正位置播放、之後停止歸零判定完播（BRA-117 P2）。
-    if (playback.uri !== current.uri || (!playback.isPlaying && playback.progressMs === 0 && (nearEnd || playedWithoutDuration))) {
+    if (!this.localPause && (playback.uri !== current.uri || (!playback.isPlaying && playback.progressMs === 0 && (nearEnd || playedWithoutDuration)))) {
       this.current = null;
       this.emit({ type: 'ended', attemptId: current.attemptId, owner: 'track' });
       return;
@@ -449,6 +456,7 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     this.clearPoll();
     this.current = null;
     this.localPause = false;
+    this.playedAtPositivePosition = false;
     this.pausedAt = null;
   }
 

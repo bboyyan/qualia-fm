@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PlaybackEngine } from '../src/audio/engine';
 import { makeShow } from './fixtures';
 import { SpotifyConnectAdapter } from '../src/audio/adapters/spotifyConnectAdapter';
@@ -133,6 +133,7 @@ describe('SpotifyConnectAdapter（路徑 C：遙控 Spotify app）', () => {
 
   it.each([
     { beforePosition: 0, pausedPosition: 0 },
+    { beforePosition: 5000, pausedPosition: 1 },
     { beforePosition: 5000, pausedPosition: 5000 },
   ])('durationMs 為 null：$beforePosition → $pausedPosition，沒有播放後歸零訊號仍當暫停', async ({ beforePosition, pausedPosition }) => {
     const ctx = setup();
@@ -180,6 +181,27 @@ describe('SpotifyConnectAdapter（路徑 C：遙控 Spotify app）', () => {
     expect(ctx.events).toEqual([{ type: 'started', attemptId: 2, owner: 'track' }]);
   });
 
+  it.each([null, 200_000])('輪詢在途時本頁暫停並 seek 到 0，遲到回覆不可送 ended（時長 %s）', async (durationMs) => {
+    const ctx = setup();
+    await startTrack(ctx, 2);
+    ctx.remote.playbackState = { ...playing(TEST_URI, 197_000), durationMs };
+    await ctx.clock.advance(2000);
+    let landReply = () => {};
+    const reply = new Promise<typeof ctx.remote.playbackState>((resolve) => {
+      landReply = () => resolve({ ...playing(TEST_URI, 0, false), durationMs });
+    });
+    const poll = vi.spyOn(ctx.remote, 'playback').mockReturnValueOnce(reply);
+    await ctx.clock.advance(2000);
+    expect(poll).toHaveBeenCalledTimes(1);
+    ctx.adapter.pause();
+    ctx.adapter.seek(0);
+    landReply();
+    await flush();
+    await ctx.clock.advance(4000);
+    expect(ctx.events).toEqual([{ type: 'started', attemptId: 2, owner: 'track' }]);
+    expect(poll).toHaveBeenCalledTimes(1);
+  });
+
   it('暫停時停止輪詢；暫停超過 10 分鐘 → 需重連，不直接送 play', async () => {
     const ctx = setup();
     await startTrack(ctx, 2);
@@ -215,6 +237,44 @@ describe('mutation 補測（BRA-111 重跑 PR #6）', () => {
 });
 
 describe('BRA-117：Connect 未知時長', () => {
+  it.each(['切曲', '換 attempt', '本頁暫停後續播'] as const)('%s 後從 0 播放，不沿用前次正位置紀錄', async (action) => {
+    const ctx = setup();
+    await startTrack(ctx, 1);
+    ctx.remote.playbackState = { ...playing(TEST_URI, 5000), durationMs: null };
+    await ctx.clock.advance(2000);
+    const uri = action === '切曲' ? OTHER_URI : TEST_URI;
+    if (action === '本頁暫停後續播') {
+      ctx.adapter.pause();
+      await ctx.adapter.resume(2);
+    } else {
+      await ctx.adapter.start({ owner: 'track', segment: spotifySegment(2, uri), attemptId: 2, fromMs: 0 });
+    }
+    ctx.remote.playbackState = { ...playing(uri, 0), durationMs: null };
+    await ctx.clock.advance(2000);
+    ctx.remote.playbackState = { ...playing(uri, 0, false), durationMs: null };
+    await ctx.clock.advance(4000);
+    expect(ctx.events).toEqual([
+      { type: 'started', attemptId: 1, owner: 'track' },
+      { type: 'started', attemptId: 2, owner: 'track' },
+      { type: 'paused', attemptId: 2, owner: 'track', positionMs: 0 },
+    ]);
+  });
+
+  it('playing/5000 → playing/0 → stopped/0 仍回報 ended 一次', async () => {
+    const ctx = setup();
+    await startTrack(ctx, 2);
+    for (const progressMs of [5000, 0]) {
+      ctx.remote.playbackState = { ...playing(TEST_URI, progressMs), durationMs: null };
+      await ctx.clock.advance(2000);
+    }
+    ctx.remote.playbackState = { ...playing(TEST_URI, 0, false), durationMs: null };
+    await ctx.clock.advance(4000);
+    expect(ctx.events).toEqual([
+      { type: 'started', attemptId: 2, owner: 'track' },
+      { type: 'ended', attemptId: 2, owner: 'track' },
+    ]);
+  });
+
   it('曾播放正位置後重設為 0 且停止 → ended 一次，引擎進入 feedback', async () => {
     const ctx = setup();
     const engine = new PlaybackEngine(ctx.adapter, { djEnabled: false, canSeek: true, playbackMode: 'spotify', feedbackEnabled: true });
