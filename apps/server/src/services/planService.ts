@@ -26,6 +26,7 @@ import { AppError, errorEnvelope, newRequestId } from '../http/errors.js';
 import { logger } from '../http/log.js';
 import type { CatalogResolver, EditorialPlanner, PhaseClock } from '../providers/types.js';
 import { WindowLimiter } from '../security/rateLimit.js';
+import type { SessionStore } from '../security/sessions.js';
 import type { JobStore} from '../stores/jobStore.js';
 import { toJobInfo, type JobRecord } from '../stores/jobStore.js';
 import { RecentPicks, type RecentSelection } from '../stores/recentPicks.js';
@@ -59,6 +60,7 @@ export interface PlanServiceDeps {
   readonly planner: EditorialPlanner;
   readonly resolver: CatalogResolver;
   readonly store: JobStore;
+  readonly sessions?: SessionStore;
   readonly clock: PhaseClock;
   readonly now: () => number;
   /** BRA-127：同種子近期已選；未注入時依 config.limits.recentSeedRuns 建立。 */
@@ -172,12 +174,14 @@ export class PlanService {
    * 帳本只存 LLM 當時提名的原始曲名／藝人＋評價＋原因＋日期；永遠不讀 segment.track（Spotify 回傳欄位）。
    */
   async feedback(ownerId: string, request: FeedbackRequest) {
-    const show = this.show(ownerId, request.showId);
+    const liveShow = this.deps.store.getShow(request.showId, ownerId);
+    const show = liveShow ?? this.deps.sessions?.feedbackContext(ownerId, request.showId);
+    if (!show) throw new AppError('NOT_FOUND');
     const segment = show.segments.find((s) => s.segmentId === request.segmentId);
     if (!segment) throw new AppError('NOT_FOUND');
     const key = JSON.stringify([request.segmentId, request.clientRequestId ?? null]);
     // 先寫本機品味帳本（失敗即回錯誤、不寫備份）；成功後才寫 FeedbackLedger（Notion 備份）。
-    return this.deps.store.saveFeedback(request.showId, ownerId, key, async () => {
+    const save = async () => {
       await this.deps.tasteService.recordFeedback({
         showId: request.showId,
         segmentId: request.segmentId,
@@ -193,12 +197,16 @@ export class PlanService {
         rating: request.rating,
         reason: request.reason,
       });
-    });
+    };
+    return liveShow
+      ? this.deps.store.saveFeedback(request.showId, ownerId, key, save)
+      : this.deps.sessions!.saveFeedback(ownerId, request.showId, key, save);
   }
 
   /** 手動編輯的對象：只取 LLM 提名的曲名／藝人，永遠不讀 segment.track（Spotify 回傳欄位）。 */
   trackOf(ownerId: string, showId: string, segmentId: string): { title: string; artist: string } {
-    const segment = this.show(ownerId, showId).segments.find((s) => s.segmentId === segmentId);
+    const show = this.deps.store.getShow(showId, ownerId) ?? this.deps.sessions?.feedbackContext(ownerId, showId);
+    const segment = show?.segments.find((s) => s.segmentId === segmentId);
     if (!segment) throw new AppError('NOT_FOUND');
     return { title: segment.candidate.title, artist: segment.candidate.artist };
   }
@@ -252,6 +260,7 @@ export class PlanService {
       if (signal.aborted) throw signal.reason;
       if (this.deps.store.get(job.jobId, job.ownerId)?.status !== 'running') return;
       const plan = warning ? { ...result, warnings: [...result.warnings, warning] } : result;
+      this.deps.sessions?.rememberShow(job.ownerId, plan);
       this.deps.store.putShow(job.ownerId, plan, this.deps.now());
       this.finish(job, plan);
       // D-23：TTS 階段結束、節目儲存並交付後才記錄；只存實際交付的非 MOCK 提名。
