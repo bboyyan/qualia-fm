@@ -14,7 +14,7 @@ import { DEFAULT_DRAFT, type Draft } from '../features/seed/seedList';
 export type { Draft } from '../features/seed/seedList';
 
 export type Tab = 'home' | 'listen' | 'mine' | 'settings';
-export type SheetKind = 'bridge' | 'queue' | 'tune' | 'environment';
+export type SheetKind = 'bridge' | 'queue' | 'tune' | 'environment' | 'capsule';
 
 const SETTINGS_KEY = 'qfm.settings.v2';
 /** v1 的串詞長度預設是短版；讀到時升級為加厚版（BRA-117）。 */
