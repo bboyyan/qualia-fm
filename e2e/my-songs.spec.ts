@@ -163,7 +163,7 @@ test('BRA-135：預設路徑在「我的歌」完成收藏、釘選（含上限�
     await search(page, '');
     await page.getByTestId('songs-search').blur();
     await page.evaluate(() => window.scrollTo(0, 0));
-    const path = `docs/implementation/screenshots/bra135-my-songs-${testInfo.project.name}.png`;
+    const path = testInfo.outputPath(`bra135-my-songs-${testInfo.project.name}.png`);
     await page.screenshot({ path });
     expect((await stat(path)).size).toBeLessThan(400 * 1024);
     await search(page, plain);
