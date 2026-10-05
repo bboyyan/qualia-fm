@@ -59,7 +59,7 @@ it('逾時及供應商錯誤保留預扣，例外不洩漏金鑰', async () => {
   await expect(timeout.synthesize('你好', new AbortController().signal)).rejects.toThrow(/時間|逾時/);
   expect(runtime.ledger!.snapshot().totalUsd).toBeCloseTo(0.00002);
   const failed = new OpenAITtsProvider(config.openai, runtime, async () => { throw new Error(config.openai.apiKey); });
-  await expect(failed.synthesize('失敗', new AbortController().signal)).rejects.toThrow('OpenAI 回應無法使用');
+  await expect(failed.synthesize('失敗', new AbortController().signal)).rejects.toThrow('OpenAI 供應商失敗（INVALID_RESPONSE）');
   expect(runtime.ledger!.snapshot().totalUsd).toBeCloseTo(0.00004);
 });
 it('帳本於啟動後損毀或寫入失敗立即 fail closed，不進 provider', async () => {

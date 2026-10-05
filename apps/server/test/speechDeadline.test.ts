@@ -12,9 +12,10 @@ const speechCalls = (fetchImpl: ReturnType<typeof fakeOpenAI>) => fetchImpl.mock
 const responseCalls = (fetchImpl: ReturnType<typeof fakeOpenAI>) => fetchImpl.mock.calls.filter(([url]) => String(url).endsWith('/responses'));
 const readLedger = (path: string) => JSON.parse(readFileSync(path, 'utf8')) as { totalUsd: number; days: Record<string, { usd: number; plans: number; graphemes: number }> };
 
-function expectTtsLedger(config: ReturnType<typeof realConfig>, show: ReturnType<typeof ShowPlanSchema.parse>, attemptedSegments: number) {
+function expectTtsLedger(config: ReturnType<typeof realConfig>, show: ReturnType<typeof ShowPlanSchema.parse>, attemptedSegments: number, retries = 0) {
   // 成功與失敗的已送出段落都計費；尚未嘗試的降級段落不得預扣。
   const lines = show.segments.slice(0, attemptedSegments).map((segment) => segment.candidate.djLine);
+  if (retries) lines.push(...Array<string>(retries).fill(lines.at(-1)!));
   const ttsUsd = lines.reduce((sum, line) => sum + [...line].length * 10 / 1e6, 0);
   const llmUsd = (100 * 1 + 100 * 2) / 1e6; // fakeOpenAI 的成功 LLM usage。
   const ledger = readLedger(config.openai.ledgerPath);
@@ -135,7 +136,7 @@ it('TTS 自身 timeout 與 deadline 降級使用不同 reason code', async () =>
   }));
 });
 
-it.each([0, 1])('成功 %i 段後供應商失敗：保留成功段落與失敗預扣，後續停止並記錄單次降級', async (succeeded) => {
+it.each([0, 1, 3])('成功 %i 段後供應商重試仍失敗：保留成功段落與失敗預扣，後續停止並記錄單次降級', async (succeeded) => {
   const log = vi.spyOn(logger, 'info');
   let calls = 0;
   const fetchImpl = fakeOpenAI({ speech: () => ++calls <= succeeded
@@ -145,13 +146,14 @@ it.each([0, 1])('成功 %i 段後供應商失敗：保留成功段落與失敗�
   expect(job.status).toBe('completed');
   expect(show!.segments.slice(0, succeeded).every((s) => s.speech.kind === 'ai_audio')).toBe(true);
   expect(show!.segments.slice(succeeded).every((s) => s.speech.kind === 'mock_chime')).toBe(true);
-  expect(speechCalls(fetchImpl)).toHaveLength(succeeded + 1);
-  expectTtsLedger(config, show!, succeeded + 1);
+  expect(speechCalls(fetchImpl)).toHaveLength(succeeded + 2);
+  expectTtsLedger(config, show!, succeeded + 1, 1);
   const degraded = log.mock.calls.filter(([event]) => event === 'tts_degraded');
   expect(degraded).toHaveLength(1);
   expect(degraded[0]![1]).toMatchObject({
     showId: show!.showId, deadlineMs: 2000, ttsTimeoutMs: 1000,
     reason: 'TTS_PROVIDER_FAILED', synthesizedSegments: succeeded, degradedSegments: 5 - succeeded,
+    segmentId: show!.segments[succeeded]!.segmentId, providerCode: 'HTTP_503', providerStatus: 503, providerAttempts: 2, providerRetryable: true,
   });
   expect(JSON.stringify(degraded)).not.toContain('PRIVATE');
   expect(show!.warnings.join()).not.toContain('PRIVATE');
@@ -172,4 +174,34 @@ it('LLM 本身逾時（PROVIDER_TIMEOUT_MS）：照舊以 LLM 失敗處理（保
   expect(show!.warnings[0]).toMatch(new RegExp(`^${PROVIDER_NOTICES.llm}：.*逾時`));
   expect(responseCalls(fetchImpl)).toHaveLength(1);
   expect(readLedger(config.openai.ledgerPath).totalUsd).toBeGreaterThan(0);
+});
+
+
+it('供應商瞬時失敗重試恢復：五段 AI 語音，沒有降級 warning／log', async () => {
+  const log = vi.spyOn(logger, 'info');
+  let calls = 0;
+  const fetchImpl = fakeOpenAI({ speech: () => ++calls === 1
+    ? new Response('PRIVATE', { status: 503 }) : new Response(MP3_BYTES) });
+  const { job, show } = await runPlan({ PLAN_DEADLINE_MS: '2000', TTS_TIMEOUT_MS: '1000' }, fetchImpl);
+  expect(job.status).toBe('completed');
+  expect(show!.segments.every((s) => s.speech.kind === 'ai_audio')).toBe(true);
+  expect(show!.warnings.some((w) => w.startsWith(PROVIDER_NOTICES.tts))).toBe(false);
+  expect(log.mock.calls.some(([event]) => event === 'tts_degraded')).toBe(false);
+  expect(speechCalls(fetchImpl)).toHaveLength(6);
+});
+
+it('重試等待中段落 deadline 先到：保留 TTS_DEADLINE_TIMEOUT，不發第二次 HTTP', async () => {
+  const log = vi.spyOn(logger, 'info');
+  const fetchImpl = fakeOpenAI({ speech: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 650));
+    return new Response('PRIVATE', { status: 503 });
+  } });
+  const { job, show, config } = await runPlan({ PLAN_DEADLINE_MS: '1000', TTS_TIMEOUT_MS: '5000' }, fetchImpl);
+  expect(job.status).toBe('completed');
+  expect(show!.segments.every((s) => s.speech.kind === 'mock_chime')).toBe(true);
+  expect(speechCalls(fetchImpl)).toHaveLength(1);
+  expectTtsLedger(config, show!, 1);
+  expect(log).toHaveBeenCalledWith('tts_degraded', expect.objectContaining({
+    reason: 'TTS_DEADLINE_TIMEOUT', providerCode: 'TIMEOUT', providerAttempts: 1,
+  }));
 });
