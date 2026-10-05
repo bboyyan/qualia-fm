@@ -17,6 +17,7 @@ export const LedgerRowSchema = z.strictObject({
   reason: z.string().max(200),
 });
 export const FeedbackReceiptSchema = z.strictObject({ mode: z.enum(['fake', 'notion']), rowId: z.string() });
+export type FeedbackRating = z.infer<typeof FeedbackRatingSchema>;
 export type FeedbackRequest = z.infer<typeof FeedbackRequestSchema>;
 export type LedgerRow = z.infer<typeof LedgerRowSchema>;
 export type FeedbackReceipt = z.infer<typeof FeedbackReceiptSchema>;

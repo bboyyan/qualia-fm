@@ -1,7 +1,7 @@
 /** 後端環境設定：不支援的播放模式拒絕啟動；Spotify 開關為嚴格閘門（缺設定即拒絕啟動）；OpenAI 缺設定明示降級。
  * 金鑰不進錯誤、日誌或 Vite。
  */
-import { isAbsolute } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { z } from 'zod';
 import type { BudgetLimits } from '../budget/ledger.js';
 
@@ -73,6 +73,7 @@ const EnvSchema = z.object({
   OPENAI_PRICE_OUTPUT_PER_1M_TOKENS: z.string().optional(),
   OPENAI_PRICE_TTS_PER_1M_CHARS: z.string().optional(),
   STATIC_DIR: z.preprocess(emptyToUndefined, z.string().optional()),
+  TASTE_LEDGER_PATH: z.preprocess(blankToUndefined, z.string().max(1000).optional()),
 });
 
 export interface ServerConfig {
@@ -96,6 +97,8 @@ export interface ServerConfig {
   };
   mock: { trackMs: number; speechMs: number; phaseMs: number; slowPhaseMs: number };
   staticDir: string | undefined;
+  /** 品味帳本（BRA-134）：絕對路徑的本機 JSON 檔；null＝只存在記憶體（只有 NODE_ENV=test 未設定時）。 */
+  tasteLedger: { path: string | null };
   openai: {
     llm: 'mock' | 'openai'; tts: 'mock' | 'openai'; apiKey: string | undefined;
     textModel: string | undefined; ttsModel: string | undefined; voice: string | undefined;
@@ -186,6 +189,12 @@ function assertSupported(env: ParsedEnv): void {
   }
 }
 
+/** 預設 ./data/taste-ledger.json（啟動時轉成絕對路徑，之後不隨工作目錄改變）；測試未設定時只用記憶體。 */
+function tasteLedgerPath(env: ParsedEnv): string | null {
+  if (env.TASTE_LEDGER_PATH) return resolve(env.TASTE_LEDGER_PATH);
+  return env.NODE_ENV === 'test' ? null : resolve('data/taste-ledger.json');
+}
+
 function originsFor(env: ParsedEnv): string[] {
   const own = [`http://127.0.0.1:${env.PORT}`, `http://localhost:${env.PORT}`];
   const list = env.NODE_ENV === 'production' ? [env.APP_ORIGIN] : [env.APP_ORIGIN, ...own];
@@ -260,5 +269,6 @@ export function loadConfig(source: Record<string, string | undefined> = process.
       slowPhaseMs: env.MOCK_SLOW_PHASE_MS,
     },
     staticDir: env.STATIC_DIR,
+    tasteLedger: { path: tasteLedgerPath(env) },
   };
 }

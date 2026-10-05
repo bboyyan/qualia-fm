@@ -27,6 +27,9 @@ export function candidateLimitFor(maxOutputTokens: number): number {
   return Math.min(POOL_MAX, Math.max(POOL_MIN, fits));
 }
 
+/** 品味帳本提示的用法（BRA-134）；系統 prompt 來自唯讀 handoff，故放在 user 訊息。 */
+export const TASTE_GUIDE = 'editorialInput.tasteHints 來自使用者在本 App 的評價與手動標記（不是 Spotify 資料）：avoid 內的曲目不要提名；loved 可往相近質地靠，但不必重複同一首；disliked 的 note 是軟約束，避開相同理由的選擇。';
+
 const responseSchema = z.object({
   output: z.array(z.object({ type: z.string(), content: z.array(z.object({ type: z.string(), text: z.string().optional() })).optional() })),
   usage: z.object({ input_tokens: z.number().int().nonnegative(), output_tokens: z.number().int().nonnegative() }),
@@ -54,7 +57,7 @@ export class OpenAIEditorialPlanner implements EditorialPlanner {
   static requestBody(config: OpenAIConfig, input: EditorialInput) {
     return {
       model: config.textModel, max_output_tokens: config.maxOutputTokens, store: false,
-      input: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: JSON.stringify({ editorialInput: input, candidateLimit: candidateLimitFor(config.maxOutputTokens), candidateMin: POOL_MIN, requestedCount: 5 }) }],
+      input: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: JSON.stringify({ editorialInput: input, tasteGuide: TASTE_GUIDE, candidateLimit: candidateLimitFor(config.maxOutputTokens), candidateMin: POOL_MIN, requestedCount: 5 }) }],
       text: { format: { type: 'json_schema', name: 'plan_draft', strict: true, schema: SENT_SCHEMA } },
     };
   }

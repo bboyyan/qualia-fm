@@ -13,6 +13,8 @@ import { SessionStore } from './security/sessions.js';
 import { PlanService, realClock } from './services/planService.js';
 import { InMemoryLedger } from './ledger/fake.js';
 import type { FeedbackLedger } from './ledger/types.js';
+import { TasteLedger, filePersistence, memoryPersistence } from './ledger/tasteStore.js';
+import { TasteService } from './services/tasteService.js';
 import { RealProviderRuntime } from './budget/runtime.js';
 import { OpenAIEditorialPlanner } from './providers/openai/planner.js';
 import { OpenAITtsProvider } from './providers/openai/tts.js';
@@ -28,6 +30,8 @@ import { SpotifyWebApi } from './spotify/webApi.js';
 export interface AppOverrides {
   fetchImpl?: typeof fetch;
   ledger?: FeedbackLedger;
+  /** 品味帳本（預設依 TASTE_LEDGER_PATH 建立本機檔）。 */
+  tasteLedger?: TasteLedger;
   store?: JobStore;
   now?: () => number;
   clock?: PhaseClock;
@@ -66,6 +70,12 @@ function createSpotify(config: ServerConfig, fetchImpl: typeof fetch, now: () =>
   return { auth, api, loved: new LovedPlaylist(api, config.spotify.lovedPlaylistId) };
 }
 
+function createTasteLedger(config: ServerConfig): TasteLedger {
+  if (config.tasteLedger.path) return new TasteLedger(filePersistence(config.tasteLedger.path));
+  logger.info('taste_ledger_memory_only', { reason: 'TASTE_LEDGER_PATH unset in test' });
+  return new TasteLedger(memoryPersistence());
+}
+
 export function createApp(config: ServerConfig, overrides: AppOverrides = {}): QualiaApp {
   const now = overrides.now ?? Date.now;
   const sessions = new SessionStore();
@@ -78,9 +88,11 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
   const planner: EditorialPlanner = realLlm ? new OpenAIEditorialPlanner(config.openai, runtime, overrides.fetchImpl ?? fetch) : mockPlanner;
   const tts = new OpenAITtsProvider(config.openai, runtime, overrides.fetchImpl ?? fetch, now);
   const spotify = createSpotify(config, overrides.fetchImpl ?? fetch, now);
+  const tasteService = new TasteService(overrides.tasteLedger ?? createTasteLedger(config), now);
   const plans = new PlanService({
     config,
     ledger: overrides.ledger ?? new InMemoryLedger(),
+    tasteService,
     planner: overrides.planner ?? planner,
     fallbackPlanner: realLlm ? mockPlanner : undefined,
     runtime: config.openai.llm === 'openai' || config.openai.tts === 'openai' ? runtime : undefined,
@@ -95,7 +107,7 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
   const app = express();
   app.disable('x-powered-by');
   app.use(requestIdMiddleware, accessLog, securityHeaders(config.gates.spotifyEnabled));
-  const apiDeps = { config, sessions, plans, now, runtime, tts, spotify };
+  const apiDeps = { config, sessions, plans, tasteService, now, runtime, tts, spotify };
   app.use('/api', express.json({ limit: '16kb' }), createApiRouter(apiDeps));
   // Spotify 後台登記的 redirect URI 是 /callback：必須在 SPA fallback 之前處理。
   if (spotify) app.get('/callback', spotifyCallback(apiDeps));

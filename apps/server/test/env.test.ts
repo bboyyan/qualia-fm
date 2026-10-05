@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { isAbsolute, resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigError, loadConfig } from '../src/config/env.js';
 
@@ -24,6 +25,14 @@ describe('loadConfig', () => {
     expect(config.openai).toMatchObject({ llm: 'mock', tts: 'mock', reason: null });
     expect(config.openai.budget).toEqual({ dailyUsd: 1, totalUsd: 10, plansPerDay: 20, graphemesPerDay: 4000 });
     expect(config.openai).toMatchObject({ providerTimeoutMs: 30_000, ttsTimeoutMs: 30_000, ttsInstructions: undefined });
+  });
+
+  it('品味帳本：預設為絕對路徑的本機檔；測試環境未設定只用記憶體；空值視為未設定', () => {
+    expect(loadConfig({}).tasteLedger.path).toBe(resolve('data/taste-ledger.json'));
+    expect(loadConfig({ NODE_ENV: 'test' }).tasteLedger.path).toBeNull();
+    expect(loadConfig({ NODE_ENV: 'test', TASTE_LEDGER_PATH: '  ' }).tasteLedger.path).toBeNull();
+    expect(loadConfig({ NODE_ENV: 'test', TASTE_LEDGER_PATH: './TEST/taste.json' }).tasteLedger.path).toBe(resolve('TEST/taste.json'));
+    expect(isAbsolute(loadConfig({ TASTE_LEDGER_PATH: 'rel/taste.json' }).tasteLedger.path!)).toBe(true);
   });
 
   it('treats empty env values (as in .env.example) as defaults', () => {

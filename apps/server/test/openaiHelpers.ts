@@ -10,7 +10,7 @@ export function realEnv(extra: Record<string, string> = {}): Record<string, stri
   return { MOCK_PHASE_MS: '0', LLM_PROVIDER: 'openai', TTS_PROVIDER: 'openai', OPENAI_API_KEY: 'TEST-fake-secret',
     OPENAI_REAL_CALLS_APPROVED: 'true', OPENAI_TEXT_MODEL: 'TEST-text', OPENAI_TTS_MODEL: 'TEST-tts', OPENAI_TTS_VOICE: 'TEST-voice',
     OPENAI_PRICE_INPUT_PER_1M_TOKENS: '1', OPENAI_PRICE_OUTPUT_PER_1M_TOKENS: '2', OPENAI_PRICE_TTS_PER_1M_CHARS: '10',
-    BUDGET_LEDGER_PATH: join(dir, 'ledger.json'), KILL_SWITCH_FILE: join(dir, 'KILL_SWITCH'), TTS_CACHE_DIR: join(dir, 'tts'), ...extra };
+    BUDGET_LEDGER_PATH: join(dir, 'ledger.json'), KILL_SWITCH_FILE: join(dir, 'KILL_SWITCH'), TTS_CACHE_DIR: join(dir, 'tts'), TASTE_LEDGER_PATH: join(dir, 'taste-ledger.json'), ...extra };
 }
 
 export function realConfig(extra: Record<string, string> = {}) {
@@ -20,7 +20,7 @@ export function realConfig(extra: Record<string, string> = {}) {
 /** 合法 PlanDraft 的 JSON 字串，模擬模型輸出（內容仍被 PlanService 當不受信任資料驗證）；每段台詞不同，避免快取合併。 */
 export async function validDraftText(): Promise<string> {
   const draft = await new MockEditorialPlanner().draft(
-    { seedText: 'TEST', seedKind: 'feeling', seedArtist: null, history: [], tuning: null, djEnabled: true, djLength: 'short', recentPicks: [], exploration: 0 },
+    { seedText: 'TEST', seedKind: 'feeling', seedArtist: null, history: [], tasteHints: { avoid: [], loved: [], disliked: [] }, tuning: null, djEnabled: true, djLength: 'short', recentPicks: [], exploration: 0 },
     { signal: new AbortController().signal, attempt: 1, scenario: 'five' },
   ) as { candidates: { djLine: string }[] };
   return JSON.stringify({ ...draft, candidates: draft.candidates.map((c, i) => ({ ...c, djLine: `第${i + 1}首 ${c.djLine}` })) });

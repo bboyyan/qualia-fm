@@ -8,7 +8,7 @@ import { bootstrap, planRequest, postPlan, waitForJob } from './helpers.js';
 beforeEach(() => { vi.stubGlobal('fetch', () => { throw new Error('禁止真實網路'); }); });
 it('啟用後 API plan 與 AI 音訊可使用假 fetch，標示 aiVoice，音訊需本人 session', async () => {
   const config = realConfig({ MOCK_PHASE_MS: '0' });
-  const draft = await new MockEditorialPlanner().draft({ seedText: 'TEST', seedKind: 'feeling', seedArtist: null, history: [], tuning: null, djEnabled: true, djLength: 'short', recentPicks: [], exploration: 0 }, { signal: new AbortController().signal, attempt: 1, scenario: 'five' });
+  const draft = await new MockEditorialPlanner().draft({ seedText: 'TEST', seedKind: 'feeling', seedArtist: null, history: [], tasteHints: { avoid: [], loved: [], disliked: [] }, tuning: null, djEnabled: true, djLength: 'short', recentPicks: [], exploration: 0 }, { signal: new AbortController().signal, attempt: 1, scenario: 'five' });
   const fetchImpl = vi.fn<typeof fetch>(async (url) => String(url).endsWith('/responses') ? Response.json({ output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(draft) }] }], usage: { input_tokens: 100, output_tokens: 100 } }) : new Response(new Uint8Array([1, 2, 3])));
   const { app } = createApp(config, { fetchImpl });
   const client = await bootstrap(app);

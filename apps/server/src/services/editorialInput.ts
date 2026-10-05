@@ -5,9 +5,12 @@
  */
 import type { LedgerRow, PlanRequest } from '@qualia/contracts';
 import type { TrackRef } from './candidatePool.js';
+import { EMPTY_TASTE_HINTS, type TasteHints } from './tasteRules.js';
 
 export interface EditorialInput {
   readonly history: readonly LedgerRow[];
+  /** 品味帳本的軟約束（BRA-134）：只含曲名／藝人／短評，由 PlanService 開台前填入。 */
+  readonly tasteHints: TasteHints;
   readonly seedKind: 'feeling' | 'song' | 'sound';
   readonly seedText: string;
   readonly seedArtist: string | null;
@@ -22,6 +25,7 @@ export interface EditorialInput {
 
 export const EDITORIAL_INPUT_KEYS: readonly (keyof EditorialInput)[] = [
   'history',
+  'tasteHints',
   'seedKind',
   'seedText',
   'seedArtist',
@@ -35,6 +39,7 @@ export const EDITORIAL_INPUT_KEYS: readonly (keyof EditorialInput)[] = [
 export function toEditorialInput(request: PlanRequest): EditorialInput {
   return {
     history: [],
+    tasteHints: EMPTY_TASTE_HINTS,
     seedKind: request.seed.kind,
     seedText: request.seed.text,
     seedArtist: request.seed.artist,

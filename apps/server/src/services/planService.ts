@@ -30,6 +30,8 @@ import { RecentPicks, type RecentSelection } from '../stores/recentPicks.js';
 import { drawOrder, effectiveExploration, type PoolEntry } from './candidatePool.js';
 import { toEditorialInput, type EditorialInput } from './editorialInput.js';
 import { buildShowPlan, type ResolvedCandidate } from './showBuilder.js';
+import { EMPTY_TASTE_HINTS, applyTasteRules, tasteHintsFor } from './tasteRules.js';
+import type { TasteRead, TasteService } from './tasteService.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const MAX_ACTIVE_JOBS_PER_SESSION = 3;
@@ -49,6 +51,8 @@ export interface PlanServiceDeps {
   readonly fallbackPlanner?: EditorialPlanner;
   readonly tts?: OpenAITtsProvider;
   readonly ledger: FeedbackLedger;
+  /** 品味帳本（BRA-134）：開台前必讀、回饋與播出紀錄必寫；Notion（ledger）只是可選備份。 */
+  readonly tasteService: TasteService;
   readonly config: ServerConfig;
   readonly planner: EditorialPlanner;
   readonly resolver: CatalogResolver;
@@ -170,13 +174,31 @@ export class PlanService {
     const segment = show.segments.find((s) => s.segmentId === request.segmentId);
     if (!segment) throw new AppError('NOT_FOUND');
     const key = JSON.stringify([request.segmentId, request.clientRequestId ?? null]);
-    return this.deps.store.saveFeedback(request.showId, ownerId, key, () => this.deps.ledger.append({
-      date: new Date(this.deps.now()).toISOString(),
-      seed: [show.seed.artist, show.seed.text].filter(Boolean).join(' — '),
-      recommendation: `${segment.candidate.artist} — ${segment.candidate.title}`,
-      rating: request.rating,
-      reason: request.reason,
-    }));
+    // 先寫本機品味帳本（失敗即回錯誤、不寫備份）；成功後才寫 FeedbackLedger（Notion 備份）。
+    return this.deps.store.saveFeedback(request.showId, ownerId, key, async () => {
+      await this.deps.tasteService.recordFeedback({
+        showId: request.showId,
+        segmentId: request.segmentId,
+        clientRequestId: request.clientRequestId ?? null,
+        track: { title: segment.candidate.title, artist: segment.candidate.artist },
+        rating: request.rating,
+        reason: request.reason,
+      });
+      return this.deps.ledger.append({
+        date: new Date(this.deps.now()).toISOString(),
+        seed: [show.seed.artist, show.seed.text].filter(Boolean).join(' — '),
+        recommendation: `${segment.candidate.artist} — ${segment.candidate.title}`,
+        rating: request.rating,
+        reason: request.reason,
+      });
+    });
+  }
+
+  /** 手動編輯的對象：只取 LLM 提名的曲名／藝人，永遠不讀 segment.track（Spotify 回傳欄位）。 */
+  trackOf(ownerId: string, showId: string, segmentId: string): { title: string; artist: string } {
+    const segment = this.show(ownerId, showId).segments.find((s) => s.segmentId === segmentId);
+    if (!segment) throw new AppError('NOT_FOUND');
+    return { title: segment.candidate.title, artist: segment.candidate.artist };
   }
 
   /** Logout / session end: abort in-flight work and forget everything the owner had. */
@@ -217,11 +239,13 @@ export class PlanService {
         request = { ...request, seed: { ...CONFIRMED_SEED }, tuning: null };
         warning = '未讀到帳本：本輪只用種子曲。';
       }
+      const tasteRead = await this.deps.tasteService.readForPlan();
       if (signal.aborted) throw signal.reason;
+      const tasteHints = tasteRead.snapshot ? tasteHintsFor(tasteRead.snapshot) : EMPTY_TASTE_HINTS;
       const recent = this.recentPicks.recent(job.ownerId, request.seed);
       const exploration = effectiveExploration(this.deps.config.limits.planExploration, recent.runs);
-      const editorial = { ...toEditorialInput(request), history, recentPicks: recent.tracks, exploration };
-      const { plan: result, mock } = await this.pipeline(job.jobId, editorial, { ...input, request }, signal, deadlineAt, recent.history);
+      const editorial = { ...toEditorialInput(request), history, tasteHints, recentPicks: recent.tracks, exploration };
+      const { plan: result, mock } = await this.pipeline(job.jobId, editorial, { ...input, request }, signal, deadlineAt, recent.history, tasteRead);
       // TTS 可能在取消／逾時後才回覆；交付前再次確認，晚回覆不能留下 show 或近期選曲。
       if (signal.aborted) throw signal.reason;
       if (this.deps.store.get(job.jobId, job.ownerId)?.status !== 'running') return;
@@ -237,7 +261,7 @@ export class PlanService {
     }
   }
 
-  private async pipeline(jobId: string, editorial: EditorialInput, input: StartPlanInput, signal: AbortSignal, deadlineAt: number, recentRuns: RecentSelection['history']): Promise<{ plan: ShowPlan; mock: boolean }> {
+  private async pipeline(jobId: string, editorial: EditorialInput, input: StartPlanInput, signal: AbortSignal, deadlineAt: number, recentRuns: RecentSelection['history'], tasteRead: TasteRead): Promise<{ plan: ShowPlan; mock: boolean }> {
     const { phaseMs, slowPhaseMs, speechMs } = this.deps.config.mock;
     await this.enter(jobId, 'understanding', phaseMs, signal);
     // 供應商降級提示一律放在 warnings 最前面，模型自己的 warnings 再多也不會把它擠掉。
@@ -250,8 +274,20 @@ export class PlanService {
         realReason = safeReason(error, '真實供應商無法使用。');
       }
     }
-    const { draft, mock } = await this.draftWithFallback(editorial, input.scenario, signal, realReason, notices);
+    const drafted = await this.draftWithFallback(editorial, input.scenario, signal, realReason, notices);
+    const { mock } = drafted;
     if (this.deps.tts && realReason) notices.push(`${PROVIDER_NOTICES.tts}：${realReason}`);
+    // 開台前選歌管線：blocked → 近 N 已播 → pinned → 愛／不對；帳本讀不到就整段略過並明示。
+    // 帳本提示排在供應商提示之後、模型 warnings 之前。
+    const tasteNotices: string[] = [];
+    let draft = drafted.draft;
+    if (tasteRead.snapshot) {
+      const applied = applyTasteRules(draft.candidates, tasteRead.snapshot, { target: TARGET_SEGMENTS });
+      draft = { ...draft, candidates: applied.candidates };
+      tasteNotices.push(...applied.warnings);
+    } else if (tasteRead.warning) {
+      tasteNotices.push(tasteRead.warning);
+    }
     await this.enter(jobId, 'matching', input.scenario === 'slow' ? slowPhaseMs : phaseMs, signal);
     await this.enter(jobId, 'resolving', phaseMs, signal);
     const spotify = !mock && input.spotifyOwner === true && this.deps.spotify?.linked() ? this.deps.spotify.resolver : null;
@@ -273,7 +309,10 @@ export class PlanService {
       now: this.deps.now(),
     });
     const segments = editorial.djEnabled && this.deps.tts && !realReason ? await this.withAiSpeech(plan, signal, notices, deadlineAt) : plan.segments;
-    return { plan: { ...plan, segments, warnings: [...new Set([...notices, ...plan.warnings])].slice(0, 10) }, mock };
+    // MOCK 提名是虛構示意，不算播出紀錄（否則示範模式會被近 N 擋光）；已取消／逾時的節目也不記。
+    const airedWarning = mock || signal.aborted ? null : await this.deps.tasteService.recordAired(plan);
+    if (airedWarning) tasteNotices.push(airedWarning);
+    return { plan: { ...plan, segments, warnings: [...new Set([...notices, ...tasteNotices, ...plan.warnings])].slice(0, 10) }, mock };
   }
 
   /**
