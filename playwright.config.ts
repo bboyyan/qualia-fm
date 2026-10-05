@@ -28,6 +28,8 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 8_000 },
   reporter: [['list']],
+  // BRA-155: all captures use testInfo.outputPath() under this ignored temporary directory.
+  // Never generate into the committed docs/implementation/screenshots/ evidence directory.
   outputDir: 'test-results',
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,

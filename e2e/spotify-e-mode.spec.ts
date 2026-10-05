@@ -304,12 +304,12 @@ test('BRA-125：預設旅程清爽，Spotify 播放、回饋與恢復仍可用',
   await expect(partial).toHaveText('先聽這 4 首。重新選歌');
   await expect(partial).not.toHaveAttribute('role', 'alert');
   await clean();
-  await page.screenshot({ path: `docs/implementation/screenshots/bra125-ready-${testInfo.project.name}.png` });
+  await page.screenshot({ path: testInfo.outputPath(`bra125-ready-${testInfo.project.name}.png`) });
   await page.getByTestId('start-listening').click();
   const uri = await reachPlaying(page, server);
   expect(server.plays[0]?.speechSilent).toBe(true);
   await clean();
-  await page.screenshot({ path: `docs/implementation/screenshots/bra125-listen-${testInfo.project.name}.png` });
+  await page.screenshot({ path: testInfo.outputPath(`bra125-listen-${testInfo.project.name}.png`) });
   await page.getByTestId('bridge-card').click();
   await clean();
   await page.getByTestId('bridge-sheet').getByRole('button', { name: '關閉面板' }).click();

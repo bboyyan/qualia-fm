@@ -1,5 +1,5 @@
 /**
- * Captures review screenshots at the required sizes into docs/implementation/screenshots/.
+ * Captures review screenshots at the required sizes into test-results/<test-and-project>/.
  * Browser-rendered evidence only — not real-device evidence.
  */
 import { expect, test, type Page } from '@playwright/test';
@@ -11,8 +11,6 @@ const SIZES = [
   { width: 430, height: 932 },
   { width: 1440, height: 900 },
 ] as const;
-
-const OUT = 'docs/implementation/screenshots';
 
 async function startPlaying(page: Page): Promise<void> {
   await startShow(page);
@@ -198,12 +196,12 @@ for (const size of SIZES) {
   test.describe(`${size.width}x${size.height}`, () => {
     test.use({ viewport: size, isMobile: size.width < 700, hasTouch: size.width < 700, deviceScaleFactor: 2 });
     for (const screen of SCREENS) {
-      test(screen.name, async ({ page }) => {
+      test(screen.name, async ({ page }, testInfo) => {
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await openApp(page, 'mock');
         await screen.prepare(page);
         await page.waitForTimeout(300);
-        await page.screenshot({ path: `${OUT}/${screen.name}-${size.width}x${size.height}.png` });
+        await page.screenshot({ path: testInfo.outputPath(`${screen.name}-${size.width}x${size.height}.png`) });
       });
     }
   });

@@ -43,9 +43,11 @@ pnpm check:preferences # V5：全 repo 程式碼預設偏好檢查
 pnpm e2e
 # 額外：WebKit 引擎 390×844（仍不是 iPhone Safari 真機）
 pnpm e2e:webkit
-# 重新產生截圖到 docs/implementation/screenshots/（360／390／430／1440）
+# 專用 screenshots project：產生暫存截圖到 test-results/（360／390／430／1440）
 pnpm screenshots
 ```
+
+所有 E2E 截圖（含失敗截圖、BRA-98／125／135 與專用 `screenshots` project）都寫入已忽略的 `test-results/<測試與 project 目錄>/`，由 `testInfo.outputPath()` 分隔不同測試與視窗。Playwright 會在下次執行時清理暫存產物；需要保留時請先複製到另一個位置。`pnpm screenshots` 只跑專用截圖規格，一般 `pnpm e2e` 不包含它。`docs/implementation/screenshots/` 是已提交的歷史證據，不會由上述指令自動更新；如需提交新證據，請人工審閱暫存截圖後，以新檔名選取複製並提交，避免覆寫舊證據。此路徑調整可用 revert 回滾。
 
 Playwright 使用本機已快取的瀏覽器（`@playwright/test@1.63.0` 對應 chromium-1243、webkit-2359）。首次在其他機器上執行若沒有快取，需另外執行 `pnpm exec playwright install chromium webkit`（會下載瀏覽器）。
 
@@ -92,6 +94,6 @@ OpenAI 的設定、預扣／結算、fail-closed 行為與曄的啟用檢查表�
 
 V5 的 `scripts/check-preferences.mjs` 掃描全 repo 程式碼（排除依賴、建置、git 與測試產物），拒絕預設品味／偏好宣告與已知質地推測句型，另核對唯一 confirmed seed；單元測試從 planner 輸出確認沒有硬編碼音色推測。這是可機器驗證的護欄，不能取代人對任意新提示詞的審查。唯讀 `handoff/` 的歷史規格與舊截圖不會被當作執行時偏好。
 
-E2E spec 已備妥，本輪依指示不執行，交外部執行者跑 `pnpm e2e`。`e2e/feedback.spec.ts` 會只新增 `bra98-feedback-360x800.png` 與 `bra98-feedback-390x844.png`，以 CSS 像素截圖並檢查每張 <300KB；兩張總計 <600KB。不要跑大量舊截圖重生指令來替代這兩張證據。真機 NOT TESTED。
+執行 `pnpm e2e` 時，`e2e/feedback.spec.ts` 會在 `test-results/` 的各測試目錄產生 `bra98-feedback-360x800.png` 與 `bra98-feedback-390x844.png`，以 CSS 像素截圖並檢查每張 <300KB；兩張總計 <600KB。不要跑大量舊截圖重生指令來替代這兩張證據。真機 NOT TESTED。
 
 V6 尚待專案管家外部 L1 授權實寫 TEST 列及補 PR 證據。`node scripts/notion-live-check.mjs` 預設不讀 token、不連線、不寫入。只有明確參數 `--confirm-write-one-test-row` 才會建構真實 adapter（先 `pnpm build`，token 僅從 `NOTION_TOKEN` 環境變數讀取；不要放入指令字串或 repo）。它只向固定帳本頁寫一列，種子與原因都標 TEST，回傳測試列連結；reader 排除 TEST 列，保留標記即符合回滾要求。此 agent 不執行真實檢查。

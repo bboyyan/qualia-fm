@@ -27,7 +27,7 @@ test('B default, E disabled, manual finish shows feedback and submission advance
   await expectNoHorizontalOverflow(page);
   if (['mobile-360', 'mobile-390'].includes(testInfo.project.name)) {
     await form.scrollIntoViewIfNeeded();
-    const path = `docs/implementation/screenshots/bra98-feedback-${testInfo.project.name === 'mobile-360' ? '360x800' : '390x844'}.png`;
+    const path = testInfo.outputPath(`bra98-feedback-${testInfo.project.name === 'mobile-360' ? '360x800' : '390x844'}.png`);
     await page.screenshot({ path, scale: 'css' });
     expect((await stat(path)).size).toBeLessThan(300 * 1024);
   }
