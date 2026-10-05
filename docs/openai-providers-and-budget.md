@@ -20,8 +20,8 @@ API 的 `speech.kind=ai_audio` 必須含 `aiVoice: true`，DJ 區塊顯示「AI 
 
 - 供應商提示以 contracts 的 `PROVIDER_NOTICES` 固定開頭寫入 ShowPlan.warnings，**一律排在最前面**（模型自己的 warnings 再多也擠不掉），web 的 `ProviderNotices` 在「準備好了」與收聽頁顯示。
 - LLM：gate 拒絕、LLM 呼叫階段的預算拒絕、HTTP 失敗、逾時、拒答、或初次＋修復兩次輸出都未通過 PlanDraftSchema，皆改用 MOCK 選歌完成本輪並顯示「AI 選歌本輪改用 MOCK 示範：原因」。**選歌前 `claimPlan` 的 `QUOTA_EXCEEDED` 是例外，直接讓 job 失敗，不進 MOCK 降級**（見下節）。不增加真實呼叫次數；僅 mock 模式維持原本「兩次無效即 PLAN_INVALID」。
-- TTS（伺服器合成）：失敗時該段保留文字介紹＋提示音（mock_chime，介紹區如實標示「MOCK 提示音，非 AI 語音」並可「跳過介紹」），顯示「AI 語音本輪改為文字介紹＋提示音：原因」；本輪第一次失敗後不再嘗試其餘段落，避免逾時連鎖與重複預扣。
-- TTS 與整輪 deadline：每段開始前用單調時鐘計算 `remainingMs = max(0, floor(deadlineAt − 250 ms − now))`，**`remainingMs > 0` 就嘗試該段，不要求留足完整 `TTS_TIMEOUT_MS`**；`remainingMs === 0` 才停止。250 ms 留給節目組裝收尾；已開始的段落以這次 `remainingMs` 限制整段合成（含排隊等待），HTTP／讀取本文另受 `TTS_TIMEOUT_MS` 限制，先到的限制生效。第一次耗盡、逾時或失敗後，當段與其餘段落保留文字介紹＋提示音並明示原因，已成功的 AI 語音照用，節目可 completed。未開始的段落不發請求、不預扣；已發出的失敗請求仍依帳本規則保留預扣。deadline 若在 LLM 階段就到，仍照舊整輪 PLAN_TIMEOUT；LLM 自身逾時（`PROVIDER_TIMEOUT_MS`）仍視為 LLM 失敗（保留預扣、改用 MOCK 選歌並明示）。
+- TTS（伺服器合成）：失敗時該段保留文字介紹＋提示音（mock_chime，介紹區如實標示「MOCK 提示音，非 AI 語音」並可「跳過介紹」），顯示「AI 語音本輪改為文字介紹＋提示音：原因」；瞬時失敗最多自動重試一次（BRA-162，規則見下）；有界重試仍失敗後不再嘗試其餘段落。
+- TTS 與整輪 deadline：每段開始前用單調時鐘計算 `remainingMs = max(0, floor(deadlineAt − 250 ms − now))`，**`remainingMs > 0` 就嘗試該段，不要求留足完整 `TTS_TIMEOUT_MS`**；`remainingMs === 0` 才停止。250 ms 留給節目組裝收尾；已開始的段落以這次 `remainingMs` 限制整段合成（含排隊等待），HTTP／讀取本文與重試等待共用同一個 `TTS_TIMEOUT_MS` 限制，先到的限制生效。第一次耗盡、逾時或有界重試仍失敗後，當段與其餘段落保留文字介紹＋提示音並明示原因，已成功的 AI 語音照用，節目可 completed。未開始的段落不發請求、不預扣；已發出的失敗請求仍依帳本規則保留預扣。deadline 若在 LLM 階段就到，仍照舊整輪 PLAN_TIMEOUT；LLM 自身逾時（`PROVIDER_TIMEOUT_MS`）仍視為 LLM 失敗（保留預扣、改用 MOCK 選歌並明示）。
 - TTS（手機播放）：AI 音檔播放失敗（如快取過期 404、斷網）時不擋音樂（AC17），直接進曲目，同時在收聽頁顯示文字介紹全文與「重試語音」（在使用者點擊內重播介紹）。自動播放被擋則照舊顯示「點一下繼續」，介紹文字仍在。
 - iPhone 手勢：「開始收聽」的點擊同步執行 loadShow＋play，第一段 AI 介紹的 `audio.play()` 在同一個點擊內發出；之後同一個 audio 元素連續切換來源。媒體路由用 `sendFile` 回應 Range（206），iOS Safari 播放 `<audio>` 需要此行為。
 
@@ -56,7 +56,29 @@ API 的 `speech.kind=ai_audio` 必須含 `aiVoice: true`，DJ 區塊顯示「AI 
 | `synthesizedSegments` | 降級前已成功取得 AI 語音的段數（含快取命中） |
 | `degradedSegments` | 總段數減成功段數，包含當段及後續未嘗試段落 |
 
-事件只記上述欄位，不含台詞、供應商本文、原始錯誤或憑證。完整成功的節目不記 `tts_degraded`。
+供應商請求錯誤另外附以下安全欄位；開始前已耗盡 deadline 或本地 gate 拒絕時不附供應商欄位。
+
+| 事件欄位 | 意義 |
+|---|---|
+| `segmentId` | 失敗的段落 ID，可配合 `showId` 查文字與曲目；日誌本身不記台詞 |
+| `providerCode` | 本地生成的 `HTTP_<status>`、`NETWORK_ERROR`、`INVALID_RESPONSE`、`INVALID_AUDIO` 或 `TIMEOUT` |
+| `providerStatus` | HTTP 狀態碼；本地錯誤或沒有取得狀態碼時為 null |
+| `providerRetryable` | 是否屬於可重試的瞬時類別；不代表仍有時間／預算可重試 |
+| `providerAttempts` | 當段已嘗試的 HTTP 次數（1 或 2），含失敗的請求 |
+
+**不讀取、不記錄供應商錯誤本文、headers 或原始例外訊息**；因此上游即使把金鑰／token 放在 message 或 code 也不會傳入日誌與 warning。HTTP 狀態碼能區分驗證拒絕（401）、速率／配額拒絕（429）與服務失敗（503）；不能據此推論更細的供應商根因。ShowPlan.warnings 使用固定安全訊息，例如「OpenAI 供應商失敗（HTTP_503），請稍後再試。」；deadline 仍顯示準備時間不足。完整成功的節目不記 `tts_degraded`。
+
+### 供應商有界重試（BRA-162）
+
+- 只在 TTS 層重試 HTTP 408、500、502、503、504，以及 fetch 在收到回應前拋出的網路 TypeError；固定等待 200 ms，最多一次重試（每段最多兩次 HTTP）。LLM 呼叫次數不變。
+- HTTP 400／401／403／429、格式／空音訊錯誤、provider timeout、gate／配額拒絕不自動重試。429 不假設為瞬時錯誤，避免把上游 quota 與 rate limit 混為一談。
+- 兩次 HTTP 與等待共用原本 `TTS_TIMEOUT_MS`，段落 deadline signal 仍涵蓋排隊、兩次 HTTP 與等待；取消、停止開關、deadline 或 timeout 到達就停止。重試前再次查 gate。
+- 每次 HTTP 先走原本 `runtime.charge` 預扣金額與字數；第一次失敗的預扣完整保留，重試另行預扣，既有日額／總額／字數硬帽不足即拒絕且不發第二次請求。重試可能較早用完當日額度，不提供 usage credits。
+- 重試成功後沿用原本快取與後續逐段合成；兩次仍失敗則保留成功前綴、停止其餘段落，記一次 `tts_degraded`。`TTS_DEADLINE_EXHAUSTED`／`TTS_DEADLINE_TIMEOUT` 的優先序與 reason codes 不變。
+- 範例：已成功三段後 503 連續兩次，事件為 `reason=TTS_PROVIDER_FAILED synthesizedSegments=3 degradedSegments=2 providerCode=HTTP_503 providerStatus=503 providerAttempts=2`。
+- 本次維持串行合成，未實作 BRA-110 全預取或 BRA-151 FIFO。回滾方式：revert BRA-162 的提交；不需遷移資料或調整額度設定。
+
+驗證：`pnpm test apps/server/test/ttsRetry.test.ts apps/server/test/speechDeadline.test.ts apps/server/test/ledgerTamperRetention.test.ts apps/server/test/openaiSecrets.test.ts`。皆以注入式假供應商執行，未對真實供應商發請求；部署後的真實 `tts_degraded` 觀測仍待測線驗證。
 
 ### 開台配額拒絕與供應商降級（BRA-149）
 
@@ -195,7 +217,7 @@ node --env-file-if-exists=.env --env-file=$HOME/.config/qualia/openai.env apps/s
 
 - 多個 `--env-file` 時後面的檔案覆寫前面的值；shell 已 export 的變數優先於檔案。不要在 shell export 金鑰，以免留在歷史紀錄。
 - 啟動後先打開設定頁或 `GET /api/capabilities`：`providers` 應為 `{ llm: 'openai', tts: 'openai', reason: null }`。若有 reason（未簽收、缺單價、帳本損毀、停止檔……），代表已降級，不會發出任何 OpenAI 請求。
-- 逾時：真實 LLM 產生 5–7 首中文候選常需 15–30 秒，`PROVIDER_TIMEOUT_MS` 預設已是 30000（原 8000 幾乎必定逾時，逾時的預扣會保守保留）。前端輪詢上限是 65 秒，所以 `PLAN_DEADLINE_MS` 維持 60000；時間不夠合成全部 5 段時其餘改為文字介紹、節目照常完成。可把 `MOCK_PHASE_MS` 降到 200 減少階段等待；`TTS_TIMEOUT_MS` 只控制單次請求等待上限，調低不保證合成更多段落。
+- 逾時：真實 LLM 產生 5–7 首中文候選常需 15–30 秒，`PROVIDER_TIMEOUT_MS` 預設已是 30000（原 8000 幾乎必定逾時，逾時的預扣會保守保留）。前端輪詢上限是 65 秒，所以 `PLAN_DEADLINE_MS` 維持 60000；時間不夠合成全部 5 段時其餘改為文字介紹、節目照常完成。可把 `MOCK_PHASE_MS` 降到 200 減少階段等待；`TTS_TIMEOUT_MS` 控制每段 HTTP 與重試等待的共用上限，調低不保證合成更多段落。
 - 推理型模型（reasoning tokens 也計入 `max_output_tokens`）容易在 4096 內被截斷，第一次實測建議用非推理型模型。
 - 緊急停止：`touch ./data/KILL_SWITCH`（執行中立即生效）；恢復時刪除該檔。帳本在 `BUDGET_LEDGER_PATH`（絕對路徑），旁邊的 `.initialized` sentinel 讓「刪帳本取得新額度」行不通：帳本不見只會停用真實呼叫，需依上方「帳本遺失的人工處理」。
 - 服務只綁 127.0.0.1；手機實測需要的 HTTPS 入口不在本 PR 範圍，也不要在這裡變更既有的 launchd／tailscale 設定。

@@ -43,7 +43,7 @@ it.each(TAMPERS)('帳本於執行中被改壞（$name）：之後 LLM 與 TTS �
   expect(readFileSync(config.openai.ledgerPath, 'utf8')).toBe(valid);
 });
 
-type Failure = { name: string; env?: Record<string, string>; respond: () => Promise<Response> };
+type Failure = { name: string; attempts?: number; env?: Record<string, string>; respond: () => Promise<Response> };
 const LLM_FAILURES: Failure[] = [
   { name: 'HTTP 500', respond: async () => new Response('upstream down', { status: 500 }) },
   { name: '逾時', env: { PROVIDER_TIMEOUT_MS: '10' }, respond: () => new Promise<Response>(() => {}) },
@@ -82,12 +82,12 @@ it('LLM 一直失敗也繞不過每日上限：預扣累計到日額即拒絕，
 });
 
 const TTS_FAILURES: Failure[] = [
-  { name: 'HTTP 500', respond: async () => new Response('bad', { status: 500 }) },
+  { name: 'HTTP 500', attempts: 2, respond: async () => new Response('bad', { status: 500 }) },
   { name: '逾時', env: { TTS_TIMEOUT_MS: '10' }, respond: () => new Promise<Response>(() => {}) },
   { name: '空音訊', respond: async () => new Response(new Uint8Array()) },
 ];
 
-it.each(TTS_FAILURES)('TTS 失敗（$name）不釋放預扣：金額與每日字數都累計', async ({ env, respond }) => {
+it.each(TTS_FAILURES)('TTS 失敗（$name）不釋放預扣：金額與每日字數都累計', async ({ env, respond, attempts = 1 }) => {
   const config = realConfig(env);
   const runtime = new RealProviderRuntime(config.openai);
   const fetchImpl = vi.fn<typeof fetch>(respond);
@@ -96,8 +96,8 @@ it.each(TTS_FAILURES)('TTS 失敗（$name）不釋放預扣：金額與每日字
   for (const [index, line] of lines.entries()) {
     await expect(tts.synthesize(line, signal())).rejects.toBeDefined();
     const day = Object.values(runtime.ledger!.snapshot().days)[0]!;
-    expect(day.usd).toBeCloseTo((index + 1) * 5 * 10 / 1e6, 9);
-    expect(day.graphemes).toBe((index + 1) * 5);
+    expect(day.usd).toBeCloseTo((index + 1) * attempts * 5 * 10 / 1e6, 9);
+    expect(day.graphemes).toBe((index + 1) * attempts * 5);
   }
-  expect(fetchImpl).toHaveBeenCalledTimes(3);
+  expect(fetchImpl).toHaveBeenCalledTimes(3 * attempts);
 });
