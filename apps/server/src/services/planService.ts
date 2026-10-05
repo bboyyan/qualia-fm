@@ -271,6 +271,8 @@ export class PlanService {
       try { await this.deps.runtime.claimPlan(signal); }
       catch (error) {
         if (signal.aborted) throw signal.reason;
+        // 配額是明確拒絕開台，不能降級成 MOCK 成功後讓 UI 誤判 INTERNAL。
+        if (error instanceof AppError && error.code === 'QUOTA_EXCEEDED') throw error;
         realReason = safeReason(error, '真實供應商無法使用。');
       }
     }
