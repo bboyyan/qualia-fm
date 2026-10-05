@@ -14,6 +14,7 @@ import {
   type MockScenario,
   type PlanDraft,
   type PlanRequest,
+  type ResolvedTrack,
   type ShowPlan,
 } from '@qualia/contracts';
 import type { RealProviderRuntime } from '../budget/runtime.js';
@@ -35,8 +36,12 @@ const TARGET_SEGMENTS = 5;
 /** TTS 階段結束後留給組裝節目的餘裕；開始下一段前剩餘時間須 ≥ TTS 單次逾時＋此餘裕。 */
 const SPEECH_DEADLINE_MARGIN_MS = 250;
 const monotonicNow = (): number => performance.now();
+const SPOTIFY_RESOLVE_WARNING = 'Spotify 對應暫時失敗，部分曲目改列待確認。';
+const spotifyMismatchWarning = (count: number): string => `Spotify 找不到曲名與藝人都相符（且可播放）的曲目，已略過 ${count} 首提名，改用下一首。`;
 
 export interface PlanServiceDeps {
+  /** SPOTIFY_ENABLED 且已連結時，把真實提名對應成 Spotify URI；MOCK 提名不送 Search。 */
+  readonly spotify?: { readonly resolver: CatalogResolver; readonly linked: () => boolean };
   readonly runtime?: RealProviderRuntime;
   /** 啟用真實 LLM 時的降級來源（MOCK）；未設定時維持原行為：無效兩次即 PLAN_INVALID。 */
   readonly fallbackPlanner?: EditorialPlanner;
@@ -130,6 +135,24 @@ export class PlanService {
     return { ...speech, url: `/api/media/tts/${showId}/${segmentId}/${speech.url.split('/').at(-1)!}` };
   }
 
+  /** 「愛」→ Loved：URI 一律由伺服器依擁有者的節目查出，不接受用戶端傳入。 */
+  spotifyUriFor(ownerId: string, showId: string, segmentId: string): string {
+    const locator = this.show(ownerId, showId).segments.find((s) => s.segmentId === segmentId)?.track.audioLocator;
+    if (locator?.kind !== 'spotify_uri') throw new AppError('NOT_FOUND');
+    return locator.uri;
+  }
+
+  ownsSpotifyUri(ownerId: string, uri: string): boolean {
+    return this.deps.store.ownedShows(ownerId).some((plan) => plan.segments.some((s) => s.track.audioLocator.kind === 'spotify_uri' && s.track.audioLocator.uri === uri));
+  }
+
+  scrubSpotify(): void {
+    this.deps.store.scrubSpotify();
+  }
+
+  /**
+   * 帳本只存 LLM 當時提名的原始曲名／藝人＋評價＋原因＋日期；永遠不讀 segment.track（Spotify 回傳欄位）。
+   */
   async feedback(ownerId: string, request: FeedbackRequest) {
     const show = this.show(ownerId, request.showId);
     const segment = show.segments.find((s) => s.segmentId === request.segmentId);
@@ -207,15 +230,19 @@ export class PlanService {
         realReason = safeReason(error, '真實供應商無法使用。');
       }
     }
-    const draft = await this.draftWithFallback(editorial, input.scenario, signal, realReason, notices);
+    const { draft, mock } = await this.draftWithFallback(editorial, input.scenario, signal, realReason, notices);
     if (this.deps.tts && realReason) notices.push(`${PROVIDER_NOTICES.tts}：${realReason}`);
     await this.enter(jobId, 'matching', input.scenario === 'slow' ? slowPhaseMs : phaseMs, signal);
     await this.enter(jobId, 'resolving', phaseMs, signal);
-    const { playable, unavailable } = await this.resolveAll(draft.candidates, input.scenario, signal);
+    const spotify = !mock && this.deps.spotify?.linked() ? this.deps.spotify.resolver : null;
+    const { playable, unavailable, failed } = await this.resolveAll(spotify ?? this.deps.resolver, draft.candidates, input.scenario, signal);
     await this.enter(jobId, 'preparing', phaseMs, signal);
+    // 只說數量（提名來自 LLM），不含 token 或任何 Spotify 回傳內容。
+    const mismatched = spotify ? unavailable.length - failed : 0;
+    const resolveWarnings = [...(failed > 0 ? [SPOTIFY_RESOLVE_WARNING] : []), ...(mismatched > 0 ? [spotifyMismatchWarning(mismatched)] : [])];
     const plan = buildShowPlan({
       seed: input.request.seed,
-      draft,
+      draft: resolveWarnings.length > 0 ? { ...draft, warnings: [...resolveWarnings, ...draft.warnings].slice(0, 10) } : draft,
       playable,
       unavailable,
       speech: editorial.djEnabled ? { kind: 'mock_chime', durationMs: speechMs } : { kind: 'none' },
@@ -260,20 +287,25 @@ export class PlanService {
     return segments;
   }
 
-  /** 真實 LLM 失敗、拒答或兩次輸出都無效時，改用 fallback（MOCK）並明示；不額外增加真實呼叫次數。 */
-  private async draftWithFallback(input: EditorialInput, scenario: MockScenario, signal: AbortSignal, realReason: string | null, notices: string[]): Promise<PlanDraft> {
+  /**
+   * 真實 LLM 失敗、拒答或兩次輸出都無效時，改用 fallback（MOCK）並明示；不額外增加真實呼叫次數。
+   * `mock` 表示這份草稿是虛構示意（來自 MOCK planner），不會送去 Spotify 對應。
+   */
+  private async draftWithFallback(input: EditorialInput, scenario: MockScenario, signal: AbortSignal, realReason: string | null, notices: string[]): Promise<{ draft: PlanDraft; mock: boolean }> {
+    const planner = this.deps.planner;
     const fallback = this.deps.fallbackPlanner;
-    if (!fallback) return this.draftWithRepair(this.deps.planner, input, scenario, signal, realReason === null);
+    const isMock = (p: EditorialPlanner): boolean => p.kind === 'mock';
+    if (!fallback) return { draft: await this.draftWithRepair(planner, input, scenario, signal, realReason === null), mock: isMock(planner) };
     if (realReason) {
       notices.push(`${PROVIDER_NOTICES.llm}：${realReason}`);
-      return this.draftWithRepair(fallback, input, scenario, signal, false);
+      return { draft: await this.draftWithRepair(fallback, input, scenario, signal, false), mock: true };
     }
     try {
-      return await this.draftWithRepair(this.deps.planner, input, scenario, signal, true);
+      return { draft: await this.draftWithRepair(planner, input, scenario, signal, true), mock: isMock(planner) };
     } catch (error) {
       if (signal.aborted) throw signal.reason;
       notices.push(`${PROVIDER_NOTICES.llm}：${safeReason(error, 'AI 選歌暫時無法使用。')}`);
-      return this.draftWithRepair(fallback, input, scenario, signal, false);
+      return { draft: await this.draftWithRepair(fallback, input, scenario, signal, false), mock: true };
     }
   }
 
@@ -293,18 +325,29 @@ export class PlanService {
     throw new AppError('PLAN_INVALID');
   }
 
-  private async resolveAll(candidates: readonly Candidate[], scenario: MockScenario, signal: AbortSignal) {
+  /** 單一候選對應失敗（例如 Spotify 暫時沒回應）只把該首列為待確認，不讓整輪失敗。 */
+  private async resolveAll(resolver: CatalogResolver, candidates: readonly Candidate[], scenario: MockScenario, signal: AbortSignal) {
     const playable: ResolvedCandidate[] = [];
     const unavailable: Candidate[] = [];
+    let failed = 0;
     const limit = Math.min(candidates.length, this.deps.config.limits.maxCandidatesPerPlan);
     for (let index = 0; index < limit && playable.length < TARGET_SEGMENTS; index += 1) {
       const candidate = candidates[index];
       if (!candidate) break;
-      const track = await this.deps.resolver.resolve(candidate, { signal, scenario, index });
+      let track: ResolvedTrack;
+      try {
+        track = await resolver.resolve(candidate, { signal, scenario, index });
+      } catch (error) {
+        if (signal.aborted) throw signal.reason;
+        if (resolver === this.deps.resolver) throw error;
+        failed += 1;
+        unavailable.push(candidate);
+        continue;
+      }
       if (track.canAttemptPlayback && track.availability === 'resolved') playable.push({ candidate, track });
       else unavailable.push(candidate);
     }
-    return { playable, unavailable };
+    return { playable, unavailable, failed };
   }
 
   private finish(job: JobRecord, plan: ShowPlan): void {

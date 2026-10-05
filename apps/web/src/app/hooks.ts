@@ -1,6 +1,29 @@
 import { useEffect, useState } from 'react';
+import type { PlaybackMode } from '../audio/types';
+import { LINK_MESSAGES, effectivePlaybackMode, readLinkOutcome, urlWithoutLinkOutcome } from '../features/spotify/spotifyMode';
 import { api } from './services';
 import { useAppStore, type Tab } from './appStore';
+
+/** 實際播放模式：伺服器核可＋已連結且使用者沒改回 B／MOCK 時才是 E（spotify）。 */
+export function useEffectivePlaybackMode(): PlaybackMode {
+  const settingsMode = useAppStore((s) => s.settings.playbackMode);
+  const caps = useAppStore((s) => s.capabilities);
+  const eMode = useAppStore((s) => s.eMode);
+  return effectivePlaybackMode(settingsMode, caps, eMode);
+}
+
+/** Spotify 授權回到 /?spotify=… 時顯示結果並清掉網址參數（不含任何 code／state）。 */
+function announceLinkOutcome(): void {
+  const outcome = readLinkOutcome(window.location.search);
+  if (!outcome) return;
+  window.history.replaceState(window.history.state, '', urlWithoutLinkOutcome(window.location.pathname, window.location.search, window.location.hash));
+  const store = useAppStore.getState();
+  store.showToast(LINK_MESSAGES[outcome]);
+  if (outcome === 'linked') {
+    store.setEMode('on');
+    store.setTab('settings');
+  }
+}
 
 /** Creates the anonymous session and reads the server's real capabilities once. */
 export function useBoot(): void {
@@ -10,7 +33,10 @@ export function useBoot(): void {
     api
       .ensureSession()
       .then(() => api.capabilities(controller.signal))
-      .then((caps) => setBoot('ready', caps))
+      .then((caps) => {
+        setBoot('ready', caps);
+        announceLinkOutcome();
+      })
       .catch(() => {
         if (!controller.signal.aborted) setBoot('error');
       });

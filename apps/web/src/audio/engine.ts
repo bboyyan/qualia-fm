@@ -5,10 +5,10 @@
  */
 import type { ShowPlan } from '@qualia/contracts';
 import { initialEngineState, reduce } from './reducer';
-import type { Action, AdapterEvent, Effect, EngineState, MediaAdapter, QueueItem, Reduction } from './types';
+import type { Action, AdapterEvent, Effect, EngineState, MediaAdapter, PlaybackMode, QueueItem, Reduction } from './types';
 
 export interface EngineOptions {
-  playbackMode?: 'manual' | 'mock';
+  playbackMode?: PlaybackMode;
   feedbackEnabled?: boolean;
   djEnabled: boolean;
   canSeek: boolean;
@@ -40,13 +40,19 @@ function toAction(event: AdapterEvent): Action {
       return { type: 'OWNER_PAUSED', attemptId: event.attemptId, owner: event.owner, positionMs: event.positionMs };
     case 'failed':
       return { type: 'OWNER_FAILED', attemptId: event.attemptId, owner: event.owner, code: event.code };
+    case 'device_lost':
+      return { type: 'DEVICE_LOST' };
   }
 }
 
-/** NotAllowedError → needs a tap; AbortError → superseded by our own pause/stop (not a failure). */
-export function classifyPlayError(error: unknown): 'AUTOPLAY_BLOCKED' | 'AUDIO_SOURCE_FAILED' | 'ignore' {
+/**
+ * NotAllowedError → needs a tap; AbortError → superseded by our own pause/stop (not a failure);
+ * DeviceUnavailableError → 外部播放裝置不在（Spotify），停下等使用者，不自動跳歌。
+ */
+export function classifyPlayError(error: unknown): 'AUTOPLAY_BLOCKED' | 'AUDIO_SOURCE_FAILED' | 'DEVICE_UNAVAILABLE' | 'ignore' {
   const name = (error as { name?: unknown } | null)?.name;
   if (name === 'NotAllowedError') return 'AUTOPLAY_BLOCKED';
+  if (name === 'DeviceUnavailableError') return 'DEVICE_UNAVAILABLE';
   if (name === 'AbortError') return 'ignore';
   return 'AUDIO_SOURCE_FAILED';
 }
@@ -102,7 +108,7 @@ export class PlaybackEngine {
     return sessionId;
   }
 
-  setPlaybackMode = (mode: 'manual' | 'mock'): Reduction => this.dispatch({ type: 'SET_MODE', mode });
+  setPlaybackMode = (mode: PlaybackMode): Reduction => this.dispatch({ type: 'SET_MODE', mode });
   manualStarted = (): Reduction => this.dispatch({ type: 'MANUAL_STARTED' });
   manualFinished = (): Reduction => this.dispatch({ type: 'MANUAL_FINISHED' });
   completeFeedback = (): Reduction => this.dispatch({ type: 'COMPLETE_FEEDBACK' });
@@ -203,7 +209,12 @@ export class PlaybackEngine {
   private watch(promise: Promise<void>, attemptId: number, owner: 'speech' | 'track'): void {
     promise.catch((error: unknown) => {
       const code = classifyPlayError(error);
-      if (code !== 'ignore') this.dispatch({ type: 'OWNER_FAILED', attemptId, owner, code });
+      if (code === 'ignore') return;
+      if (code === 'DEVICE_UNAVAILABLE') {
+        if (attemptId === this.state.attemptId) this.dispatch({ type: 'DEVICE_LOST' });
+        return;
+      }
+      this.dispatch({ type: 'OWNER_FAILED', attemptId, owner, code });
     });
   }
 

@@ -39,8 +39,11 @@ export interface RemovedEntry {
   readonly index: number;
 }
 
+/** manual＝B 手動；mock＝本站合成測試音；spotify＝E 模式（Spotify 自動串接，伺服器核可且已連結才可能）。 */
+export type PlaybackMode = 'manual' | 'mock' | 'spotify';
+
 export interface EngineState {
-  readonly playbackMode: 'manual' | 'mock';
+  readonly playbackMode: PlaybackMode;
   readonly feedbackEnabled: boolean;
   readonly feedbackNextIndex: number | null;
   readonly sessionId: string | null;
@@ -80,7 +83,7 @@ export interface ProviderState {
 
 export type Action =
   | { type: 'LOAD_SHOW'; show: ShowPlan; sessionId: string }
-  | { type: 'SET_MODE'; mode: 'manual' | 'mock' }
+  | { type: 'SET_MODE'; mode: PlaybackMode }
   | { type: 'MANUAL_STARTED' }
   | { type: 'MANUAL_FINISHED' }
   | { type: 'COMPLETE_FEEDBACK' }
@@ -133,7 +136,9 @@ export interface StartRequest {
 export type AdapterEvent =
   | { type: 'started' | 'ended'; attemptId: number; owner: OwnerKind }
   | { type: 'paused'; attemptId: number; owner: OwnerKind; positionMs: number }
-  | { type: 'failed'; attemptId: number; owner: OwnerKind; code: 'AUTOPLAY_BLOCKED' | 'AUDIO_SOURCE_FAILED' };
+  | { type: 'failed'; attemptId: number; owner: OwnerKind; code: 'AUTOPLAY_BLOCKED' | 'AUDIO_SOURCE_FAILED' }
+  /** 外部播放裝置（Spotify）不見了：引擎重新確認狀態，離線就停下等使用者處理。 */
+  | { type: 'device_lost' };
 
 /**
  * Provider boundary. Implementations own exactly one audio output; `start` must call the

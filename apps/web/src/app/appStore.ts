@@ -8,6 +8,7 @@ import type { Capabilities, MockScenario, SeedKind } from '@qualia/contracts';
 import { DEFAULT_SETTINGS, parseSettings, type Settings } from '../features/settings/settings';
 export type { Settings } from '../features/settings/settings';
 import type { ToastData } from '../ui/Toast';
+import type { EModePreference } from '../features/spotify/spotifyMode';
 
 export type Tab = 'home' | 'listen' | 'settings';
 export type SheetKind = 'bridge' | 'queue' | 'tune' | 'environment';
@@ -19,6 +20,25 @@ export interface Draft {
 }
 
 const SETTINGS_KEY = 'qfm.settings.v1';
+/** E 模式偏好另存：既有設定的 parseSettings 永遠不接受 E（伺服器才是權威）。 */
+const EMODE_KEY = 'qfm.emode.v1';
+
+function loadEMode(): EModePreference {
+  try {
+    return window.localStorage.getItem(EMODE_KEY) === 'off' ? 'off' : 'on';
+  } catch {
+    return 'on';
+  }
+}
+
+function saveEMode(value: EModePreference | null): void {
+  try {
+    if (value) window.localStorage.setItem(EMODE_KEY, value);
+    else window.localStorage.removeItem(EMODE_KEY);
+  } catch {
+    // Storage unavailable: preference lasts for this page only.
+  }
+}
 
 function loadSettings(): Settings {
   try {
@@ -50,6 +70,8 @@ export interface AppState {
   live: string;
   draft: Draft;
   settings: Settings;
+  /** 只在伺服器核可＋已連結時有作用；見 effectivePlaybackMode。 */
+  eMode: EModePreference;
   mockScenario: MockScenario;
   capabilities: Capabilities | null;
   boot: 'loading' | 'ready' | 'error';
@@ -62,6 +84,7 @@ export interface AppState {
   setDraft: (patch: Partial<Draft>) => void;
   setSettings: (patch: Partial<Settings>) => void;
   resetSettings: () => void;
+  setEMode: (eMode: EModePreference) => void;
   setMockScenario: (scenario: MockScenario) => void;
   setBoot: (boot: AppState['boot'], capabilities?: Capabilities | null) => void;
 }
@@ -75,6 +98,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   live: '',
   draft: { kind: 'feeling', text: '', artist: '' },
   settings: loadSettings(),
+  eMode: loadEMode(),
   mockScenario: 'five',
   capabilities: null,
   boot: 'loading',
@@ -108,7 +132,12 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
   resetSettings: () => {
     saveSettings(null);
-    set({ settings: DEFAULT_SETTINGS });
+    saveEMode(null);
+    set({ settings: DEFAULT_SETTINGS, eMode: 'on' });
+  },
+  setEMode: (eMode) => {
+    saveEMode(eMode);
+    set({ eMode });
   },
   setMockScenario: (mockScenario) => set({ mockScenario }),
   setBoot: (boot, capabilities = null) => set({ boot, capabilities }),

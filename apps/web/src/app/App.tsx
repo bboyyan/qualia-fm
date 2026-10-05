@@ -14,8 +14,10 @@ import { Button } from '../ui/Button';
 import { AppShell } from './AppShell';
 import { EnvironmentSheet } from './EnvironmentSheet';
 import { useAppStore } from './appStore';
-import { useBoot, usePopStateNavigation } from './hooks';
+import { useBoot, useEffectivePlaybackMode, usePopStateNavigation } from './hooks';
 import { generation, getEngine, tuneGeneration } from './services';
+import { connectPlayer, syncSpotifyOutput } from './spotify';
+import { effectivePlaybackMode } from '../features/spotify/spotifyMode';
 
 function BootError() {
   return (
@@ -35,8 +37,10 @@ function BootError() {
 
 /** Engine-wide side effects: DJ setting, lock-screen controls, foreground reconcile. */
 function useEngineBindings(): void {
-  const playbackMode = useAppStore((s) => s.settings.playbackMode);
+  const playbackMode = useEffectivePlaybackMode();
   useEffect(() => {
+    // E 模式才接上 Spotify 輸出（不載 SDK）；其他模式拔掉，router 回到單一 <audio>。
+    syncSpotifyOutput(playbackMode === 'spotify');
     getEngine().setPlaybackMode(playbackMode);
   }, [playbackMode]);
   const djEnabled = useAppStore((s) => s.settings.djEnabled);
@@ -99,6 +103,9 @@ function startReadyShow(): void {
   const show = generation.getState().show;
   if (!show || show.segments.length === 0) return;
   const engine = getEngine();
+  const store = useAppStore.getState();
+  // E 模式：同一次點擊內接上 Qualia 播放器（載入 SDK＋activateElement），介紹播放期間完成連線。
+  if (effectivePlaybackMode(store.settings.playbackMode, store.capabilities, store.eMode) === 'spotify') void connectPlayer();
   engine.loadShow(show);
   engine.play();
   generation.reset();

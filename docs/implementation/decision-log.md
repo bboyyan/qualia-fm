@@ -15,3 +15,7 @@
 | D-09 | 伺服器只綁定 `127.0.0.1` | 不公開部署；手機真機測試需另行設定可信 HTTPS 入口（未在本任務範圍） | 真機測試一律 NOT TESTED |
 | D-10 | 正式 `pnpm start` 由 Express 同源提供 `apps/web/dist`；dev 時 Vite proxy `/api` | docs/04、docs/09 拓樸 | 無 |
 | D-11 | Seed 草稿只存在記憶體（不寫 localStorage）；設定（DJ 開關、串詞長度）存 localStorage | docs/09：心情描述可能敏感；設定為非敏感偏好 | 「清除本機設定」會清 localStorage |
+| D-12 | （BRA-109）D-08 的 Spotify「一律拒絕啟動」改為嚴格閘門：預設全關；`SPOTIFY_ENABLED=true` 需 Client ID、redirect URI、加密金鑰；`SPOTIFY_DJ_APPROVED=true` 另需 ENABLED 與 `SPOTIFY_APPROVAL_REFERENCE` | 曄核准 E 模式落地；開關仍由伺服器 env 決定，實作者不設 true | 見 docs/spotify-e-mode.md；`.env.example` 維持 false |
+| D-13 | 網頁引擎的唯一 adapter 改為 `PlaybackRouter`：沒有 Spotify 輸出時原樣交給單一 `<audio>`；E 模式時 Spotify 曲目交給路徑 P／C，介紹確認已停才放歌 | 不疊音（Policy III.7）需要跨兩個音訊來源協調；預設路徑行為不變 | `PlaybackMode` 新增 `spotify`；reducer 對非 manual 一律自動接續 |
+| D-14 | 帳本只寫 LLM 提名的原始曲名／藝人；Spotify Search 結果只放在 `segment.track`，MOCK 提名不送 Search | Policy III.13／III.14：Spotify 資料不得輸入 AI 或建立畫像 | 防火牆測試 `spotifyFirewall.test.ts` |
+| D-15 | E 模式 UI 沿用既有 `--q-*` 配色與元件，design-v1 只採旅程／文案／狀態 | 曄 10/05 04:47：design-v1 視覺不採用 | 未做全站夜間主題 |

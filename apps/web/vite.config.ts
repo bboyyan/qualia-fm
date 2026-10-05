@@ -13,7 +13,8 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
-    proxy: { '/api': 'http://127.0.0.1:8080' },
+    // /callback：Spotify 後台登記的 redirect 路徑，由伺服器處理（只在 SPOTIFY_ENABLED=true 時存在）。
+    proxy: { '/api': 'http://127.0.0.1:8080', '/callback': 'http://127.0.0.1:8080' },
   },
   build: { target: 'es2022', sourcemap: false },
 });

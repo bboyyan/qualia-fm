@@ -7,7 +7,7 @@ import { CapabilityBadge } from '../ui/Feedback';
 import { Icon, type IconName } from '../ui/Icon';
 import { Toast } from '../ui/Toast';
 import { useAppStore, type Tab } from './appStore';
-import { useKeyboardOpen } from './hooks';
+import { useEffectivePlaybackMode, useKeyboardOpen } from './hooks';
 import styles from './shell.module.css';
 
 const NAV: readonly { tab: Tab; label: string; icon: IconName }[] = [
@@ -23,7 +23,9 @@ interface AppShellProps {
 }
 
 function TopBar() {
-  const mode = useAppStore((s) => s.capabilities?.mode ?? 'mock');
+  const providerMode = useAppStore((s) => s.capabilities?.mode ?? 'mock');
+  // E 模式實際由 Spotify 播放時如實改標 Spotify（避免誤以為仍是 MOCK）；其他情況與以前相同。
+  const mode = useEffectivePlaybackMode() === 'spotify' ? 'spotify' : providerMode;
   const openSheet = useAppStore((s) => s.openSheet);
   return (
     <header className={styles.topbar}>

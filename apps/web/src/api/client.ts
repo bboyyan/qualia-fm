@@ -12,8 +12,18 @@ import {
   ErrorEnvelopeSchema,
   HEADERS,
   JobInfoSchema,
+  LovedResultSchema,
   SessionInfoSchema,
   ShowPlanSchema,
+  SpotifyDevicesSchema,
+  SpotifyPlaybackSchema,
+  SpotifyTokenSchema,
+  type LovedRequest,
+  type LovedResult,
+  type SpotifyDevice,
+  type SpotifyPlayback,
+  type SpotifyPlayRequest,
+  type SpotifyToken,
   type Capabilities,
   type ErrorCode,
   type ErrorInfo,
@@ -56,6 +66,15 @@ export interface ApiClient {
   getJob(jobId: string, signal?: AbortSignal): Promise<JobInfo>;
   cancelJob(jobId: string): Promise<JobInfo>;
   getShow(showId: string, signal?: AbortSignal): Promise<ShowPlan>;
+  /** E 模式（伺服器核可且已連結）才可用；token 只給 Web Playback SDK。 */
+  spotifyToken(): Promise<SpotifyToken>;
+  spotifyDevices(): Promise<SpotifyDevice[]>;
+  spotifyPlayback(): Promise<SpotifyPlayback>;
+  spotifyPlay(request: SpotifyPlayRequest): Promise<void>;
+  spotifyPause(deviceId: string): Promise<void>;
+  /** 「愛」確認後加入 Qualia Loved；URI 由伺服器依節目查，用戶端只送段落識別。 */
+  spotifyLoved(request: LovedRequest): Promise<LovedResult>;
+  spotifyDisconnect(): Promise<void>;
 }
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -71,7 +90,7 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
   let session: SessionInfo | null = null;
   let pending: Promise<SessionInfo> | null = null;
 
-  async function send<T>(path: string, schema: z.ZodType<T>, init: RequestInit = {}): Promise<T> {
+  async function request(path: string, init: RequestInit): Promise<Response> {
     let res: Response;
     try {
       res = await fetchImpl(`${baseUrl}${path}`, { credentials: 'same-origin', ...init });
@@ -80,6 +99,11 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
       throw localError('NETWORK_ERROR');
     }
     if (!res.ok) throw await toApiError(res);
+    return res;
+  }
+
+  async function send<T>(path: string, schema: z.ZodType<T>, init: RequestInit = {}): Promise<T> {
+    const res = await request(path, init);
     const parsed = schema.safeParse(await res.json());
     if (!parsed.success) throw localError('INTERNAL', '服務回應格式不正確，請稍後再試。');
     return parsed.data;
@@ -89,6 +113,14 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
     const headers: Record<string, string> = { [HEADERS.csrf]: session?.csrfToken ?? '', ...extra };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     return send(path, schema, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal });
+  }
+
+  /** 204 無內容的狀態變更（播放代理、中斷連結）。 */
+  async function mutateEmpty(path: string, body?: unknown): Promise<void> {
+    await ensureSession();
+    const headers: Record<string, string> = { [HEADERS.csrf]: session?.csrfToken ?? '' };
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    await request(path, { method: 'POST', headers, body: body === undefined ? undefined : JSON.stringify(body) });
   }
 
   async function ensureSession(force = false): Promise<SessionInfo> {
@@ -116,6 +148,19 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
     getJob: (jobId, signal) => send(`/api/jobs/${encodeURIComponent(jobId)}`, JobInfoSchema, { signal }),
     cancelJob: (jobId) => mutate(`/api/jobs/${encodeURIComponent(jobId)}`, JobInfoSchema, 'DELETE'),
     getShow: (showId, signal) => send(`/api/shows/${encodeURIComponent(showId)}`, ShowPlanSchema, { signal }),
+    spotifyToken: async () => {
+      await ensureSession();
+      return mutate('/api/spotify/token', SpotifyTokenSchema, 'POST');
+    },
+    spotifyDevices: async () => (await send('/api/spotify/devices', SpotifyDevicesSchema)).devices,
+    spotifyPlayback: () => send('/api/spotify/playback', SpotifyPlaybackSchema),
+    spotifyPlay: (play) => mutateEmpty('/api/spotify/play', play),
+    spotifyPause: (deviceId) => mutateEmpty('/api/spotify/pause', { deviceId }),
+    spotifyLoved: async (loved) => {
+      await ensureSession();
+      return mutate('/api/spotify/loved', LovedResultSchema, 'POST', {}, loved);
+    },
+    spotifyDisconnect: () => mutateEmpty('/api/auth/spotify/logout'),
   };
 }
 

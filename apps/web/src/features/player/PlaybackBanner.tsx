@@ -6,9 +6,28 @@ import { getEngine, mockAudioControls } from '../../app/services';
 import type { EngineState } from '../../audio/types';
 import { Button } from '../../ui/Button';
 import { InlineRecovery } from '../../ui/Feedback';
+import { SpotifyRecovery } from '../spotify/SpotifyPanels';
 
 export function PlaybackBanner({ state }: { state: EngineState }) {
   const engine = getEngine();
+  const spotify = state.playbackMode === 'spotify';
+  if (state.phase === 'awaiting_gesture' && spotify) {
+    return (
+      <InlineRecovery
+        tone="warning"
+        title="暫停在這裡，等你"
+        testId="autoplay-blocked"
+        actions={
+          <Button block onClick={() => engine.play()} data-testid="tap-to-resume">
+            點一下繼續
+          </Button>
+        }
+      >
+        <p>iPhone 需要你親手點一下，才能開始下一段聲音。介紹和歌都在原地等你。</p>
+        <p>這是瀏覽器的保護機制，不是壞掉。剛才可能鎖屏或切到別的 App。</p>
+      </InlineRecovery>
+    );
+  }
   if (state.phase === 'awaiting_gesture') {
     return (
       <InlineRecovery
@@ -29,6 +48,7 @@ export function PlaybackBanner({ state }: { state: EngineState }) {
     return <InlineRecovery tone="info" title="正在確認播放狀態…" testId="reconciling" />;
   }
   if (state.phase !== 'recoverable_error' || !state.error) return null;
+  if (spotify && state.error.code === 'DEVICE_UNAVAILABLE') return <SpotifyRecovery state={state} />;
   const deviceLost = state.error.code === 'DEVICE_UNAVAILABLE';
   return (
     <InlineRecovery

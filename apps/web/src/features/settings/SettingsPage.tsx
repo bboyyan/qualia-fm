@@ -9,6 +9,10 @@ import { Button } from '../../ui/Button';
 import { Chip, SegmentedControl, Switch } from '../../ui/controls';
 import { CapabilityBadge, Eyebrow } from '../../ui/Feedback';
 import { PlaybackModeSettings } from './PlaybackModeSettings';
+import { useEffectivePlaybackMode } from '../../app/hooks';
+import { ModeStrip } from '../spotify/ModeStrip';
+import { SpotifySettingsSection } from '../spotify/SpotifyPanels';
+import { eModeAvailable, modeStrip } from '../spotify/spotifyMode';
 import styles from './settings.module.css';
 
 function DjSettings() {
@@ -171,17 +175,34 @@ export function SettingsPage() {
   const feedbackPending = engineState.phase === 'feedback';
   const resetSettings = useAppStore((s) => s.resetSettings);
   const showToast = useAppStore((s) => s.showToast);
+  const caps = useAppStore((s) => s.capabilities);
+  const setEMode = useAppStore((s) => s.setEMode);
+  const effectiveMode = useEffectivePlaybackMode();
+  const eAvailable = eModeAvailable(caps);
   return (
     <>
       <header className={styles.heading}>
         <Eyebrow>MAKE IT YOURS</Eyebrow>
         <h1>剛剛好的陪伴。</h1>
       </header>
-      <PlaybackModeSettings mode={settings.playbackMode} disabled={feedbackPending} onChange={(playbackMode) => {
-        getEngine().setPlaybackMode(playbackMode);
-        setSettings({ playbackMode });
-        showToast('播放模式已切換，請重新開始目前曲目。');
-      }} />
+      {caps?.spotifyEnabled && <ModeStrip labels={modeStrip(caps, effectiveMode)} />}
+      <PlaybackModeSettings
+        mode={settings.playbackMode}
+        disabled={feedbackPending}
+        eAvailable={eAvailable}
+        eActive={effectiveMode === 'spotify'}
+        onSelectE={() => {
+          setEMode('on');
+          showToast('已切到 E 模式：每首前先播完 AI 介紹，再由這個網頁播放。');
+        }}
+        onChange={(playbackMode) => {
+          if (eAvailable) setEMode('off');
+          getEngine().setPlaybackMode(playbackMode);
+          setSettings({ playbackMode });
+          showToast('播放模式已切換，請重新開始目前曲目。');
+        }}
+      />
+      <SpotifySettingsSection />
       <DjSettings />
       <EnvironmentSettings />
       <ScenarioSettings />
