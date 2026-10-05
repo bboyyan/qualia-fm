@@ -52,4 +52,20 @@ describe('createApiClient', () => {
     await Promise.all([client.ensureSession(), client.ensureSession()]);
     expect(calls).toBe(1);
   });
+
+  it('品味帳本：編輯帶 CSRF，紀錄查詢把 trackKey 編進網址（BRA-135）', async () => {
+    const seen: { url: string; init: RequestInit }[] = [];
+    const mark = { trackKey: '夜行者 — 遠方的燈', title: '遠方的燈', artist: '夜行者', mark: 'pinned', rating: null, note: null, lastAiredAt: null, updatedAt: '2026-10-05T12:00:00.000Z' };
+    const client = createApiClient(async (url, init) => {
+      seen.push({ url, init: init ?? {} });
+      if (url === '/api/session') return json(200, session);
+      if (url.startsWith('/api/taste/history')) return json(200, { entries: [] });
+      return json(200, mark);
+    });
+    expect(await client.tasteEdit({ target: { trackKey: mark.trackKey }, mark: 'pinned' })).toEqual(mark);
+    expect((seen[1]?.init.headers as Record<string, string>)['X-CSRF-Token']).toBe(session.csrfToken);
+    expect(JSON.parse(String(seen[1]?.init.body))).toEqual({ target: { trackKey: mark.trackKey }, mark: 'pinned' });
+    await client.tasteHistory(mark.trackKey);
+    expect(seen[2]?.url).toBe(`/api/taste/history?trackKey=${encodeURIComponent(mark.trackKey)}`);
+  });
 });

@@ -31,7 +31,7 @@
 .shell[data-keyboard='true'] .bottom { display: none; }
 .shell[data-keyboard='true'] .main { padding-bottom: 24px; }
 
-.nav { display: grid; grid-template-columns: repeat(3, 1fr); padding: 2px 12px; }
+.nav { display: grid; grid-template-columns: repeat(4, 1fr); padding: 2px 12px; }
 .navButton {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   min-height: var(--q-nav-height); border: 0; background: none; color: var(--q-muted); font-size: 13px;

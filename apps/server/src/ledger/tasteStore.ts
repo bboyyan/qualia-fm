@@ -132,6 +132,11 @@ export class TasteLedger {
     return mark ? { ...mark } : undefined;
   }
 
+  /** 單曲最近的帳本紀錄（新到舊，最多 limit 筆）；「我的歌」展開用。 */
+  async history(trackKey: string, limit: number): Promise<LedgerEntry[]> {
+    return this.loaded().entries.filter((entry) => entry.trackKey === trackKey).slice(-limit).reverse().map((entry) => ({ ...entry }));
+  }
+
   /** 冪等：已存在的 entryId 略過。全部寫入成功才回傳。 */
   async record(entries: readonly LedgerEntry[]): Promise<void> {
     const state = this.loaded();

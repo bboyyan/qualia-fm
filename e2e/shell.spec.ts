@@ -2,12 +2,12 @@ import { expect, test } from '@playwright/test';
 import { chooseFeeling, expectNoHorizontalOverflow, expectNotCoveredByBottomBar, fillSeed, openApp } from './support';
 
 test.describe('T02 shell and design foundation', () => {
-  test('opens in mock mode with three labelled tabs and no horizontal overflow', async ({ page }) => {
+  test('opens in mock mode with four labelled tabs and no horizontal overflow', async ({ page }) => {
     await openApp(page);
     const nav = page.getByRole('navigation', { name: '主要導覽' });
-    await expect(nav.getByRole('button')).toHaveText(['開台', '收聽', '設定']);
+    await expect(nav.getByRole('button')).toHaveText(['開台', '收聽', '我的', '設定']);
     await expect(page.getByTestId('tab-home')).toHaveAttribute('aria-current', 'page');
-    for (const tab of ['listen', 'settings', 'home'] as const) {
+    for (const tab of ['listen', 'mine', 'settings', 'home'] as const) {
       await page.getByTestId(`tab-${tab}`).click();
       await expectNoHorizontalOverflow(page);
     }

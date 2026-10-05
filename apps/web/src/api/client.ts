@@ -32,6 +32,12 @@ import {
   type PlanRequest,
   type SessionInfo,
   type ShowPlan,
+  TasteHistoryResponseSchema,
+  TasteMarksResponseSchema,
+  TrackMarkSchema,
+  type LedgerEntry,
+  type TasteEditRequest,
+  type TrackMark,
 } from '@qualia/contracts';
 
 export class ApiError extends Error {
@@ -75,6 +81,12 @@ export interface ApiClient {
   /** 「愛」確認後加入 Qualia Loved；URI 由伺服器依節目查，用戶端只送段落識別。 */
   spotifyLoved(request: LovedRequest): Promise<LovedResult>;
   spotifyDisconnect(): Promise<void>;
+  /** 品味帳本（BRA-134）：每首歌目前的評價／標記，最近更新在前。 */
+  tasteMarks(signal?: AbortSignal): Promise<TrackMark[]>;
+  /** 手動改評價／標記；回傳更新後的 TrackMark。 */
+  tasteEdit(request: TasteEditRequest): Promise<TrackMark>;
+  /** 單曲最近幾筆帳本紀錄（新到舊）。 */
+  tasteHistory(trackKey: string, signal?: AbortSignal): Promise<LedgerEntry[]>;
 }
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -161,6 +173,13 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
       return mutate('/api/spotify/loved', LovedResultSchema, 'POST', {}, loved);
     },
     spotifyDisconnect: () => mutateEmpty('/api/auth/spotify/logout'),
+    tasteMarks: async (signal) => (await send('/api/taste/marks', TasteMarksResponseSchema, { signal })).marks,
+    tasteEdit: async (edit) => {
+      await ensureSession();
+      return mutate('/api/taste/marks', TrackMarkSchema, 'POST', {}, edit);
+    },
+    tasteHistory: async (trackKey, signal) =>
+      (await send(`/api/taste/history?trackKey=${encodeURIComponent(trackKey)}`, TasteHistoryResponseSchema, { signal })).entries,
   };
 }
 

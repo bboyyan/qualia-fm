@@ -3,9 +3,14 @@
  * real device; real-device evidence is tracked separately (always NOT TESTED in this build).
  * Uses the already-cached Playwright browsers (no download).
  */
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 4173;
+/** 預設 4173；同一台機器上有別的 worktree 在跑 E2E 時可用 E2E_PORT 換埠。 */
+const PORT = Number(process.env.E2E_PORT ?? 4173);
+/** 每次執行用新的品味帳本檔（BRA-135）：不寫進 repo 的 data/，上一次執行的標記也不會帶進來。 */
+const TASTE_LEDGER_PATH = join(tmpdir(), `qfm-e2e-taste-${process.pid}.json`);
 
 const phone = (width: number, height: number) => ({
   ...devices['Desktop Chrome'],
@@ -45,6 +50,7 @@ export default defineConfig({
       MOCK_SPEECH_MS: '1500',
       SESSION_RATE_LIMIT_PER_MIN: '2000',
       PLAN_RATE_LIMIT_PER_HOUR: '500',
+      TASTE_LEDGER_PATH,
     },
   },
   projects: [

@@ -4,6 +4,8 @@
  */
 import { createHash, randomBytes } from 'node:crypto';
 import {
+  PINNED_LIMIT,
+  TASTE_HISTORY_LIMIT,
   trackKeyOf,
   type FeedbackRating,
   type LedgerEntry,
@@ -19,6 +21,7 @@ export const TASTE_READ_WARNING = '品味帳本讀取失敗：本輪未套用封
 export const TASTE_AIRED_WARNING = '品味帳本寫入失敗：本輪播出紀錄沒有存下，之後可能重播。';
 const TASTE_WRITE_MESSAGE = '品味帳本寫入失敗，這次的評價或標記沒有記下，請再試一次。';
 const TASTE_UNREADABLE_MESSAGE = '品味帳本目前無法讀取，請稍後再試。';
+const PIN_LIMIT_MESSAGE = `釘選已滿 ${PINNED_LIMIT} 首（每輪開台都會帶上），先取消一首再釘。`;
 
 export interface TrackRef {
   readonly title: string;
@@ -41,6 +44,9 @@ function failureOf(error: unknown): string {
 }
 
 export class TasteService {
+  /** 同一伺服器的手動編輯依序執行，名額檢查到寫入之間不能插入另一筆釘選。 */
+  private edits: Promise<void> = Promise.resolve();
+
   constructor(private readonly ledger: TasteLedger, private readonly now: () => number) {}
 
   /** 開台前必讀；失敗不擋開台，但回傳明示 warning 並記錄錯誤。 */
@@ -86,9 +92,17 @@ export class TasteService {
   }
 
   /** 手動改評價／標記；回傳更新後的 TrackMark。 */
-  async edit(target: TasteTarget, request: Omit<TasteEditRequest, 'target'>): Promise<TrackMark> {
+  edit(target: TasteTarget, request: Omit<TasteEditRequest, 'target'>): Promise<TrackMark> {
+    const result = this.edits.then(() => this.editSerially(target, request));
+    // 錯誤仍交給這次呼叫者；佇列恢復，後續取消／重試不會被前一筆失敗堵住。
+    this.edits = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private async editSerially(target: TasteTarget, request: Omit<TasteEditRequest, 'target'>): Promise<TrackMark> {
     const track = await this.resolve(target);
     const fields = this.trackFields(track);
+    if (request.mark === 'pinned') await this.assertPinRoom(fields.trackKey);
     const idFor = (kind: string): string => request.clientRequestId
       ? `man_${digest([fields.trackKey, kind, request.clientRequestId])}`
       : `man_${randomBytes(12).toString('hex')}`;
@@ -106,6 +120,20 @@ export class TasteService {
   async marks(): Promise<TrackMark[]> {
     const marks = await this.read(() => this.ledger.marks());
     return marks.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  /** 單曲最近幾筆帳本紀錄（新到舊）；不在帳本裡的 trackKey 回 NOT_FOUND。 */
+  async history(trackKey: string): Promise<LedgerEntry[]> {
+    const entries = await this.read(() => this.ledger.history(trackKey, TASTE_HISTORY_LIMIT));
+    if (entries.length === 0) throw new AppError('NOT_FOUND');
+    return entries;
+  }
+
+  /** 新增釘選時檢查上限；已釘選的再送一次不算新增。上限前的舊帳本（超過上限）照常讀，只擋新增。 */
+  private async assertPinRoom(trackKey: string): Promise<void> {
+    const marks = await this.read(() => this.ledger.marks());
+    if (marks.some((mark) => mark.trackKey === trackKey && mark.mark === 'pinned')) return;
+    if (marks.filter((mark) => mark.mark === 'pinned').length >= PINNED_LIMIT) throw new AppError('PIN_LIMIT_REACHED', { message: PIN_LIMIT_MESSAGE });
   }
 
   private async resolve(target: TasteTarget): Promise<TrackRef> {

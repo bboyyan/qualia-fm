@@ -13,7 +13,7 @@ import type { EModePreference } from '../features/spotify/spotifyMode';
 import { DEFAULT_DRAFT, type Draft } from '../features/seed/seedList';
 export type { Draft } from '../features/seed/seedList';
 
-export type Tab = 'home' | 'listen' | 'settings';
+export type Tab = 'home' | 'listen' | 'mine' | 'settings';
 export type SheetKind = 'bridge' | 'queue' | 'tune' | 'environment';
 
 const SETTINGS_KEY = 'qfm.settings.v2';

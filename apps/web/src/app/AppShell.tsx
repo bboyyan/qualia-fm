@@ -1,5 +1,5 @@
 /**
- * Mobile-first shell: brand + opt-in developer diagnostics, one scroll container, explicit 3-tab nav
+ * Mobile-first shell: brand + opt-in developer diagnostics, one scroll container, explicit 4-tab nav
  * with labels, optional mini-player above the nav (never on the listen tab), toast + live region.
  */
 import { DeveloperOnly } from './developerMode';
@@ -14,6 +14,7 @@ import styles from './shell.module.css';
 const NAV: readonly { tab: Tab; label: string; icon: IconName }[] = [
   { tab: 'home', label: '開台', icon: 'radio' },
   { tab: 'listen', label: '收聽', icon: 'listen' },
+  { tab: 'mine', label: '我的', icon: 'heart' },
   { tab: 'settings', label: '設定', icon: 'sliders' },
 ];
 

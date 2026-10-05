@@ -44,7 +44,7 @@ export function useBoot(): void {
   }, [setBoot]);
 }
 
-const TABS: readonly Tab[] = ['home', 'listen', 'settings'];
+const TABS: readonly Tab[] = ['home', 'listen', 'mine', 'settings'];
 
 /** Back closes the sheet first; otherwise returns to the tab stored in history state. */
 export function usePopStateNavigation(): void {
