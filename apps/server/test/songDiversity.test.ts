@@ -51,7 +51,7 @@ function seeded(start: number): () => number {
 }
 
 describe('開台候選 8–12 首、目標可播仍 5 首（BRA-127）', () => {
-  const input: EditorialInput = { history: [], seedKind: 'feeling', seedText: 'TEST', seedArtist: null, tuning: null, djEnabled: true, djLength: 'short', recentPicks: [], exploration: 0 };
+  const input: EditorialInput = { history: [], tasteHints: { avoid: [], loved: [], disliked: [] }, seedKind: 'feeling', seedText: 'TEST', seedArtist: null, tuning: null, djEnabled: true, djLength: 'short', recentPicks: [], exploration: 0 };
   const draft = (tuning: string | null) => new MockEditorialPlanner().draft({ ...input, tuning }, { signal: new AbortController().signal, scenario: 'five', attempt: 1 });
 
   it('MOCK 候選池：開台 12 首、微調 8 首，都通過草稿 schema', async () => {
