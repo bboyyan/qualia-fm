@@ -119,8 +119,10 @@ export function applyTasteRules(candidates: readonly Candidate[], snapshot: Tast
   const fresh = unblocked.filter((c) => !recentSet.has(keyOf(c)));
 
   // 3. pinned（上限 maxPinned）：草稿裡有就用草稿那份，沒有就補一首；近 N 不擋釘選
-  const chosenPins = snapshot.marks.filter((mark) => mark.mark === 'pinned').sort(pinnedOrder).slice(0, Math.max(0, maxPinned));
-  const pinKeys = new Set(chosenPins.map((mark) => mark.trackKey));
+  const allPins = snapshot.marks.filter((mark) => mark.mark === 'pinned');
+  const chosenPins = allPins.sort(pinnedOrder).slice(0, Math.max(0, maxPinned));
+  // 未選中的釘選也不能走一般候選或近期補回繞過上限。
+  const pinKeys = new Set(allPins.map((mark) => mark.trackKey));
   const takenIds = new Set(candidates.map((c) => c.candidateId));
   const pinned = chosenPins.map((mark, index) => unblocked.find((c) => keyOf(c) === mark.trackKey) ?? pinnedCandidate(mark, index, takenIds));
 

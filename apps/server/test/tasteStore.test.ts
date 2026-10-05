@@ -12,6 +12,7 @@ import {
   reduceMarks,
   type TastePersistence,
 } from '../src/ledger/tasteStore.js';
+import { applyTasteRules } from '../src/services/tasteRules.js';
 
 const track = (title: string, artist = 'TEST Artist') => ({ trackKey: trackKeyOf(artist, title), title, artist });
 const at = (minute: number): string => new Date(Date.UTC(2026, 9, 5, 12, minute)).toISOString();
@@ -90,9 +91,47 @@ describe('TasteLedger 讀寫', () => {
     expect(snapshot.recentAired).not.toContain(track('Song 0').trackKey);
     expect((await ledger.find(track('Song 0').trackKey))?.rating).toBe('愛');
   });
+
+  it('修剪後仍保留 pinned 播出時間，重啟與後續寫入不會改壞釘選排序', async () => {
+    const path = tempPath();
+    const ledger = new TasteLedger(filePersistence(path));
+    await ledger.record([
+      mark('never', 'Never pin', 0, 'pinned'),
+      mark('older', 'Older pin', 1, 'pinned'), aired('older-air', 'Older pin', 2),
+      aired('old-air', 'Old pin', 3), mark('old', 'Old pin', 4, 'pinned'),
+    ]);
+    await ledger.record(Array.from({ length: MAX_AIRED_ENTRIES }, (_, i) => aired(`new-${i}`, `Song ${i}`, i + 10)));
+    expect((await ledger.find(track('Old pin').trackKey))?.lastAiredAt).toBe(at(3));
+    const reopened = new TasteLedger(filePersistence(path));
+    expect((await reopened.find(track('Old pin').trackKey))?.lastAiredAt).toBe(at(3));
+    // 遲到的舊播出事件與新的評價都不能抹掉最近一次播出。
+    await reopened.record([aired('late-old-air', 'Old pin', -1), rating('later-rating', 'Old pin', 600, '愛')]);
+    const snapshot = await new TasteLedger(filePersistence(path)).snapshot();
+    expect(snapshot.marks.find((item) => item.title === 'Old pin')).toMatchObject({ lastAiredAt: at(3), rating: '愛' });
+    expect(snapshot.recentAired).toHaveLength(MAX_AIRED_ENTRIES);
+    expect(snapshot.recentAired).not.toContain(track('Old pin').trackKey);
+    expect(applyTasteRules([], snapshot, { target: 2 }).candidates.map((item) => item.title)).toEqual(['Never pin', 'Older pin']);
+  });
 });
 
 describe('TasteLedger 失敗明示（不靜默、不覆寫）', () => {
+  it.each(['TEST corrupt JSON', '{"version":1,"entries":[],"marks":[{}]}'])('載入後損毀仍拒絕讀寫，保留原檔並可在修復後恢復：%s', async (corrupt) => {
+    const path = tempPath();
+    const ledger = new TasteLedger(filePersistence(path));
+    await ledger.record([mark('m1', 'Song A', 1, 'pinned')]);
+    await ledger.snapshot();
+    const good = readFileSync(path, 'utf8');
+    writeFileSync(path, corrupt);
+    await expect(ledger.record([mark('m2', 'Song B', 2, 'pinned')])).rejects.toMatchObject({ failure: 'corrupt' });
+    expect(readFileSync(path, 'utf8')).toBe(corrupt);
+    await expect(ledger.snapshot()).rejects.toMatchObject({ failure: 'corrupt' });
+    await expect(ledger.marks()).rejects.toMatchObject({ failure: 'corrupt' });
+    await expect(ledger.find(track('Song A').trackKey)).rejects.toMatchObject({ failure: 'corrupt' });
+    writeFileSync(path, good);
+    await ledger.record([mark('m2', 'Song B', 2, 'pinned')]);
+    expect((await ledger.marks()).map((item) => item.title)).toEqual(['Song A', 'Song B']);
+  });
+
   it('損毀檔：讀取丟 corrupt，寫入也拒絕且原檔不被覆寫', async () => {
     const path = tempPath();
     await new TasteLedger(filePersistence(path)).record([rating('r1', 'Song A', 1, '愛')]);

@@ -53,7 +53,7 @@ export const TrackMarkSchema = z.strictObject({
 });
 export type TrackMark = z.infer<typeof TrackMarkSchema>;
 
-/** 帳本檔（version 1）：entries 為事實來源；marks 是依 entries 重算的檢視，方便人或其他工具直接讀。 */
+/** 帳本檔（version 1）：評價／標記依 entries 重算；marks.lastAiredAt 另保留已修剪播出事件的摘要。 */
 export const TasteLedgerFileSchema = z.strictObject({
   version: z.literal(1),
   entries: z.array(LedgerEntrySchema),

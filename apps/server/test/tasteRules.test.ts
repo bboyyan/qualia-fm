@@ -87,6 +87,13 @@ describe('V2 開台前選歌管線：blocked → 近 N → pinned → 愛／不�
     expect(titles(outcome.candidates)).toEqual(['P2', 'P3', 'A', 'B', 'C', 'D', 'E']);
   });
 
+  it.each([{ recent: [] }, { recent: ['C', 'P3'] }])('草稿含三首 pinned 時，一般候選與近期補回都不能繞過上限（$recent）', ({ recent }) => {
+    const marks = ['P1', 'P2', 'P3'].map((title) => markOf(title, { mark: 'pinned' }));
+    const outcome = applyTasteRules(draft('P1', 'P2', 'P3', 'A', 'B', 'C'), snapshot(marks, recent), { target: 5 });
+    expect(titles(outcome.candidates)).toEqual(['P1', 'P2', 'A', 'B', 'C']);
+    expect(outcome.trace.readmitted).not.toContain(key('P3'));
+  });
+
   it('草稿裡沒有的 pinned 會補成合法候選（不撞 candidateId、沒有 transition）', () => {
     const outcome = applyTasteRules(draft('A', 'B'), snapshot([markOf('Pinned Song', { mark: 'pinned' })]), { target: 5 });
     const [pinned] = outcome.candidates;
@@ -101,7 +108,7 @@ describe('V2 開台前選歌管線：blocked → 近 N → pinned → 愛／不�
   });
 
   it('pinned 上限設 0 時不排釘選', () => {
-    const outcome = applyTasteRules(draft('A'), snapshot([markOf('P', { mark: 'pinned' })]), { target: 1, maxPinned: 0 });
+    const outcome = applyTasteRules(draft('P', 'A'), snapshot([markOf('P', { mark: 'pinned' })]), { target: 1, maxPinned: 0 });
     expect(titles(outcome.candidates)).toEqual(['A']);
   });
 

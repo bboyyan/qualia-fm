@@ -1,6 +1,6 @@
 /**
  * 品味帳本 store（BRA-134）：本機 JSON 檔為唯一事實來源，開台前直接讀，不依賴 Notion。
- * 讀不到／損毀一律丟 TasteLedgerError（由呼叫端明示降級），且不覆寫損毀檔；寫入成功後才更新記憶體。
+ * 每次操作重新讀檔驗證；讀不到／損毀一律丟 TasteLedgerError（由呼叫端明示降級），且不覆寫損毀檔。
  */
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -92,6 +92,15 @@ function recentAiredOf(entries: readonly LedgerEntry[]): string[] {
   return [...seen];
 }
 
+/** 評價／標記依事件重算；保留已修剪播出事件的摘要，較舊的補送事件不能倒退最後播出時間。 */
+function marksWithAiredHistory(entries: readonly LedgerEntry[], previous: readonly TrackMark[]): TrackMark[] {
+  const lastAired = new Map(previous.map((mark) => [mark.trackKey, mark.lastAiredAt]));
+  return reduceMarks(entries).map((mark) => {
+    const saved = lastAired.get(mark.trackKey);
+    return saved && saved > (mark.lastAiredAt ?? '') ? { ...mark, lastAiredAt: saved } : mark;
+  });
+}
+
 /** 超出上限時丟掉最舊的播出紀錄，其他事件不動。 */
 function trimAired(entries: readonly LedgerEntry[]): LedgerEntry[] {
   const airedCount = entries.filter((entry) => entry.kind === 'aired').length;
@@ -107,8 +116,6 @@ function trimAired(entries: readonly LedgerEntry[]): LedgerEntry[] {
 const byTime = (a: LedgerEntry, b: LedgerEntry): number => a.at.localeCompare(b.at);
 
 export class TasteLedger {
-  private state: TasteLedgerFile | null = null;
-
   constructor(private readonly persistence: TastePersistence) {}
 
   async snapshot(): Promise<TasteSnapshot> {
@@ -136,28 +143,27 @@ export class TasteLedger {
       fresh.push(entry);
     }
     if (fresh.length === 0) return;
-    const merged = trimAired([...state.entries, ...fresh].sort(byTime));
-    const next = TasteLedgerFileSchema.parse({ version: 1, entries: merged, marks: reduceMarks(merged) });
+    const merged = [...state.entries, ...fresh].sort(byTime);
+    const retained = trimAired(merged);
+    const retainedKeys = new Set(retained.map((entry) => entry.trackKey));
+    const marks = marksWithAiredHistory(merged, state.marks).filter((mark) => retainedKeys.has(mark.trackKey));
+    const next = TasteLedgerFileSchema.parse({ version: 1, entries: retained, marks });
     try { this.persistence.save(JSON.stringify(next, null, 2)); }
     catch { throw new TasteLedgerError('write'); }
-    this.state = next;
   }
 
-  /** 每次失敗都會在下次呼叫重試讀檔（人工修好檔案後不必重啟）；損毀檔絕不覆寫。 */
+  /** 每次呼叫驗檔，避免載入後損毀被舊狀態覆寫；人工修好檔案後不必重啟。 */
   private loaded(): TasteLedgerFile {
-    if (this.state) return this.state;
     let body: string | null;
     try { body = this.persistence.load(); }
     catch { throw new TasteLedgerError('unreadable'); }
     if (body === null) {
-      this.state = { version: 1, entries: [], marks: [] };
-      return this.state;
+      return { version: 1, entries: [], marks: [] };
     }
     let parsed: TasteLedgerFile;
     try { parsed = TasteLedgerFileSchema.parse(JSON.parse(body)); }
     catch { throw new TasteLedgerError('corrupt'); }
     const entries = [...parsed.entries].sort(byTime);
-    this.state = { version: 1, entries, marks: reduceMarks(entries) };
-    return this.state;
+    return { version: 1, entries, marks: marksWithAiredHistory(entries, parsed.marks) };
   }
 }
