@@ -3,6 +3,7 @@
  * playable count; 0 tracks keeps the analysis and the unconfirmed list with "修改感覺".
  * BRA-117：曲目用與種子清單同一個勾選清單，預設全選；主按鈕一鍵「全選・開始收聽」，只播勾選的。
  */
+import { DeveloperOnly } from '../../app/developerMode';
 import { useState } from 'react';
 import { useAppStore } from '../../app/appStore';
 import type { ShowPlan } from '@qualia/contracts';
@@ -30,18 +31,10 @@ const TARGET = 5;
 function PartialNotice({ show, onRegenerate }: { show: ShowPlan; onRegenerate: () => void }) {
   const count = show.segments.length;
   return (
-    <InlineRecovery
-      tone="warning"
-      title={`已確認 ${count} 首，${show.unavailable.length} 首候選暫時無法使用`}
-      testId="partial-notice"
-      actions={
-        <Button variant="outline" block onClick={onRegenerate}>
-          重新選歌
-        </Button>
-      }
-    >
-      不足 {TARGET} 首時我們如實告訴你，不會用別的歌充數。你可以先聽這 {count} 首。
-    </InlineRecovery>
+    <div className={styles.partialNotice} data-testid="partial-notice">
+      <span>先聽這 {count} 首。</span>
+      <Button variant="text" onClick={onRegenerate}>重新選歌</Button>
+    </div>
   );
 }
 
@@ -101,7 +94,7 @@ export function ReadyView({ show, hasActiveShow, onStart, onBackToListen, onEdit
             testId="ready-tracks"
           />
           <div className={styles.stats}>
-            <span data-testid="ready-count">已準備 {count} 首 · {show.segments.some((s) => s.track.provider === 'spotify') ? 'AI 提名' : 'MOCK 虛構曲目'}</span>
+            <span data-testid="ready-count">已準備 {count} 首</span>
             <span>尚未開始播放</span>
           </div>
           <Button block icon="play" disabled={chosen.length === 0} onClick={() => onStart(chosen)} data-testid="start-listening">
@@ -116,7 +109,7 @@ export function ReadyView({ show, hasActiveShow, onStart, onBackToListen, onEdit
           <Button block variant="text" className={styles.secondary} onClick={onEdit}>
             再調整一下感覺
           </Button>
-          <p className={styles.genNote}>{playbackMode === 'manual' ? 'B 手動模式：曲目為 MOCK 虛構資料。介紹只有文字與合成提示音；音樂請自行在 Spotify app 點歌，本站不播放或控制 Spotify。' : '曲目皆為虛構；按下後只會播放合成測試音（MOCK），不是真實音樂。'}</p>
+          <DeveloperOnly><p className={styles.genNote}>{playbackMode === 'manual' ? 'B 手動模式：曲目為 MOCK 虛構資料。介紹只有文字與合成提示音；音樂請自行在 Spotify app 點歌，本站不播放或控制 Spotify。' : '曲目皆為虛構；按下後只會播放合成測試音（MOCK），不是真實音樂。'}</p></DeveloperOnly>
         </>
       )}
     </section>

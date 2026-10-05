@@ -1,4 +1,5 @@
-import { isProviderNotice } from '@qualia/contracts';
+import { developerMode } from '../../app/developerMode';
+import { isProviderNotice, PROVIDER_NOTICES } from '@qualia/contracts';
 import { Button } from '../../ui/Button';
 import { InlineRecovery } from '../../ui/Feedback';
 
@@ -9,7 +10,7 @@ export function ProviderNotices({ warnings }: { warnings: readonly string[] }) {
   return (
     <InlineRecovery tone="warning" title="本輪已降級" testId="provider-notices">
       <ul>
-        {notices.map((notice) => <li key={notice}>{notice}</li>)}
+        {notices.map((notice) => <li key={notice}>{developerMode() ? notice : notice.startsWith(PROVIDER_NOTICES.llm) ? '選曲服務暫時無法使用，請重新選歌。' : '語音暫時無法使用，改為文字介紹。'}</li>)}
       </ul>
     </InlineRecovery>
   );

@@ -13,5 +13,5 @@ it('renders three rating buttons, a labelled optional reason and submit/skip con
   expect(html.toLowerCase()).toContain('maxlength="200"');
   expect(html).toContain('送出回饋');
   expect(html).toContain('略過回饋');
-  expect(html).toContain('TEST 假帳本');
+  expect(html).not.toContain('TEST 假帳本');
 });

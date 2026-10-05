@@ -70,7 +70,7 @@ interface LoveStepProps {
 
 export function LoveStep({ flow, title, playlistId, reason, nextLabel, onContinue }: LoveStepProps) {
   const state = useSyncExternalStore(flow.subscribe, flow.getState, flow.getState);
-  const ledger = flow.receipt.mode === 'fake' ? 'TEST 假帳本' : '帳本';
+  const ledger = flow.receipt.mode === 'fake' ? '本次回饋（服務重啟後不保留）' : '回饋';
   const asking = state.stage === 'confirm' || state.stage === 'adding';
   return (
     <>
@@ -87,7 +87,7 @@ export function LoveStep({ flow, title, playlistId, reason, nextLabel, onContinu
         footer={
           <div className={spotify.stageActions}>
             <Button block loading={state.stage === 'adding'} disabled={state.stage === 'adding'} onClick={() => void flow.confirm()} data-testid="love-add">加入 Qualia Loved</Button>
-            <Button variant="outline" block disabled={state.stage === 'adding'} onClick={() => flow.skip()} data-testid="love-skip">只在帳本記「愛」，不加入</Button>
+            <Button variant="outline" block disabled={state.stage === 'adding'} onClick={() => flow.skip()} data-testid="love-skip">只記「愛」，不加入</Button>
           </div>
         }
       >

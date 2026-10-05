@@ -69,7 +69,7 @@ export function SeekBar({ state }: { state: EngineState }) {
       />
       <div className={styles.timeRow}>
         <span data-testid="elapsed">{formatTime(shown)}</span>
-        <span>{formatTime(durationMs)} · {speech ? (item.segment.speech.kind === 'ai_audio' ? 'AI 合成語音' : 'MOCK 提示音') : item.segment.track.provider === 'spotify' ? 'Spotify' : 'MOCK 合成音'}</span>
+        <span>{formatTime(durationMs)} · {speech ? (item.segment.speech.kind === 'ai_audio' ? 'AI 合成語音' : '介紹') : item.segment.track.provider === 'spotify' ? 'Spotify' : '音訊'}</span>
       </div>
     </div>
   );

@@ -25,7 +25,7 @@ export function DeviceLostStages({ title, position, devices, detecting, onWake, 
       <p>iPhone 暫停一陣子或切到背景後，Spotify 常會把播放裝置收起來。這很常見，不是你按錯。照順序試就好：</p>
       <ol className={styles.stages}>
         <li className={styles.stage}>
-          <small>① 路徑 P · 網頁播放器</small>
+          <small>① 網頁播放器</small>
           <h4>點一下叫醒</h4>
           <p>重新接上這個頁面裡的播放器。</p>
           <div className={styles.stageActions}>
@@ -33,7 +33,7 @@ export function DeviceLostStages({ title, position, devices, detecting, onWake, 
           </div>
         </li>
         <li className={styles.stage}>
-          <small>② 路徑 C · Spotify app</small>
+          <small>② Spotify app</small>
           <h4>讓 Spotify app 接手</h4>
           <p>打開 Spotify，隨便播一首再暫停，回到這裡按「重新偵測」。</p>
           <div className={styles.stageActions}>

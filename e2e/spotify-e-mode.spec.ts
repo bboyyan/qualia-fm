@@ -86,7 +86,7 @@ interface FakeServer {
 }
 
 /** 假造 E 模式的伺服器：capabilities（核可＋連結狀態）、Spotify 對應後的節目、token／播放代理／Loved。 */
-async function fakeEModeServer(page: Page, options: { linked: boolean }): Promise<FakeServer> {
+async function fakeEModeServer(page: Page, options: { linked: boolean; clean?: boolean }): Promise<FakeServer> {
   const server: FakeServer = { linked: options.linked, plays: [], loved: [], devices: [] };
   await page.addInitScript(FAKE_SDK);
   await page.route('**/api/capabilities', async (route) => {
@@ -94,6 +94,7 @@ async function fakeEModeServer(page: Page, options: { linked: boolean }): Promis
     const caps = await response.json();
     await route.fulfill({ response, json: {
       ...caps,
+      ...(options.clean ? { providers: { llm: 'openai', tts: 'openai', reason: null } } : {}),
       spotifyEnabled: true,
       spotifyDjApproved: true,
       spotify: { linked: server.linked, clientId: 'E2Eclientid00000', redirectUri: 'https://qualia.example.test/callback', lovedPlaylistId: LOVED, scopes: ['streaming'] },
@@ -102,8 +103,9 @@ async function fakeEModeServer(page: Page, options: { linked: boolean }): Promis
   await page.route('**/api/shows/*', async (route) => {
     const response = await route.fetch();
     const show = await response.json();
-    const segments = show.segments.map((segment: { track: Record<string, unknown> }, i: number) => ({
+    const segments = show.segments.slice(0, options.clean ? 4 : 5).map((segment: { track: Record<string, unknown> }, i: number) => ({
       ...segment,
+      ...(options.clean ? { candidate: { ...show.segments[i].candidate, title: `遠方的燈 ${i + 1}`, artist: '夜行者', seedBridge: '讓溫暖的音色接住今晚。', transitionBridge: null, vibe: ['溫暖', '安靜', '空間感'], djLine: '接下來讓旋律陪你走一段。', uncertainty: null } } : {}),
       track: {
         ...segment.track,
         provider: 'spotify',
@@ -116,7 +118,7 @@ async function fakeEModeServer(page: Page, options: { linked: boolean }): Promis
         audioLocator: { kind: 'spotify_uri', uri: uriFor(i + 1) },
       },
     }));
-    await route.fulfill({ response, json: { ...show, segments } });
+    await route.fulfill({ response, json: { ...show, segments, ...(options.clean ? { warnings: [], unavailable: [], analysis: { ...show.analysis, hookOfFeeling: '安靜而溫暖', spatialSignature: null, emotionalVelocity: null, timbralPalette: [], lyricalContext: null, caveat: null } } : {}) } });
   });
   await page.route('**/api/spotify/token', (route) => route.fulfill({ json: { accessToken: 'E2E-fake-token', expiresAt: new Date(Date.now() + 3600_000).toISOString() } }));
   await page.route('**/api/spotify/pause', (route) => route.fulfill({ status: 204 }));
@@ -136,7 +138,7 @@ async function fakeEModeServer(page: Page, options: { linked: boolean }): Promis
 }
 
 async function startEModeShow(page: Page): Promise<void> {
-  await page.goto('/');
+  await page.goto('/?developer=1');
   await expect(page.getByTestId('mode-badge')).toContainText('Spotify');
   await generate(page, 'TEST seed');
   await page.getByTestId('start-listening').click();
@@ -155,11 +157,11 @@ async function reachPlaying(page: Page, server: FakeServer): Promise<string> {
 
 test.describe('BRA-109 E 模式（假 Spotify）', () => {
   test('E 模式關閉（預設伺服器）時與現在相同：E 停用、沒有 Spotify 區塊、不載 SDK、登入被擋', async ({ page, request }) => {
-    await page.goto('/');
+    await page.goto('/?developer=1');
     await expect(page.getByTestId('mode-badge')).toContainText('MOCK');
     await page.getByTestId('tab-settings').click();
     await expect(page.getByRole('radio', { name: 'E · Spotify 自動串接' })).toBeDisabled();
-    await expect(page.getByText('需曄當次明確同意，預設關閉', { exact: true })).toBeVisible();
+    await expect(page.getByText('Spotify 自動播放尚未開放。', { exact: true })).toBeVisible();
     await expect(page.getByTestId('e-mode-settings')).toHaveCount(0);
     await expect(page.getByTestId('mode-strip')).toHaveCount(0);
     expect(await page.locator('script[src*="sdk.scdn.co"]').count()).toBe(0);
@@ -187,7 +189,7 @@ test.describe('BRA-109 E 模式（假 Spotify）', () => {
         body: '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/?spotify=linked"><script>location.replace("/?spotify=linked")</script>',
       });
     });
-    await page.goto('/');
+    await page.goto('/?developer=1');
     await page.getByTestId('tab-settings').click();
     await expect(page.getByTestId('spotify-link-state')).toHaveText('未連結');
     await expect(page.getByTestId('disconnect-spotify')).toBeDisabled();
@@ -257,7 +259,7 @@ test.describe('BRA-109 E 模式（假 Spotify）', () => {
     await sheet.getByTestId('love-add').click();
     const result = page.getByTestId('love-result');
     await expect(result).toContainText('已加入 Qualia Loved');
-    await expect(result).toContainText('TEST 假帳本已寫入');
+    await expect(result).toContainText('本次回饋（服務重啟後不保留）已寫入');
     expect(server.loved).toHaveLength(1);
     expect(Object.keys(server.loved[0] as object).sort()).toEqual(['segmentId', 'showId']);
     await result.getByTestId('love-continue').click();
@@ -276,4 +278,72 @@ test.describe('BRA-109 E 模式（假 Spotify）', () => {
     await expect(page.getByTestId('love-result')).toContainText('只記在帳本');
     expect(server.loved).toEqual([]);
   });
+});
+
+test('BRA-125：預設旅程清爽，Spotify 播放、回饋與恢復仍可用', async ({ page }, testInfo) => {
+  const server = await fakeEModeServer(page, { linked: true, clean: true });
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const clean = async () => {
+    await expect(page.locator('body')).not.toContainText(/MOCK|TEST|假帳本|路徑 P|經核可模式/i);
+    for (const id of ['mode-badge', 'mode-strip', 'device-card', 'device-status', 'redetect']) await expect(page.getByTestId(id)).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+  };
+  await page.goto('/');
+  await expect(page.getByTestId('generate')).toBeEnabled();
+  await clean();
+  await page.getByTestId('tab-settings').click();
+  await expect(page.getByRole('radio', { name: 'E · Spotify 自動串接' })).toBeChecked();
+  await expect(page.getByRole('group', { name: 'MOCK 開台情境' })).toHaveCount(0);
+  await clean();
+  await page.getByTestId('tab-home').click();
+  await generate(page, '夜裡慢慢放鬆');
+  await clean();
+  await expect(page.getByTestId('ready-view')).toBeVisible();
+  const partial = page.getByTestId('partial-notice');
+  await expect(partial).toHaveText('先聽這 4 首。重新選歌');
+  await expect(partial).not.toHaveAttribute('role', 'alert');
+  await clean();
+  await page.screenshot({ path: `docs/implementation/screenshots/bra125-ready-${testInfo.project.name}.png` });
+  await page.getByTestId('start-listening').click();
+  const uri = await reachPlaying(page, server);
+  expect(server.plays[0]?.speechSilent).toBe(true);
+  await clean();
+  await page.screenshot({ path: `docs/implementation/screenshots/bra125-listen-${testInfo.project.name}.png` });
+  await page.getByTestId('bridge-card').click();
+  await clean();
+  await page.getByTestId('bridge-sheet').getByRole('button', { name: '關閉面板' }).click();
+  await page.getByTestId('open-tune').click();
+  await clean();
+  await page.getByTestId('tune-sheet').getByRole('button', { name: '關閉面板' }).click();
+  await fake(page, 'finish', uri);
+  await expect(page.getByTestId('feedback-card')).toBeVisible();
+  await clean();
+  await page.getByRole('button', { name: '愛', exact: true }).click();
+  await page.getByRole('button', { name: '送出回饋', exact: true }).click();
+  await page.getByTestId('love-skip').click();
+  await expect(page.getByTestId('love-result')).toContainText('服務重啟後不保留');
+  await clean();
+  await page.getByTestId('love-continue').click();
+  await expect.poll(() => server.plays.length).toBe(2);
+  await reachPlaying(page, server);
+  await fake(page, 'goAway');
+  await expect(page.getByTestId('wake-player')).toBeVisible();
+  await expect(page.getByTestId('detect-devices')).toBeVisible();
+  await clean();
+  expect(errors).toEqual([]);
+});
+
+test('BRA-125：預設不呈現示範節目與殘留測試播放設定', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('qfm.settings.v2', JSON.stringify({ playbackMode: 'mock' })));
+  await page.goto('/');
+  await page.getByTestId('tab-settings').click();
+  await expect(page.getByRole('radio', { name: 'B · 手動（預設）' })).toBeChecked();
+  await expect(page.locator('body')).not.toContainText(/MOCK|TEST|假帳本/i);
+  await page.getByTestId('tab-home').click();
+  await generate(page, '想聽點安靜的歌');
+  await expect(page.getByTestId('generation-error')).toBeVisible();
+  await expect(page.getByTestId('ready-view')).toHaveCount(0);
+  await expect(page.getByTestId('start-listening')).toHaveCount(0);
+  await expect(page.locator('body')).not.toContainText(/MOCK|TEST|假帳本/i);
 });

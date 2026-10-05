@@ -3,6 +3,7 @@
  * never mutated from here. Browser Back closes the open sheet first, then returns to the
  * previous tab (docs/02 導覽規則).
  */
+import { developerMode } from './developerMode';
 import { create } from 'zustand';
 import type { Capabilities, MockScenario } from '@qualia/contracts';
 import { DEFAULT_SETTINGS, migrateLegacySettings, parseSettings, type Settings } from '../features/settings/settings';
@@ -41,9 +42,13 @@ function saveEMode(value: EModePreference | null): void {
 function loadSettings(): Settings {
   try {
     const raw = window.localStorage.getItem(SETTINGS_KEY);
-    if (raw) return parseSettings(JSON.parse(raw));
+    if (raw) {
+      const settings = parseSettings(JSON.parse(raw));
+      return !developerMode() && settings.playbackMode === 'mock' ? { ...settings, playbackMode: 'manual' } : settings;
+    }
     const legacy = window.localStorage.getItem(LEGACY_SETTINGS_KEY);
-    return legacy ? migrateLegacySettings(JSON.parse(legacy)) : DEFAULT_SETTINGS;
+    const settings = legacy ? migrateLegacySettings(JSON.parse(legacy)) : DEFAULT_SETTINGS;
+    return !developerMode() && settings.playbackMode === 'mock' ? { ...settings, playbackMode: 'manual' } : settings;
   } catch {
     return DEFAULT_SETTINGS;
   }

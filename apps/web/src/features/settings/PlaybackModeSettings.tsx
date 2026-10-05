@@ -1,3 +1,4 @@
+import { DeveloperOnly } from '../../app/developerMode';
 import { useId } from 'react';
 import type { Settings } from './settings';
 import styles from './settings.module.css';
@@ -22,9 +23,11 @@ export function PlaybackModeSettings({ mode, disabled, onChange, eAvailable = fa
         <fieldset className={styles.modeOptions} disabled={disabled}>
           <legend className="sr-only">播放模式</legend>
           <label><input type="radio" name={id} value="manual" checked={!eActive && mode === 'manual'} onChange={() => onChange('manual')} /> B · 手動（預設）</label>
-          <p>自行在 Spotify app 點歌；本站只顯示介紹文字、MOCK 提示音與回饋。</p>
-          <label><input type="radio" name={id} value="mock" checked={!eActive && mode === 'mock'} onChange={() => onChange('mock')} /> MOCK · 合成測試音</label>
-          <p>僅供測試／開發，曲目為虛構資料。</p>
+          <p>自行在 Spotify app 點歌；本站提供介紹與回饋。</p>
+          <DeveloperOnly>
+            <label><input type="radio" name={id} value="mock" checked={!eActive && mode === 'mock'} onChange={() => onChange('mock')} /> MOCK · 合成測試音</label>
+            <p>僅供測試／開發，曲目為虛構資料。</p>
+          </DeveloperOnly>
           {eAvailable ? (
             <>
               <label><input type="radio" name={id} value="spotify" checked={eActive} onChange={() => onSelectE?.()} aria-describedby={`${id}-approval`} /> E · Spotify 自動串接</label>
@@ -33,7 +36,7 @@ export function PlaybackModeSettings({ mode, disabled, onChange, eAvailable = fa
           ) : (
             <>
               <label><input type="radio" name={id} value="spotify" disabled checked={false} readOnly aria-describedby={`${id}-approval`} /> E · Spotify 自動串接</label>
-              <p id={`${id}-approval`}>需曄當次明確同意，預設關閉</p>
+              <p id={`${id}-approval`}>Spotify 自動播放尚未開放。</p>
             </>
           )}
         </fieldset>

@@ -1,3 +1,4 @@
+import { DeveloperOnly } from '../../app/developerMode';
 import { useId, useSyncExternalStore } from 'react';
 import { FeedbackRatingSchema } from '@qualia/contracts';
 import { Button } from '../../ui/Button';
@@ -11,7 +12,7 @@ export function FeedbackCard({ model }: { model: FeedbackFormModel }) {
   return (
     <section className={styles.card} aria-label="這首的回饋" data-testid="feedback-card">
       <h2>這首，對你的感覺嗎？</h2>
-      <p>僅測試用：回饋寫入 TEST 假帳本，重啟即清除。請只填假資料。</p>
+      <DeveloperOnly><p>僅測試用：回饋寫入 TEST 假帳本，重啟即清除。請只填假資料。</p></DeveloperOnly>
       <form onSubmit={(event) => { event.preventDefault(); void model.submit(); }}>
         <div className={styles.ratings} role="group" aria-label="評價">
           {FeedbackRatingSchema.options.map((rating) => (

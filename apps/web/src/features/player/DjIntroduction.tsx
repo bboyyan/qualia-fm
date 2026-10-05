@@ -13,7 +13,7 @@ export function DjIntroduction({ djLine, paused, aiVoice = false, onSkip }: { dj
   return (
     <section className={styles.djStrip} aria-label="DJ 介紹" data-testid="dj-strip">
       <div className={styles.djHead}>
-        <p>{paused ? '介紹已暫停' : 'DJ 正在介紹'}<span> · {aiVoice ? 'AI 合成語音' : 'MOCK 提示音，非 AI 語音'}</span></p>
+        <p>{paused ? '介紹已暫停' : 'DJ 正在介紹'}{aiVoice && <span> · AI 合成語音</span>}</p>
         <Button variant="text" trailingIcon="chevron" onClick={onSkip} data-testid="skip-intro">跳過介紹</Button>
       </div>
       {/* 展開鈕放在引言同一列（右下），不另佔一行：360 寬首屏仍要看得到播放鍵。 */}

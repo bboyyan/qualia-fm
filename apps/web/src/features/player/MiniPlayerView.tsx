@@ -23,7 +23,7 @@ export function miniStatus(state: EngineState): string {
   if (state.phase === 'feedback') return '聽完了・回收聽留下回饋';
   if (state.phase === 'recoverable_error') return '播放中斷，回收聽頁處理';
   if (state.phase === 'speaking') {
-    return currentItem(state)?.segment.speech.kind === 'ai_audio' ? 'DJ 介紹中 · AI 合成語音' : 'DJ 介紹中 · MOCK 提示音';
+    return currentItem(state)?.segment.speech.kind === 'ai_audio' ? 'DJ 介紹中 · AI 合成語音' : 'DJ 介紹中';
   }
   return phaseLabel(state);
 }

@@ -25,11 +25,11 @@ const LABEL: Record<Exclude<SeedKind, 'song'>, string> = {
 };
 
 const PLACEHOLDER: Record<Exclude<SeedKind, 'song'>, string> = {
-  feeling: 'TEST：請輸入假資料，僅用於測試。',
-  sound: 'TEST：請輸入假聲音描述。',
+  feeling: '例如：想在夜裡慢慢放鬆。',
+  sound: '例如：溫暖的吉他，留一點空間感。',
 };
 
-export const EXAMPLES = ['TEST 假起點一', 'TEST 假起點二', 'TEST 假起點三'] as const;
+export const EXAMPLES = ['夜裡慢慢放鬆', '想找回一點精神', '陪我安靜走一段'] as const;
 
 interface SeedComposerProps {
   /** 已有節目在播：按鈕改成「建立下一段」。 */

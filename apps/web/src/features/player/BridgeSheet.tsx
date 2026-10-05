@@ -33,7 +33,7 @@ export function BridgeSheet() {
       {item && bridge && state.show && (
         <>
           <p className={styles.lead}>
-            {item.segment.candidate.title} · MOCK 虛構曲目
+            {item.segment.candidate.title}
             <br />
             讓推薦有一個聽得懂的理由。
           </p>
@@ -63,7 +63,7 @@ export function BridgeSheet() {
               closeSheet();
             }}
           >
-            {canReplay ? '重聽介紹（MOCK 提示音）' : '目前無法重聽介紹'}
+            {canReplay ? '重聽介紹' : '目前無法重聽介紹'}
           </Button>
           <p className={styles.disclaimer} data-testid="bridge-evidence">
             可信度：{EVIDENCE[item.segment.candidate.evidenceLevel] ?? EVIDENCE.unknown}。{item.segment.candidate.uncertainty ?? ''}

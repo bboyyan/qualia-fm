@@ -15,7 +15,7 @@ import { useGeneration } from '../seed/useGeneration';
 import { captureTuneContext, pendingTune, tuneRequest } from './tuneFlow';
 import styles from './sheets.module.css';
 
-const QUICK = ['TEST 微調一', 'TEST 微調二', 'TEST 微調三', 'TEST 微調四'] as const;
+const QUICK = ['再安靜一點', '多一點溫暖', '節奏輕快些', '留更多空間'] as const;
 
 const PHASE_TEXT: Record<string, string> = {
   queued: '排隊中…',
@@ -65,7 +65,7 @@ export function TuneSheet() {
         id={fieldId}
         className={styles.field}
         value={text}
-        placeholder="TEST：請輸入假微調。"
+        placeholder="說說接下來想聽的感覺。"
         onChange={(e) => setText(e.target.value)}
         maxLength={1000}
         disabled={running}
@@ -98,7 +98,7 @@ export function TuneSheet() {
           套用到接下來
         </Button>
       )}
-      <p className={styles.disclaimer}>MOCK：會向伺服器要一組新的虛構曲目替換未播放的部分；快速方向不是 BPM 設定。</p>
+      <p className={styles.disclaimer}>只調整接下來的曲目，正在聽的這首不會中斷。</p>
     </BottomSheet>
   );
 }

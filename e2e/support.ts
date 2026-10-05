@@ -33,7 +33,7 @@ export async function expectOnFirstScreen(page: Page, testId: string): Promise<v
 }
 
 export async function openApp(page: Page, playbackMode?: 'mock'): Promise<void> {
-  await page.goto('/');
+  await page.goto('/?developer=1');
   await expect(page.getByTestId('mode-badge')).toContainText('MOCK');
   if (playbackMode === 'mock') await choosePlaybackMode(page, 'mock');
 }

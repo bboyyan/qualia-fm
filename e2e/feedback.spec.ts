@@ -7,7 +7,7 @@ test('B default, E disabled, manual finish shows feedback and submission advance
   await page.getByTestId('tab-settings').click();
   await expect(page.getByRole('radio', { name: 'B · 手動（預設）' })).toBeChecked();
   await expect(page.getByRole('radio', { name: 'E · Spotify 自動串接' })).toBeDisabled();
-  await expect(page.getByText('需曄當次明確同意，預設關閉', { exact: true })).toBeVisible();
+  await expect(page.getByText('Spotify 自動播放尚未開放。', { exact: true })).toBeVisible();
   await page.getByTestId('tab-home').click();
   await generate(page, 'TEST seed');
   await page.getByTestId('start-listening').click();
@@ -32,7 +32,7 @@ test('B default, E disabled, manual finish shows feedback and submission advance
     expect((await stat(path)).size).toBeLessThan(300 * 1024);
   }
   await page.getByRole('button', { name: '送出回饋', exact: true }).click();
-  await expect(page.getByTestId('toast').first()).toContainText('已記錄至 TEST 假帳本');
+  await expect(page.getByTestId('toast').first()).toContainText('已收到這次回饋；服務重啟後不保留。');
   await expect(page.getByTestId('count-pill')).toHaveText('02 / 05');
   await page.getByRole('button', { name: '我開始播了', exact: true }).click();
   await page.getByRole('button', { name: '這首播完了', exact: true }).click();

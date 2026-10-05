@@ -44,7 +44,7 @@ test.describe('BRA-117', () => {
     await openApp(page, 'mock');
     await page.getByTestId('generate').click();
     await page.getByTestId('start-listening').click();
-    await expect(page.getByTestId('phase-label')).toContainText('MOCK 合成測試音播放中', { timeout: 10_000 });
+    await expect(page.getByTestId('phase-label')).toContainText('播放中', { timeout: 10_000 });
     await expect(page.getByTestId('feedback-card')).toHaveCount(0);
     await expect(page.getByTestId('count-pill')).toHaveText('01 / 05');
   });
@@ -54,7 +54,7 @@ test.describe('BRA-117', () => {
     await page.getByTestId('generate').click();
     await page.getByTestId('start-listening').click();
     await page.getByTestId('skip-intro').click();
-    await expect(page.getByTestId('phase-label')).toContainText('MOCK 合成測試音播放中', { timeout: 10_000 });
+    await expect(page.getByTestId('phase-label')).toContainText('播放中', { timeout: 10_000 });
     await page.getByTestId('next').click();
     await expect(page.getByTestId('feedback-card')).toBeVisible();
     await expect(page.getByTestId('track-title')).toBeVisible();

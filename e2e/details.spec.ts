@@ -6,7 +6,7 @@ async function startListening(page: Page): Promise<void> {
   await generate(page);
   await page.getByTestId('start-listening').click();
   await page.getByTestId('skip-intro').click();
-  await expect(page.getByTestId('phase-label')).toContainText('MOCK 合成測試音播放中', { timeout: 10_000 });
+  await expect(page.getByTestId('phase-label')).toContainText('播放中', { timeout: 10_000 });
 }
 
 const audioPaused = (page: Page) => page.evaluate(() => (document.querySelector('audio') as HTMLAudioElement).paused);
@@ -71,7 +71,7 @@ test.describe('T05 收聽與細節', () => {
     await page.getByTestId('open-tune').click();
     const sheet = page.getByRole('dialog', { name: '把接下來，調近一點' });
     await expect(sheet).toContainText('不打斷這首');
-    await sheet.getByRole('button', { name: 'TEST 微調一' }).click();
+    await sheet.getByRole('button', { name: '再安靜一點' }).click();
     await sheet.getByTestId('tune-apply').click();
     await expect(sheet.getByTestId('tune-running')).toBeVisible();
     expect(await audioPaused(page)).toBe(false);
@@ -127,7 +127,7 @@ test.describe('T05 收聽與細節', () => {
     await page.getByTestId('simulate-device-lost').click();
     await expect(page.getByTestId('playback-error')).toContainText('播放裝置目前未連線');
     await page.getByRole('button', { name: '重新連線' }).click();
-    await expect(page.getByTestId('phase-label')).toContainText('MOCK 合成測試音播放中', { timeout: 8_000 });
+    await expect(page.getByTestId('phase-label')).toContainText('播放中', { timeout: 8_000 });
   });
 
   test('turning DJ off skips intros from the next segment on', async ({ page }) => {
@@ -138,7 +138,7 @@ test.describe('T05 收聽與細節', () => {
     await page.getByTestId('next').click();
     await skipFeedback(page);
     await expect(page.getByTestId('dj-strip')).toHaveCount(0);
-    await expect(page.getByTestId('phase-label')).toContainText('MOCK 合成測試音播放中', { timeout: 8_000 });
+    await expect(page.getByTestId('phase-label')).toContainText('播放中', { timeout: 8_000 });
   });
 
   test('320px wide (≈200% zoom of a 640px window): no horizontal overflow and key actions reachable (AC32)', async ({ page }) => {

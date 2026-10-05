@@ -45,14 +45,14 @@ async function startListening(page: Page): Promise<void> {
 }
 
 async function waitForTrack(page: Page): Promise<void> {
-  await expect(page.getByTestId('phase-label')).toContainText('MOCK 合成測試音播放中', { timeout: 10_000 });
+  await expect(page.getByTestId('phase-label')).toContainText('播放中', { timeout: 10_000 });
 }
 
 test.describe('T04 播放引擎', () => {
   test('start plays the DJ chime then the MOCK track of the same segment, progress moves', async ({ page }) => {
     await startListening(page);
     await expect(page.getByTestId('track-title')).toHaveText('微光偏航');
-    await expect(page.getByTestId('dj-strip')).toContainText('MOCK 提示音，非 AI 語音');
+    await expect(page.getByTestId('dj-strip')).toContainText('DJ 正在介紹');
     await expectNoHorizontalOverflow(page);
     await expectOnFirstScreen(page, 'play-toggle');
     await waitForTrack(page);

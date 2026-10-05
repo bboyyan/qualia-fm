@@ -2,6 +2,7 @@
  * 設定頁的 E 模式區塊（純呈現）：狀態（預設關）＋L2 說明（會做／不會做）＋同意 sheet、Spotify 連結資訊、
  * 中斷連結、播放路徑順序、帳本／背景／AI 語音說明。沿用既有設定頁 group／row 與 BottomSheet、Button。
  */
+import { DeveloperOnly } from '../../app/developerMode';
 import { useState } from 'react';
 import { BottomSheet } from '../../ui/BottomSheet';
 import { Button } from '../../ui/Button';
@@ -60,7 +61,7 @@ export function SpotifyLinkView({ linked, linkedElsewhere = false, djApproved, c
             <p>
               預設關閉。{djApproved
                 ? '開啟後 Qualia 會：'
-                : '伺服器尚未核可 E 模式（SPOTIFY_DJ_APPROVED）：只能連結 Spotify、在 Spotify 開啟連結並自己播放；「愛」仍可加入 Qualia Loved。'}
+                : '伺服器尚未核可 E 模式：只能連結 Spotify、在 Spotify 開啟連結並自己播放；「愛」仍可加入 Qualia Loved。'}
             </p>
           </div>
           {djApproved && (
@@ -88,9 +89,9 @@ export function SpotifyLinkView({ linked, linkedElsewhere = false, djApproved, c
         <div className={settings.rowStack}>
           <dl className={styles.facts}>
             <div><dt>狀態</dt><dd data-testid="spotify-link-state">{linked ? '已連結' : linkedElsewhere ? '已由另一台裝置連結' : '未連結'}</dd></div>
-            <div><dt>Client ID</dt><dd>{clientId}</dd></div>
+            <DeveloperOnly><div><dt>Client ID</dt><dd>{clientId}</dd></div>
             <div><dt>Redirect</dt><dd>{redirectUri}</dd></div>
-            <div><dt>權限</dt><dd>{scopes.join(' ')}</dd></div>
+            <div><dt>權限</dt><dd>{scopes.join(' ')}</dd></div></DeveloperOnly>
           </dl>
         </div>
         <div className={settings.rowStack}>
@@ -103,12 +104,12 @@ export function SpotifyLinkView({ linked, linkedElsewhere = false, djApproved, c
       </section>
 
       <section className={settings.info} aria-label="播放路徑與說明">
-        <h3>播放路徑（依序嘗試）</h3>
+        <DeveloperOnly><h3>播放路徑（依序嘗試）</h3>
         <ul className={styles.list}>
           <li>P · Qualia 網頁播放器（主要）</li>
           <li>C · 遙控 Spotify app（備援）</li>
           <li>手動 · 自己點歌（最後退路，介紹與回饋照常）</li>
-        </ul>
+        </ul></DeveloperOnly>
         <p>帳本只存：日期、種子、AI 提名的曲名／藝人、評價、原因。不存 Spotify 回傳的封面、ID 或任何資料。</p>
         <p>完整 DJ 需要這頁保持在前景。鎖屏或切到背景可能中斷，回來時會請你點一下繼續。</p>
         <p>AI 合成語音在播放中與介紹卡上都會標示。不提供語音控制。</p>

@@ -30,7 +30,7 @@ test.describe('T03 開台與生成', () => {
     await openApp(page);
     await chooseScenario(page, '部分：3 首');
     await generate(page);
-    await expect(page.getByTestId('partial-notice')).toContainText('已確認 3 首');
+    await expect(page.getByTestId('partial-notice')).toContainText('先聽這 3 首');
     await expect(page.getByTestId('ready-count')).toContainText('已準備 3 首');
     await expect(page.getByRole('button', { name: '重新選歌' })).toBeVisible();
   });

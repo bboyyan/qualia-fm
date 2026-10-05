@@ -85,7 +85,7 @@ describe('設定：E 模式、L2 說明、中斷連結', () => {
 
   it('未連結：E 模式關、L2 說明、會做／不會做；中斷連結不可按', () => {
     const html = render(createElement(SpotifyLinkView, { ...props, linked: false }));
-    for (const text of ['E 模式', 'L2・需你明確同意', '預設關閉', '把任何 Spotify 資料交給 AI', 'Premium', '未連結', 'TESTclientid0000', 'https://qualia.example.test/callback', 'streaming']) expect(html).toContain(text);
+    for (const text of ['E 模式', 'L2・需你明確同意', '預設關閉', '把任何 Spotify 資料交給 AI', 'Premium', '未連結']) expect(html).toContain(text);
     expect(html).toMatch(/<button(?=[^>]*disabled="")[^>]*><span[^>]*>中斷 Spotify 連結/);
   });
 
