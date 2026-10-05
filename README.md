@@ -97,3 +97,5 @@ V5 的 `scripts/check-preferences.mjs` 掃描全 repo 程式碼（排除依賴�
 執行 `pnpm e2e` 時，`e2e/feedback.spec.ts` 會在 `test-results/` 的各測試目錄產生 `bra98-feedback-360x800.png` 與 `bra98-feedback-390x844.png`，以 CSS 像素截圖並檢查每張 <300KB；兩張總計 <600KB。不要跑大量舊截圖重生指令來替代這兩張證據。真機 NOT TESTED。
 
 V6 尚待專案管家外部 L1 授權實寫 TEST 列及補 PR 證據。`node scripts/notion-live-check.mjs` 預設不讀 token、不連線、不寫入。只有明確參數 `--confirm-write-one-test-row` 才會建構真實 adapter（先 `pnpm build`，token 僅從 `NOTION_TOKEN` 環境變數讀取；不要放入指令字串或 repo）。它只向固定帳本頁寫一列，種子與原因都標 TEST，回傳測試列連結；reader 排除 TEST 列，保留標記即符合回滾要求。此 agent 不執行真實檢查。
+
+Session 重啟恢復、期限與回滾策略：[BRA-161 文件](docs/session-strategy.md)。

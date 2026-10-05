@@ -73,6 +73,7 @@ const EnvSchema = z.object({
   OPENAI_PRICE_OUTPUT_PER_1M_TOKENS: z.string().optional(),
   OPENAI_PRICE_TTS_PER_1M_CHARS: z.string().optional(),
   STATIC_DIR: z.preprocess(emptyToUndefined, z.string().optional()),
+  SESSION_STORE_PATH: z.preprocess(blankToUndefined, z.string().max(1000).optional()),
   TASTE_LEDGER_PATH: z.preprocess(blankToUndefined, z.string().max(1000).optional()),
 });
 
@@ -97,6 +98,8 @@ export interface ServerConfig {
   };
   mock: { trackMs: number; speechMs: number; phaseMs: number; slowPhaseMs: number };
   staticDir: string | undefined;
+  /** BRA-161：私有 session／回饋上下文檔；test 未指定路徑時只用記憶體。 */
+  sessions: { path: string | null };
   /** 品味帳本（BRA-134）：絕對路徑的本機 JSON 檔；null＝只存在記憶體（只有 NODE_ENV=test 未設定時）。 */
   tasteLedger: { path: string | null };
   openai: {
@@ -269,6 +272,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
       slowPhaseMs: env.MOCK_SLOW_PHASE_MS,
     },
     staticDir: env.STATIC_DIR,
+    sessions: { path: env.SESSION_STORE_PATH ? resolve(env.SESSION_STORE_PATH) : env.NODE_ENV === 'test' ? null : resolve('data/sessions.json') },
     tasteLedger: { path: tasteLedgerPath(env) },
   };
 }

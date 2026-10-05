@@ -78,7 +78,7 @@ function createTasteLedger(config: ServerConfig): TasteLedger {
 
 export function createApp(config: ServerConfig, overrides: AppOverrides = {}): QualiaApp {
   const now = overrides.now ?? Date.now;
-  const sessions = new SessionStore();
+  const sessions = new SessionStore(config.sessions.path ? filePersistence(config.sessions.path) : undefined, now);
   const runtime = new RealProviderRuntime(config.openai, now);
   const startupReason = runtime.reason();
   if (startupReason) logger.error('openai_disabled', { reason: startupReason });
@@ -91,6 +91,7 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
   const tasteService = new TasteService(overrides.tasteLedger ?? createTasteLedger(config), now);
   const plans = new PlanService({
     config,
+    sessions,
     ledger: overrides.ledger ?? new InMemoryLedger(),
     tasteService,
     planner: overrides.planner ?? planner,

@@ -144,10 +144,25 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
     return session;
   }
 
+  /** BRA-161: recovery is scoped to feedback/taste; the replay cannot recurse. */
+  async function recoverSession<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const usedSession = session;
+    try { return await operation(); }
+    catch (error) {
+      if (!(error instanceof ApiError) || (error.status !== 401 && error.code !== 'SESSION_EXPIRED')) throw error;
+      signal?.throwIfAborted();
+      // Concurrent expired requests share the refresh; a late 401 must not replace it again.
+      if (session === usedSession) session = null;
+      await ensureSession();
+      signal?.throwIfAborted();
+      return operation();
+    }
+  }
+
   return {
     feedback: async (request) => {
       await ensureSession();
-      return mutate('/api/feedback', FeedbackReceiptSchema, 'POST', {}, request);
+      return recoverSession(() => mutate('/api/feedback', FeedbackReceiptSchema, 'POST', {}, request));
     },
     ensureSession,
     capabilities: (signal) => send('/api/capabilities', CapabilitiesSchema, { signal }),
@@ -173,13 +188,13 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
       return mutate('/api/spotify/loved', LovedResultSchema, 'POST', {}, loved);
     },
     spotifyDisconnect: () => mutateEmpty('/api/auth/spotify/logout'),
-    tasteMarks: async (signal) => (await send('/api/taste/marks', TasteMarksResponseSchema, { signal })).marks,
+    tasteMarks: async (signal) => (await recoverSession(() => send('/api/taste/marks', TasteMarksResponseSchema, { signal }), signal)).marks,
     tasteEdit: async (edit) => {
       await ensureSession();
-      return mutate('/api/taste/marks', TrackMarkSchema, 'POST', {}, edit);
+      return recoverSession(() => mutate('/api/taste/marks', TrackMarkSchema, 'POST', {}, edit));
     },
     tasteHistory: async (trackKey, signal) =>
-      (await send(`/api/taste/history?trackKey=${encodeURIComponent(trackKey)}`, TasteHistoryResponseSchema, { signal })).entries,
+      (await recoverSession(() => send(`/api/taste/history?trackKey=${encodeURIComponent(trackKey)}`, TasteHistoryResponseSchema, { signal }), signal)).entries,
   };
 }
 
