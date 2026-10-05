@@ -5,7 +5,8 @@
     "artist": null
   },
   "requestedCount": 5,
-  "candidateLimit": 7,
+  "candidateLimit": 12,
+  "candidateMin": 8,
   "tuning": null,
   "approvedEditorialNotes": [],
   "exclusionsFromOriginalModelCandidates": [],

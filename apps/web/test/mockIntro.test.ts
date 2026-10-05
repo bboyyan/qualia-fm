@@ -8,7 +8,7 @@ describe('MOCK 自然續播實際選中的介紹（BRA-117）', () => {
   it.each(['standard', 'short'] as const)('R2：%s transition 保留曲名、藝人、理由與聆聽提醒', async (djLength) => {
     const draft = PlanDraftSchema.parse(await new MockEditorialPlanner().draft({
       history: [], seedKind: 'feeling', seedText: '深夜', seedArtist: null,
-      tuning: null, djEnabled: true, djLength,
+      tuning: null, djEnabled: true, djLength, recentPicks: [], exploration: 0,
     }, { signal: new AbortController().signal, scenario: 'five', attempt: 1 }));
     const items = draft.candidates.map((candidate, index) => ({
       showId: 'showA', segment: { ...segment('showA', index + 1), candidate },

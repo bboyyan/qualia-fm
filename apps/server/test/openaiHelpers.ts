@@ -20,7 +20,7 @@ export function realConfig(extra: Record<string, string> = {}) {
 /** 合法 PlanDraft 的 JSON 字串，模擬模型輸出（內容仍被 PlanService 當不受信任資料驗證）；每段台詞不同，避免快取合併。 */
 export async function validDraftText(): Promise<string> {
   const draft = await new MockEditorialPlanner().draft(
-    { seedText: 'TEST', seedKind: 'feeling', seedArtist: null, history: [], tuning: null, djEnabled: true, djLength: 'short' },
+    { seedText: 'TEST', seedKind: 'feeling', seedArtist: null, history: [], tuning: null, djEnabled: true, djLength: 'short', recentPicks: [], exploration: 0 },
     { signal: new AbortController().signal, attempt: 1, scenario: 'five' },
   ) as { candidates: { djLine: string }[] };
   return JSON.stringify({ ...draft, candidates: draft.candidates.map((c, i) => ({ ...c, djLine: `第${i + 1}首 ${c.djLine}` })) });

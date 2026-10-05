@@ -197,7 +197,7 @@
         ],
         "additionalProperties": false
       },
-      "maxItems": 7
+      "maxItems": 12
     },
     "warnings": {
       "type": "array",

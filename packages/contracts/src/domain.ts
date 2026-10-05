@@ -169,7 +169,8 @@ export type ShowPlan = z.infer<typeof ShowPlanSchema>;
 export const PlanDraftSchema = z.strictObject({
   schemaVersion: z.literal(1),
   analysis: SonicDNASchema,
-  candidates: z.array(CandidateSchema).min(1).max(7),
+  /** BRA-127：候選池最多 12 首（請模型給 8–12）；少於 8 照用，不逼模型湊數。 */
+  candidates: z.array(CandidateSchema).min(1).max(12),
   warnings: z.array(z.string().max(400)).max(10),
 });
 export type PlanDraft = z.infer<typeof PlanDraftSchema>;

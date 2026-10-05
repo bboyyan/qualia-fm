@@ -6,12 +6,14 @@ import type { Candidate, MockScenario, ResolvedTrack } from '@qualia/contracts';
 import type { CatalogResolver, ResolverContext } from './types.js';
 
 /** Candidate indexes reported unavailable per scenario (exercises partial results). */
-const UNAVAILABLE: Record<MockScenario, ReadonlySet<number>> = {
-  five: new Set(),
-  slow: new Set(),
-  error: new Set(),
-  three: new Set([1, 3, 5, 6]),
-  zero: new Set([0, 1, 2, 3, 4, 5, 6]),
+const PLAYABLE_IN_THREE: ReadonlySet<number> = new Set([0, 2, 4]);
+const UNAVAILABLE: Record<MockScenario, (index: number) => boolean> = {
+  five: () => false,
+  slow: () => false,
+  error: () => false,
+  // 候選池再大也只有 3 首可播：補抽到底仍不足 5 首（BRA-127）。
+  three: (index) => !PLAYABLE_IN_THREE.has(index),
+  zero: () => true,
 };
 
 export class MockCatalogResolver implements CatalogResolver {
@@ -27,7 +29,7 @@ export class MockCatalogResolver implements CatalogResolver {
       artworkUrl: null,
       externalUrl: null,
     };
-    if (UNAVAILABLE[context.scenario].has(context.index)) {
+    if (UNAVAILABLE[context.scenario](context.index)) {
       return {
         ...base,
         durationMs: null,
