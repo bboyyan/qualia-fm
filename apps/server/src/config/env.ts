@@ -1,4 +1,4 @@
-/** 後端環境設定：不支援的播放模式／Spotify gate 拒絕啟動；OpenAI 缺設定明示降級。
+/** 後端環境設定：不支援的播放模式拒絕啟動；Spotify 開關為嚴格閘門（缺設定即拒絕啟動）；OpenAI 缺設定明示降級。
  * 金鑰不進錯誤、日誌或 Vite。
  */
 import { isAbsolute } from 'node:path';
@@ -14,6 +14,11 @@ const TTS_MODELS_WITHOUT_INSTRUCTIONS: ReadonlySet<string> = new Set(['tts-1', '
 /** 聲線指示上限（Unicode code points）；預設 B2 instr-zh 約 170 字，留足調整空間也避免誤貼長文。 */
 const MAX_TTS_INSTRUCTIONS_CHARS = 1500;
 const blankToUndefined = (value: unknown): unknown => (typeof value === 'string' && value.trim() === '' ? undefined : value);
+/** 曄的 Qualia Loved 歌單（非秘密 ID）；可用 SPOTIFY_LOVED_PLAYLIST_ID 覆寫。 */
+const DEFAULT_LOVED_PLAYLIST_ID = '0dF9anAJZv0IotD6lo2kl2';
+/** 本服務實際處理 Spotify 回呼的路徑；redirect URI 必須指向其中之一。 */
+export const SPOTIFY_CALLBACK_PATHS: readonly string[] = ['/callback', '/api/auth/spotify/callback'];
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['127.0.0.1', '[::1]']);
 
 const EnvSchema = z.object({
   NODE_ENV: z.preprocess(emptyToUndefined, z.enum(['development', 'test', 'production']).default('development')),
@@ -24,6 +29,12 @@ const EnvSchema = z.object({
   TTS_PROVIDER: z.preprocess(emptyToUndefined, z.enum(['mock', 'openai']).default('mock')),
   SPOTIFY_ENABLED: flag,
   SPOTIFY_DJ_APPROVED: flag,
+  SPOTIFY_CLIENT_ID: z.preprocess(blankToUndefined, z.string().optional()),
+  SPOTIFY_REDIRECT_URI: z.preprocess(blankToUndefined, z.string().optional()),
+  SPOTIFY_TOKEN_ENC_KEY: z.preprocess(blankToUndefined, z.string().optional()),
+  SPOTIFY_TOKEN_FILE: z.preprocess(blankToUndefined, z.string().default('./data/spotify-token.enc')),
+  SPOTIFY_APPROVAL_REFERENCE: z.preprocess(blankToUndefined, z.string().max(300).optional()),
+  SPOTIFY_LOVED_PLAYLIST_ID: z.preprocess(blankToUndefined, z.string().regex(/^[A-Za-z0-9]{22}$/).default(DEFAULT_LOVED_PLAYLIST_ID)),
   PLAN_DEADLINE_MS: int(60_000, 1_000, 120_000),
   MAX_LLM_CALLS_PER_PLAN: int(2, 1, 2),
   MAX_CANDIDATES_PER_PLAN: int(10, 5, 10),
@@ -66,7 +77,8 @@ export interface ServerConfig {
   allowedOrigins: readonly string[];
   secureCookies: boolean;
   mode: 'mock';
-  gates: { spotifyEnabled: false; spotifyDjApproved: false };
+  gates: { spotifyEnabled: boolean; spotifyDjApproved: boolean };
+  spotify: SpotifyConfig;
   limits: {
     planDeadlineMs: number;
     maxLlmCallsPerPlan: number;
@@ -89,20 +101,68 @@ export interface ServerConfig {
   };
 }
 
+export interface SpotifyConfig {
+  /** 只從 SPOTIFY_CLIENT_ID 讀取，程式不寫死。 */
+  readonly clientId: string | undefined;
+  readonly redirectUri: string | undefined;
+  /** 32 bytes；只在記憶體，不進錯誤訊息或日誌。 */
+  readonly tokenKey: Buffer | undefined;
+  readonly tokenFile: string;
+  readonly approvalReference: string | undefined;
+  readonly lovedPlaylistId: string;
+}
+
 export class ConfigError extends Error {
   override name = 'ConfigError';
 }
 
 type ParsedEnv = z.infer<typeof EnvSchema>;
 
-/** Gates that this build refuses to start with. Spotify stays a disabled boundary (docs/05). */
-function assertSupported(env: ParsedEnv): void {
-  if (env.SPOTIFY_ENABLED === 'true') {
-    throw new ConfigError('SPOTIFY_ENABLED=true is refused: Spotify G0-A/B/C gates have not passed and no Spotify adapter ships in this build.');
+/** Spotify 加密金鑰：base64（44 字）或 hex（64 字），解碼後必須剛好 32 bytes；否則視為無效。 */
+function decodeTokenKey(value: string | undefined): Buffer | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  const decoded = /^[0-9a-fA-F]{64}$/.test(trimmed) ? Buffer.from(trimmed, 'hex') : Buffer.from(trimmed, 'base64');
+  return decoded.length === 32 ? decoded : undefined;
+}
+
+/** HTTPS，或明確 loopback IP 的 HTTP（Spotify 不接受 localhost）；路徑必須是本服務處理的回呼。 */
+function isAcceptableRedirect(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
   }
+  const transportOk = url.protocol === 'https:' ? url.hostname !== 'localhost' : url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname);
+  return transportOk && !url.search && !url.hash && SPOTIFY_CALLBACK_PATHS.includes(url.pathname);
+}
+
+/**
+ * Spotify 嚴格閘門（fail closed）。預設全關＝與既有行為相同。
+ * SPOTIFY_ENABLED=true 需 Client ID、redirect URI、加密金鑰齊全且有效；
+ * SPOTIFY_DJ_APPROVED=true 另需 SPOTIFY_ENABLED=true 與可追溯的 SPOTIFY_APPROVAL_REFERENCE。
+ * 錯誤訊息只點名變數，不回顯值。
+ */
+function assertSpotifyGate(env: ParsedEnv): void {
   if (env.SPOTIFY_DJ_APPROVED === 'true') {
-    throw new ConfigError('SPOTIFY_DJ_APPROVED=true is refused: it requires a traceable approval and is never set by the implementer.');
+    if (env.SPOTIFY_ENABLED !== 'true') throw new ConfigError('SPOTIFY_DJ_APPROVED=true is refused: SPOTIFY_ENABLED=true is required.');
+    if (!env.SPOTIFY_APPROVAL_REFERENCE?.trim()) throw new ConfigError('SPOTIFY_DJ_APPROVED=true is refused: SPOTIFY_APPROVAL_REFERENCE (traceable approval) is empty.');
   }
+  if (env.SPOTIFY_ENABLED !== 'true') return;
+  const missing = [
+    !env.SPOTIFY_CLIENT_ID || !/^[A-Za-z0-9]{16,64}$/.test(env.SPOTIFY_CLIENT_ID) ? 'SPOTIFY_CLIENT_ID' : null,
+    !env.SPOTIFY_REDIRECT_URI || !isAcceptableRedirect(env.SPOTIFY_REDIRECT_URI) ? 'SPOTIFY_REDIRECT_URI' : null,
+    !decodeTokenKey(env.SPOTIFY_TOKEN_ENC_KEY) ? 'SPOTIFY_TOKEN_ENC_KEY' : null,
+  ].filter((name): name is string => name !== null);
+  if (missing.length > 0) {
+    throw new ConfigError(`SPOTIFY_ENABLED=true is refused: missing or invalid ${missing.join(', ')} (redirect must be HTTPS or a loopback IP and end in ${SPOTIFY_CALLBACK_PATHS.join(' or ')}; key must decode to 32 bytes).`);
+  }
+}
+
+/** Gates that this build refuses to start with. */
+function assertSupported(env: ParsedEnv): void {
+  assertSpotifyGate(env);
   if (env.PROVIDER_MODE !== 'mock') {
     throw new ConfigError(`PROVIDER_MODE=${env.PROVIDER_MODE} is not implemented in this build (T01–T05 ship the mock adapter only).`);
   }
@@ -156,7 +216,15 @@ export function loadConfig(source: Record<string, string | undefined> = process.
     allowedOrigins: originsFor(env),
     secureCookies: env.APP_ORIGIN.startsWith('https://'),
     mode: 'mock',
-    gates: { spotifyEnabled: false, spotifyDjApproved: false },
+    gates: { spotifyEnabled: env.SPOTIFY_ENABLED === 'true', spotifyDjApproved: env.SPOTIFY_DJ_APPROVED === 'true' },
+    spotify: {
+      clientId: env.SPOTIFY_CLIENT_ID,
+      redirectUri: env.SPOTIFY_REDIRECT_URI,
+      tokenKey: decodeTokenKey(env.SPOTIFY_TOKEN_ENC_KEY),
+      tokenFile: env.SPOTIFY_TOKEN_FILE,
+      approvalReference: env.SPOTIFY_APPROVAL_REFERENCE?.trim(),
+      lovedPlaylistId: env.SPOTIFY_LOVED_PLAYLIST_ID,
+    },
     limits: {
       planDeadlineMs: env.PLAN_DEADLINE_MS,
       maxLlmCallsPerPlan: env.MAX_LLM_CALLS_PER_PLAN,

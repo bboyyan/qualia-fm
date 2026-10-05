@@ -18,6 +18,12 @@ import { PlaybackBanner } from './PlaybackBanner';
 import { ProviderNotices, SpeechFallbackNotice } from './ProviderNotices';
 import { DjStrip, SeekBar, Transport, isSpeechPhase } from './PlayerControls';
 import styles from './player.module.css';
+import { DeviceStatusPill } from '../spotify/DeviceStatusView';
+import { useDeviceStatus } from '../spotify/deviceStatus';
+import { ModeStrip } from '../spotify/ModeStrip';
+import { DevicePanel } from '../spotify/SpotifyPanels';
+import { SpotifyTrackCard } from '../spotify/SpotifyTrackCard';
+import { modeStrip } from '../spotify/spotifyMode';
 
 /** Empty state with a next step — never a disabled dead end (docs/02 導覽規則). */
 export function ListenEmpty() {
@@ -42,13 +48,25 @@ export function ListenEmpty() {
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
+/** E 模式才出現：模式列＋常駐裝置狀態（預設模式不顯示，畫面與以前相同）。 */
+function SpotifyStatusBar({ state }: { state: EngineState }) {
+  const caps = useAppStore((s) => s.capabilities);
+  const status = useDeviceStatus();
+  return (
+    <>
+      <ModeStrip labels={modeStrip(caps, state.playbackMode)} />
+      <DeviceStatusPill status={status} />
+    </>
+  );
+}
+
 function ListenHeader({ state }: { state: EngineState }) {
   const openSheet = useAppStore((s) => s.openSheet);
   const position = state.currentIndex + 1;
   return (
     <div className={styles.listenTop}>
       <div className={styles.listenContext}>
-        <p className={styles.kicker}>你的私人電台 · MOCK 示範節目</p>
+        <p className={styles.kicker}>{state.playbackMode === 'spotify' ? '你的私人電台 · Spotify E 模式' : '你的私人電台 · MOCK 示範節目'}</p>
         <p className={styles.seedLine}>{state.show?.seed.text}</p>
       </div>
       <button
@@ -135,6 +153,9 @@ export function ListenPage() {
   const feedback = state.phase === 'feedback';
   const engine = getEngine();
   const palette = track.audioLocator.kind === 'mock_tone' ? track.audioLocator.palette : state.currentIndex;
+  const eMode = state.playbackMode === 'spotify';
+  // Spotify 對應到的曲目：顯示封面＋正式 metadata＋Spotify 標示與外連（Policy II.4／II.5）。
+  const spotifyTrack = track.provider === 'spotify' && track.availability === 'resolved';
   return (
     <section className={styles.listen} aria-label="正在收聽" data-testid="listen-page">
       <LedgerWarnings warnings={state.show?.warnings ?? []} />
@@ -143,12 +164,16 @@ export function ListenPage() {
       {state.speechFallbackId === item.segment.segmentId && (
         <SpeechFallbackNotice djLine={currentBridge(state)?.djLine ?? candidate.djLine} onRetry={() => engine.replayIntro()} />
       )}
+      {eMode && <SpotifyStatusBar state={state} />}
       <ListenHeader state={state} />
-      {!feedback && <SoundscapeArt palette={palette} spinning={state.phase === 'track_playing'} kicker="THE TEXTURE OF TONIGHT" />}
+      {!feedback && (spotifyTrack
+        ? <SpotifyTrackCard track={track} confirmed={eMode && state.phase === 'track_playing'} />
+        : <SoundscapeArt palette={palette} spinning={state.phase === 'track_playing'} kicker="THE TEXTURE OF TONIGHT" />)}
       <div className={styles.songHeading}>
         <h1 data-testid="track-title">{candidate.title}</h1>
         <p>
-          {candidate.artist} <span className={styles.mockTag}>MOCK 虛構曲目</span>
+          {candidate.artist} {track.provider === 'mock' && <span className={styles.mockTag}>MOCK 虛構曲目</span>}
+          {spotifyTrack && <span className={styles.mockTag}>AI 提名</span>}
         </p>
       </div>
       {!inIntro && !feedback && <VibeList vibes={candidate.vibe} />}
@@ -159,6 +184,7 @@ export function ListenPage() {
         manualTrack ? <ManualControls phase={state.phase} onStart={() => engine.manualStarted()} onFinish={() => engine.manualFinished()} onSkip={() => engine.next()} /> :
         <><SeekBar state={state} /><Transport state={state} /></>}
 
+      {eMode && <DevicePanel />}
       <NextUp state={state} />
     </section>
   );

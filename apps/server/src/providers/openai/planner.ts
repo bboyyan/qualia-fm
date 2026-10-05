@@ -36,6 +36,8 @@ export function estimateLlmReservation(body: string, config: OpenAIConfig): { in
 }
 
 export class OpenAIEditorialPlanner implements EditorialPlanner {
+  readonly kind = 'real' as const;
+
   constructor(private readonly config: OpenAIConfig, private readonly runtime: RealProviderRuntime, private readonly fetchImpl: typeof fetch) {}
 
   static requestBody(config: OpenAIConfig, input: EditorialInput) {

@@ -15,6 +15,8 @@ export interface PlannerContext {
  * PlanDraftSchema before use, exactly as it would a real model response.
  */
 export interface EditorialPlanner {
+  /** 'mock' 表示提名是虛構示意（不會送去 Spotify Search 對應）；未設定視為真實提名。 */
+  readonly kind?: 'mock' | 'real';
   draft(input: EditorialInput, context: PlannerContext): Promise<unknown>;
 }
 

@@ -25,6 +25,7 @@ import {
 } from '../security/sessions.js';
 import { assertFeatureAllowed, buildCapabilities } from '../services/capabilities.js';
 import type { PlanService } from '../services/planService.js';
+import { spotifyPublicRoutes, spotifySessionRoutes, type SpotifyServices } from './spotify.js';
 
 export interface ApiDeps {
   readonly runtime: RealProviderRuntime;
@@ -33,6 +34,8 @@ export interface ApiDeps {
   readonly sessions: SessionStore;
   readonly plans: PlanService;
   readonly now: () => number;
+  /** 只在 SPOTIFY_ENABLED=true 時存在。 */
+  readonly spotify?: SpotifyServices;
 }
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,100}$/;
@@ -69,8 +72,8 @@ function publicRoutes(router: Router, deps: ApiDeps): void {
     res.setHeader('Set-Cookie', sessionCookie(session.id, deps.config.secureCookies));
     res.json(toSessionInfo(session));
   });
-  // Spotify OAuth/token endpoints exist only as a closed boundary (docs/05, AC27).
-  router.use('/auth/spotify', () => assertFeatureAllowed(deps.config, 'spotify_auth'));
+  // Spotify OAuth：gate 關閉（預設）時一律 FEATURE_RESTRICTED（docs/05, AC27）。
+  spotifyPublicRoutes(router, deps);
 }
 
 function planRoutes(router: Router, deps: ApiDeps): void {
@@ -105,7 +108,7 @@ function planRoutes(router: Router, deps: ApiDeps): void {
 
 function sessionRoutes(router: Router, deps: ApiDeps): void {
   router.get('/capabilities', (_req, res) => {
-    res.json(buildCapabilities(deps.config, deps.runtime.statusReason()));
+    res.json(buildCapabilities(deps.config, deps.runtime.statusReason(), { linked: deps.spotify?.auth.isLinked() ?? false }));
   });
   router.post('/tts', async (req, res) => {
     if (deps.config.openai.tts !== 'openai') assertFeatureAllowed(deps.config, 'tts');
@@ -143,6 +146,7 @@ export function createApiRouter(deps: ApiDeps): Router {
   publicRoutes(router, deps);
   router.use(requireSession(deps.sessions, deps.now), requireCsrf(deps.config.allowedOrigins));
   sessionRoutes(router, deps);
+  spotifySessionRoutes(router, deps);
   planRoutes(router, deps);
   router.use(() => {
     throw new AppError('NOT_FOUND');

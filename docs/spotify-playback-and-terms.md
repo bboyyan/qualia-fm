@@ -1,5 +1,7 @@
 # Qualia FM｜播放與 Spotify 條款說明（BRA-101，給曄決定）
 
+> **BRA-109 更新（2026-10-05）**：E 模式（Spotify 自動串接）已實作，但**預設全部關閉**，行為與下文描述的 B 手動／MOCK 相同。「本版設成 `true` 會拒絕啟動」已改為**嚴格閘門**：`SPOTIFY_ENABLED=true` 需 Client ID、redirect URI、加密金鑰齊全；`SPOTIFY_DJ_APPROVED=true` 另需 `SPOTIFY_ENABLED=true` 與非空 `SPOTIFY_APPROVAL_REFERENCE`，缺任一即拒絕啟動。實作重點：PKCE 登入（無 secret）、refresh token 加密小檔、路徑 P（Web Playback SDK，僅使用者點擊後載入）與路徑 C（Web API 遙控，指令帶 device_id）、介紹播完並確認已停才放歌（不疊、不 ducking／crossfade）、每首前就緒檢查、暫停逾 10 分鐘先重新確認、三段友善提示（叫醒播放器 → Spotify app 接手 → 手動）、「愛」先確認再加入 Qualia Loved（只加不刪、去重）、串流時顯示封面＋metadata＋Spotify 標示＋「在 Spotify 開啟」。資料防火牆：Spotify Search 只用來把 LLM 提名對應成可播放 URI，結果不進 LLM、不進帳本（有測試）。啟用 checklist、env、L2 流程與回滾見 [spotify-e-mode.md](spotify-e-mode.md)。下文第 1–5 節為 BRA-101 當時（未實作）的分析，條款風險判讀仍然適用；真機（G0-C）仍未驗證。
+
 查證日期：**2026-10-04**（本機 `date '+%Y-%m-%d %H:%M:%S %Z'`：2026-10-04 20:05:12 CST）。本頁是工程風險說明，**不是法律意見，也不是 Spotify 核可或啟用授權**。標記「官方文件明文」「我們的推論」「待曄決定」分別代表來源事實、產品判讀與尚未授權的選項。
 
 現況依 [README](../README.md)、[Provider gates](../handoff/docs/05_PROVIDER_GATES.md)、[播放引擎](../handoff/docs/06_PLAYBACK_ENGINE.md)、[T04](implementation/reports/T04.md)、[T05](implementation/reports/T05.md) 與 [decision log](implementation/decision-log.md)：main 的 B 手動播放模式與回饋閉環已實作：介紹文字與 MOCK 提示音後，由使用者自行在 Spotify app 點歌，再於本站選「愛／還行／不對」與原因，送出或略過後進下一首；目前只寫 TEST 假帳本。MOCK 另可播放合成測試音，沒有真實歌曲、LLM 或 TTS。E 模式仍停用，`SPOTIFY_ENABLED` 與 `SPOTIFY_DJ_APPROVED` 維持 `false`，本版設成 `true` 會拒絕啟動；設定頁 DJ 開關只控制 MOCK，不能開啟 Spotify。

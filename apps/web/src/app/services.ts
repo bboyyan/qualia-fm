@@ -2,14 +2,17 @@
 import { createApiClient, newIdempotencyKey } from '../api/client';
 import { createAdapter } from '../audio/adapters/createAdapter';
 import { HtmlAudioAdapter } from '../audio/adapters/htmlAudioAdapter';
+import { PlaybackRouter } from '../audio/adapters/playbackRouter';
 import { PlaybackEngine } from '../audio/engine';
-import type { MediaAdapter } from '../audio/types';
 import { GenerationController, type GenerationDeps } from '../features/seed/generationController';
 import { FeedbackFormStore } from '../features/player/feedbackForm';
+import { LoveFlowStore } from '../features/player/loveFlow';
 import { useAppStore } from './appStore';
 
 export const api = createApiClient();
 export const feedbackForms = new FeedbackFormStore();
+/** 「愛」→ Qualia Loved 確認流程（每次回饋最多一個）。 */
+export const loveFlows = new LoveFlowStore();
 
 const deps: GenerationDeps = {
   api,
@@ -32,7 +35,7 @@ document.addEventListener('visibilitychange', () => {
   tuneGeneration.onVisibilityChange();
 });
 
-let adapter: MediaAdapter | null = null;
+let router: PlaybackRouter | null = null;
 let engine: PlaybackEngine | null = null;
 
 /**
@@ -43,8 +46,9 @@ export function getEngine(): PlaybackEngine {
   if (engine) return engine;
   const store = useAppStore.getState();
   const caps = store.capabilities ?? { mode: 'mock' as const, spotifyEnabled: false, canSeek: true };
-  adapter = createAdapter(caps);
-  engine = new PlaybackEngine(adapter, {
+  // 沒有 Spotify 輸出時，router 把一切原樣交給單一 <audio>（與以前相同）。
+  router = new PlaybackRouter(createAdapter(caps));
+  engine = new PlaybackEngine(router, {
     playbackMode: store.settings.playbackMode,
     feedbackEnabled: true,
     djEnabled: store.settings.djEnabled,
@@ -57,5 +61,12 @@ export function getEngine(): PlaybackEngine {
 /** MOCK-only review hooks (Settings → 情境預覽); undefined for any non-mock adapter. */
 export function mockAudioControls(): Pick<HtmlAudioAdapter, 'simulateAutoplayBlockOnce' | 'simulateDeviceLost' | 'reconnect'> | undefined {
   getEngine();
-  return adapter instanceof HtmlAudioAdapter ? adapter : undefined;
+  return router?.base instanceof HtmlAudioAdapter ? router.base : undefined;
+}
+
+/** E 模式接上／拔掉 Spotify 輸出用。 */
+export function getRouter(): PlaybackRouter {
+  getEngine();
+  if (!router) throw new Error('playback router not initialised');
+  return router;
 }

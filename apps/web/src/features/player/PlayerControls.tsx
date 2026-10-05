@@ -35,6 +35,13 @@ const PHASE_LABEL: Record<Phase, string> = {
   completed: '這一段已結束',
 };
 
+/** E 模式時曲目只有在 Spotify 狀態確認真的在播後才會進 track_playing。 */
+export function phaseLabel(state: EngineState): string {
+  if (state.playbackMode === 'spotify' && state.phase === 'track_playing') return 'Spotify 播放中・已確認有聲音';
+  if (state.playbackMode === 'spotify' && state.phase === 'loading_track') return '介紹已停，正在請 Spotify 開始…';
+  return PHASE_LABEL[state.phase];
+}
+
 export function isSpeechPhase(state: EngineState): boolean {
   return (
     state.phase === 'speaking' ||
@@ -70,7 +77,7 @@ export function SeekBar({ state }: { state: EngineState }) {
   return (
     <div className={styles.progress}>
       <div className={styles.progressLabel}>
-        <span data-testid="phase-label">{speech ? '介紹片段' : '曲目進度'} · {PHASE_LABEL[state.phase]}</span>
+        <span data-testid="phase-label">{speech ? '介紹片段' : '曲目進度'} · {phaseLabel(state)}</span>
       </div>
       <label className="sr-only" htmlFor={id}>
         {speech ? '介紹進度（不可拖動）' : '曲目進度'}
@@ -94,7 +101,7 @@ export function SeekBar({ state }: { state: EngineState }) {
       />
       <div className={styles.timeRow}>
         <span data-testid="elapsed">{formatTime(shown)}</span>
-        <span>{formatTime(durationMs)} · {speech ? (item.segment.speech.kind === 'ai_audio' ? 'AI 合成語音' : 'MOCK 提示音') : 'MOCK 合成音'}</span>
+        <span>{formatTime(durationMs)} · {speech ? (item.segment.speech.kind === 'ai_audio' ? 'AI 合成語音' : 'MOCK 提示音') : item.segment.track.provider === 'spotify' ? 'Spotify' : 'MOCK 合成音'}</span>
       </div>
     </div>
   );

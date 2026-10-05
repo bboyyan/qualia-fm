@@ -62,6 +62,8 @@ function candidatesFor(input: EditorialInput): Candidate[] {
 }
 
 export class MockEditorialPlanner implements EditorialPlanner {
+  readonly kind = 'mock' as const;
+
   async draft(input: EditorialInput, context: PlannerContext): Promise<unknown> {
     if (context.signal.aborted) throw context.signal.reason;
     if (context.scenario === 'error') {

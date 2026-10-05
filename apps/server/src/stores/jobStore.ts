@@ -106,6 +106,33 @@ export class JobStore {
     return pending;
   }
 
+  ownedShows(ownerId: string): ShowPlan[] {
+    return [...this.shows.values()].filter((entry) => entry.ownerId === ownerId).map((entry) => entry.plan);
+  }
+
+  /** 中斷 Spotify 連結：把所有節目裡 Spotify 回傳的欄位換掉（ID、封面、正式名稱、外連、URI），段落與回饋保留。 */
+  scrubSpotify(): void {
+    for (const [id, entry] of this.shows) {
+      if (!entry.plan.segments.some((segment) => segment.track.provider === 'spotify')) continue;
+      const segments = entry.plan.segments.map((segment) => segment.track.provider !== 'spotify' ? segment : {
+        ...segment,
+        track: {
+          provider: 'spotify' as const,
+          providerTrackId: null,
+          canonicalTitle: segment.candidate.title,
+          canonicalArtists: [segment.candidate.artist],
+          artworkUrl: null,
+          durationMs: null,
+          externalUrl: null,
+          availability: 'unavailable' as const,
+          canAttemptPlayback: false,
+          audioLocator: { kind: 'none' as const },
+        },
+      });
+      this.shows.set(id, { ...entry, plan: { ...entry.plan, segments } });
+    }
+  }
+
   forgetOwner(ownerId: string): void {
     for (const [id, job] of this.jobs) if (job.ownerId === ownerId) this.jobs.delete(id);
     for (const [id, show] of this.shows) if (show.ownerId === ownerId) this.shows.delete(id);

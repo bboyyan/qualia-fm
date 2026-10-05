@@ -1,0 +1,65 @@
+/* E 模式新增元件：只用既有 --q-* token 與既有元件風格（卡片、pill、分隔線），不引入新配色。 */
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
+  font-size: 12px; line-height: 20px; white-space: nowrap;
+  background: var(--q-subtle); border-radius: 999px; color: var(--q-ink);
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--q-border-strong); flex-shrink: 0; }
+.pill[data-state='connecting'] .dot { background: var(--q-accent); }
+.pill[data-state='online'] .dot { background: var(--q-primary); }
+.pill[data-state='offline'] .dot { background: var(--q-danger); }
+@media (prefers-reduced-motion: no-preference) {
+  .pill[data-state='connecting'] .dot { animation: pulse 1.2s ease-in-out infinite; }
+}
+@keyframes pulse { 50% { opacity: 0.35; } }
+
+.deviceCard {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 14px; padding: 12px 14px; border: 1px solid var(--q-border); border-radius: 16px; background: var(--q-surface);
+}
+.deviceCard p { font-size: 13px; color: var(--q-muted); min-width: 0; }
+.deviceCard strong { display: block; font-size: 14px; color: var(--q-ink); }
+
+.track {
+  display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 14px; align-items: center;
+  margin-top: 4px; padding: 14px; border: 1px solid var(--q-border); border-radius: var(--q-radius-card);
+  background: var(--q-surface); box-shadow: var(--q-shadow-soft);
+}
+.cover { width: 96px; height: 96px; border-radius: 12px; object-fit: cover; background: var(--q-subtle); display: block; }
+.trackBody { min-width: 0; display: grid; gap: 4px; }
+.trackBody h2 { font-size: 17px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trackBody p { font-size: 13px; color: var(--q-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trackMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.source { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--q-primary); background: var(--q-primary-wash); border-radius: 6px; padding: 1px 6px; }
+.confirmed { font-size: 12px; color: var(--q-primary); font-weight: 600; }
+.openLink {
+  display: inline-flex; align-items: center; min-height: 32px; font-size: 13px; font-weight: 600;
+  color: var(--q-primary); text-decoration: underline; text-underline-offset: 3px;
+}
+.openLink:focus-visible { outline: 2px solid var(--q-focus); outline-offset: 2px; border-radius: 4px; }
+
+.stages { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.stage { padding: 12px 14px; border: 1px solid var(--q-border); border-radius: 16px; background: var(--q-surface); display: grid; gap: 6px; }
+.stage small { font-size: 12px; color: var(--q-muted); letter-spacing: 0.04em; }
+.stage h4 { font-size: 15px; }
+.stage p { font-size: 13px; color: var(--q-muted); line-height: 1.6; }
+.stageActions { display: grid; gap: 8px; margin-top: 4px; }
+.footnote { font-size: 12px; color: var(--q-muted); line-height: 1.6; }
+
+.strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 14px; }
+.strip div { padding: 8px 10px; border-radius: 12px; background: var(--q-subtle); min-width: 0; }
+.strip dt { font-size: 11px; color: var(--q-muted); }
+.strip dd { margin: 2px 0 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+
+.facts { display: grid; gap: 8px; margin: 0; }
+.facts div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+.facts dt { color: var(--q-muted); }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.list { margin: 4px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13px; line-height: 1.6; color: var(--q-ink); }
+.tag { font-size: 11px; font-weight: 700; color: var(--q-accent); background: var(--q-accent-wash); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+
+.result { padding: 18px; border: 1px solid var(--q-border); border-radius: 16px; background: var(--q-surface); display: grid; gap: 10px; }
+.result h2 { font-size: 20px; }
+.result p { font-size: 14px; line-height: 1.6; }
+.result ul { margin: 0; padding-left: 20px; font-size: 13px; color: var(--q-muted); display: grid; gap: 4px; }
