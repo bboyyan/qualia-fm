@@ -13,7 +13,7 @@ import { assertAllowedOrigin, sessionOf } from '../security/guards.js';
 import { WindowLimiter } from '../security/rateLimit.js';
 import { SESSION_COOKIE, readCookie } from '../security/sessions.js';
 import { assertFeatureAllowed } from '../services/capabilities.js';
-import { OwnerChangedError, notOwner, relinkRequired, type SpotifyAuth } from '../spotify/auth.js';
+import { OwnerChangedError, OwnerMismatchError, OwnerNotConfiguredError, notOwner, relinkRequired, type SpotifyAuth } from '../spotify/auth.js';
 import type { LovedPlaylist } from '../spotify/loved.js';
 import type { SpotifyWebApi } from '../spotify/webApi.js';
 import type { ApiDeps } from './api.js';
@@ -26,7 +26,8 @@ export interface SpotifyServices {
 
 const LOGIN_LIMIT_PER_MIN = 10;
 const CONTROL_LIMIT_PER_MIN = 240;
-type LinkOutcome = 'linked' | 'denied' | 'error' | 'session' | 'owner';
+/** owner＝已由別人連結；account＝不是 SPOTIFY_OWNER_USER_ID 的帳號；unconfigured＝未設定 SPOTIFY_OWNER_USER_ID。 */
+type LinkOutcome = 'linked' | 'denied' | 'error' | 'session' | 'owner' | 'account' | 'unconfigured';
 
 export const SPOTIFY_OWNER_COOKIE = 'qfm_spotify_owner';
 /** 擁有者憑證與 refresh token 同樣長效；中斷連結或重新連結時更換。 */
@@ -92,6 +93,12 @@ export function spotifyCallback(deps: ApiDeps): RequestHandler {
         logger.info('spotify_link_owner_conflict', {});
         return backToApp(res, 'owner');
       }
+      if (error instanceof OwnerMismatchError) {
+        // 不記帳號 id：只記「不是指定的擁有者帳號」。
+        logger.info('spotify_link_wrong_account', {});
+        return backToApp(res, 'account');
+      }
+      if (error instanceof OwnerNotConfiguredError) return backToApp(res, 'unconfigured');
       logger.error('spotify_link_failed', { code: error instanceof AppError ? error.code : 'INTERNAL' });
       backToApp(res, 'error');
     }
@@ -112,6 +119,8 @@ export function spotifyPublicRoutes(router: Router, deps: ApiDeps): void {
     if (!session) return backToApp(res, 'session');
     const limit = limiter.hit(session.id, deps.now());
     if (!limit.ok) throw new AppError('RATE_LIMITED', { retryAfterMs: limit.retryAfterMs });
+    // 沒有指定擁有者帳號：誰都不能連結（fail closed），也不轉去 Spotify。
+    if (!auth.ownerConfigured()) return backToApp(res, 'unconfigured');
     // 已由別人連結：不能開始登入（否則可以覆蓋擁有者）。擁有者自己可以重新連結。
     if (auth.ownerStatus(ownerSecretOf(req)) === 'other') return backToApp(res, 'owner');
     res.setHeader('Cache-Control', 'no-store');

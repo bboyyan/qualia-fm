@@ -2,6 +2,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setLoggerSilent } from '../src/http/log.js';
+import { OwnerNotConfiguredError, SpotifyAuth } from '../src/spotify/auth.js';
+import { SpotifyTokenStore } from '../src/spotify/tokenStore.js';
+import { testConfig } from './helpers.js';
 import { ORIGIN, bootstrap, planRequest, postPlan, testApp, waitForJob, type Client } from './helpers.js';
 import { DJ_TEST_ENV, FakeSpotify, linkedApp, nominatingPlanner, post, spotifyShow, tokenFile, trackId, type LinkedApp } from './spotifyHelpers.js';
 
@@ -242,3 +245,139 @@ describe('日誌不含擁有者憑證', () => {
     expect(lines.join('')).not.toContain(OWNER_COOKIE);
   });
 });
+
+describe('擁有者必須是 SPOTIFY_OWNER_USER_ID 指定的 Spotify 帳號（審查必修：先到先得不夠）', () => {
+  async function linkAs(meId: string, env: Record<string, string> = DJ_TEST_ENV) {
+    const fake = new FakeSpotify();
+    fake.meId = meId;
+    const file = tokenFile();
+    const { app } = testApp({ ...env, SPOTIFY_TOKEN_FILE: file }, { fetchImpl: fake.fetch });
+    const client = await bootstrap(app);
+    const started = await login(client.agent);
+    const state = started.status === 302 ? stateOf(String(started.headers.location)) : '';
+    const callback = state ? await client.agent.get(`/callback?code=TEST-code&state=${state}`) : null;
+    return { fake, file, client, started, callback };
+  }
+
+  it('正確帳號：換到 token 後呼叫一次 /v1/me 比對 id，成為擁有者', async () => {
+    const { fake, file, client, callback } = await linkAs('TESTowner');
+    expect(callback?.headers.location).toBe('/?spotify=linked');
+    const me = fake.callsTo('GET', '/v1/me');
+    expect(me).toHaveLength(1);
+    expect(me[0]?.authorization).toMatch(/^Bearer TEST-access-/);
+    expect(existsSync(file)).toBe(true);
+    expect(ownerCookieFrom(callback!)).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    await post(client, '/api/spotify/token').expect(200);
+  });
+
+  it.each([
+    ['別的 Spotify 帳號', 'TESTstranger'],
+    ['大小寫不同也不算', 'testowner'],
+  ])('錯誤帳號（%s）：導回 ?spotify=account，不寫 token 檔、不發擁有者 cookie、之後一律拒絕', async (_name, meId) => {
+    const { fake, file, client, callback } = await linkAs(meId);
+    expect(callback?.headers.location).toBe('/?spotify=account');
+    expect(String(callback?.headers['set-cookie'] ?? '')).not.toContain(OWNER_COOKIE);
+    expect(existsSync(file)).toBe(false);
+    expect(fake.callsTo('GET', '/v1/me')).toHaveLength(1);
+    expect((await client.agent.get('/api/capabilities')).body.spotify).toMatchObject({ linked: false, linkedElsewhere: false });
+    expect((await post(client, '/api/spotify/token')).status).toBe(403);
+  });
+
+  it('錯誤帳號被拒後，指定帳號仍可以正常連結（不會被佔位）', async () => {
+    const fake = new FakeSpotify();
+    const file = tokenFile();
+    const { app } = testApp({ ...DJ_TEST_ENV, SPOTIFY_TOKEN_FILE: file }, { fetchImpl: fake.fetch });
+    const stranger = await bootstrap(app);
+    fake.meId = 'TESTstranger';
+    const strangerState = stateOf(String((await login(stranger.agent).expect(302)).headers.location));
+    expect((await stranger.agent.get(`/callback?code=TEST-code&state=${strangerState}`)).headers.location).toBe('/?spotify=account');
+    const owner = await bootstrap(app);
+    fake.meId = 'TESTowner';
+    const ownerState = stateOf(String((await login(owner.agent).expect(302)).headers.location));
+    expect((await owner.agent.get(`/callback?code=TEST-code&state=${ownerState}`)).headers.location).toBe('/?spotify=linked');
+    await post(owner, '/api/spotify/token').expect(200);
+  });
+
+  it('未設定 SPOTIFY_OWNER_USER_ID：拒絕任何人成為擁有者（fail closed），login 不轉去 Spotify', async () => {
+    const { SPOTIFY_OWNER_USER_ID: _unset, ...env } = DJ_TEST_ENV;
+    const { fake, file, started, callback } = await linkAs('TESTowner', env);
+    expect([started.status, started.headers.location]).toEqual([303, '/?spotify=unconfigured']);
+    expect(callback).toBeNull();
+    expect(fake.calls).toEqual([]);
+    expect(existsSync(file)).toBe(false);
+  });
+
+  it('/v1/me 失敗（Spotify 錯誤）：不寫 token 檔、不發 cookie，導回 ?spotify=error，日誌只記狀態碼', async () => {
+    setLoggerSilent(false);
+    const lines: string[] = [];
+    const err = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => (lines.push(String(chunk)), true));
+    const out = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => (lines.push(String(chunk)), true));
+    const fake = new FakeSpotify();
+    fake.respondOnce('GET', '/v1/me', 500, { error: { status: 500 } });
+    const file = tokenFile();
+    const { app } = testApp({ ...DJ_TEST_ENV, SPOTIFY_TOKEN_FILE: file }, { fetchImpl: fake.fetch });
+    const client = await bootstrap(app);
+    const state = stateOf(String((await login(client.agent).expect(302)).headers.location));
+    const res = await client.agent.get(`/callback?code=TEST-code&state=${state}`);
+    err.mockRestore();
+    out.mockRestore();
+    expect(res.headers.location).toBe('/?spotify=error');
+    expect(String(res.headers['set-cookie'] ?? '')).not.toContain(OWNER_COOKIE);
+    expect(existsSync(file)).toBe(false);
+    expect(lines.join('')).toMatch(/spotify_me_failed[^\n]*500/);
+  });
+
+  it('日誌與錯誤回應不含 Spotify 帳號 id、名稱或 email', async () => {
+    setLoggerSilent(false);
+    const lines: string[] = [];
+    const out = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => (lines.push(String(chunk)), true));
+    const err = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => (lines.push(String(chunk)), true));
+    await linkAs('TESTstranger');
+    await linkAs('TESTowner');
+    out.mockRestore();
+    err.mockRestore();
+    expect(lines.join('')).not.toMatch(/TESTstranger|TESTowner|TEST Display Name|test-owner@example/);
+  });
+});
+
+describe('擁有者 cookie 在 HTTPS 部署帶 Secure（審查建議 4）', () => {
+  it('APP_ORIGIN 為 https 時，擁有者 cookie 與清除用 cookie 都帶 Secure', async () => {
+    const fake = new FakeSpotify();
+    const { app } = testApp({ ...DJ_TEST_ENV, SPOTIFY_TOKEN_FILE: tokenFile(), APP_ORIGIN: 'https://qualia.example.test', PORT: '5173' }, { fetchImpl: fake.fetch });
+    const session = await request(app).post('/api/session').set('Origin', ORIGIN).expect(200);
+    const sid = String((session.headers['set-cookie'] as unknown as string[])[0]).split(';')[0]!;
+    const started = await request(app).get('/api/auth/spotify/login').set('Cookie', sid).set('Sec-Fetch-Site', 'same-origin').expect(302);
+    const callback = await request(app).get(`/callback?code=TEST-code&state=${stateOf(String(started.headers.location))}`).set('Cookie', sid).expect(303);
+    const ownerSetCookie = ((callback.headers['set-cookie'] as unknown as string[] | undefined) ?? []).find((c) => c.startsWith(`${OWNER_COOKIE}=`)) ?? '';
+    expect(ownerSetCookie).toMatch(/; Secure/);
+    const owner = ownerCookieFrom(callback);
+    const logout = await request(app).post('/api/auth/spotify/logout').set('Cookie', `${sid}; ${OWNER_COOKIE}=${owner}`).set('Origin', ORIGIN).set('X-CSRF-Token', String(session.body.csrfToken)).expect(204);
+    expect(String(logout.headers['set-cookie'] ?? '')).toMatch(/Max-Age=0; Secure/);
+  });
+
+  it('APP_ORIGIN 為 http（本機）時擁有者 cookie 不帶 Secure', async () => {
+    const fake = new FakeSpotify();
+    const { app } = testApp({ ...DJ_TEST_ENV, SPOTIFY_TOKEN_FILE: tokenFile() }, { fetchImpl: fake.fetch });
+    const client = await bootstrap(app);
+    const state = stateOf(String((await login(client.agent).expect(302)).headers.location));
+    const res = await client.agent.get(`/callback?code=TEST-code&state=${state}`).expect(303);
+    const ownerSetCookie = ((res.headers['set-cookie'] as unknown as string[] | undefined) ?? []).find((c) => c.startsWith(`${OWNER_COOKIE}=`)) ?? '';
+    expect(ownerSetCookie).not.toMatch(/Secure/);
+  });
+});
+
+describe('SpotifyAuth：未設定擁有者帳號時的最後防線', () => {
+  it('就算已有 state（例如設定在登入途中被移除），completeLogin 也不換 token、不寫檔', async () => {
+    const fake = new FakeSpotify();
+    const file = tokenFile();
+    const { SPOTIFY_OWNER_USER_ID: _unset, ...env } = DJ_TEST_ENV;
+    const config = testConfig({ ...env, SPOTIFY_TOKEN_FILE: file });
+    const auth = new SpotifyAuth(config.spotify, new SpotifyTokenStore(file, config.spotify.tokenKey), fake.fetch, Date.now);
+    const state = stateOf(auth.beginLogin('TESTsession'));
+    await expect(auth.completeLogin('TESTsession', state, 'TEST-code')).rejects.toBeInstanceOf(OwnerNotConfiguredError);
+    expect(fake.calls).toEqual([]);
+    expect(existsSync(file)).toBe(false);
+    expect(auth.ownerConfigured()).toBe(false);
+  });
+});
+

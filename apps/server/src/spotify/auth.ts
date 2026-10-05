@@ -3,6 +3,8 @@
  * refresh token 只存在加密小檔；access token 只在記憶體並在過期前換新。token 與 code 一律不寫日誌。
  * 擁有者（BRA-111 A1）：完成登入時發一組擁有者憑證（只給那個瀏覽器的 HttpOnly cookie），token 檔只存它的雜湊；
  * 之後只有出示同一憑證的請求能用這份連結。已由別人連結時不能開始登入；登入途中若擁有者變了，回呼一律拒絕。
+ * 帳號比對（審查必修）：換到 token 後呼叫一次 Spotify `/v1/me`，只讀 `id`，必須等於 SPOTIFY_OWNER_USER_ID 才存檔、發憑證；
+ * 未設定 SPOTIFY_OWNER_USER_ID 一律拒絕（fail closed）。/me 回傳的名稱、email 等不保存、不寫日誌。
  */
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
@@ -18,6 +20,9 @@ const MAX_PENDING = 50;
 /** 提早換新，避免 SDK 拿到即將過期的 token。 */
 const REFRESH_MARGIN_MS = 60 * 1000;
 const REQUEST_TIMEOUT_MS = 8000;
+/** 只用來在連結時確認是哪個 Spotify 帳號；不呼叫其他讀取個人資料的 API。 */
+const SPOTIFY_ME = 'https://api.spotify.com/v1/me';
+const MeSchema = z.object({ id: z.string().min(1).max(200) });
 
 interface PendingLogin {
   readonly sessionId: string;
@@ -57,6 +62,10 @@ export const relinkRequired = (): AppError => new AppError('FEATURE_RESTRICTED',
 export const notOwner = (): AppError => new AppError('FEATURE_RESTRICTED', { message: '這個 Spotify 連結只有完成連結的擁有者（那台裝置的瀏覽器）能使用。' });
 /** 登入途中擁有者變了（別人先完成連結）。 */
 export class OwnerChangedError extends Error {}
+/** 未設定 SPOTIFY_OWNER_USER_ID：任何人都不能成為擁有者。 */
+export class OwnerNotConfiguredError extends Error {}
+/** 完成授權的 Spotify 帳號不是 SPOTIFY_OWNER_USER_ID。 */
+export class OwnerMismatchError extends Error {}
 
 export class SpotifyAuth {
   private readonly pending = new Map<string, PendingLogin>();
@@ -114,6 +123,8 @@ export class SpotifyAuth {
   async completeLogin(sessionId: string, state: string, code: string): Promise<string> {
     const entry = this.consumeState(sessionId, state);
     if (!entry) throw new AppError('INVALID_INPUT', { message: 'Spotify 授權已逾時或不屬於這個工作階段。' });
+    const ownerUserId = this.config.ownerUserId;
+    if (!ownerUserId) throw new OwnerNotConfiguredError();
     if ((this.store.load()?.ownerHash ?? null) !== entry.ownerHash) throw new OwnerChangedError();
     const token = await this.requestToken({
       grant_type: 'authorization_code',
@@ -123,10 +134,39 @@ export class SpotifyAuth {
       code_verifier: entry.verifier,
     });
     if (!token.refresh_token) throw new AppError('INTERNAL', { message: 'Spotify 沒有回傳授權，請再試一次。' });
+    // 帳號不對就什麼都不留：不存檔、不快取 access token、不發憑證。
+    if ((await this.spotifyUserId(token.access_token)) !== ownerUserId) throw new OwnerMismatchError();
     const secret = randomBytes(32).toString('base64url');
     this.store.save({ refreshToken: token.refresh_token, scope: token.scope ?? '', ownerHash: hashOwner(secret) });
     this.access = { token: token.access_token, expiresAt: this.now() + token.expires_in * 1000 };
     return secret;
+  }
+
+  /** 是否設定了唯一可連結的 Spotify 帳號（未設定時不開始登入）。 */
+  ownerConfigured(): boolean {
+    return Boolean(this.config.ownerUserId);
+  }
+
+  /** 完成授權的是哪個 Spotify 帳號：只取 /v1/me 的 id。 */
+  private async spotifyUserId(accessToken: string): Promise<string> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(SPOTIFY_ME, {
+        method: 'GET',
+        redirect: 'error',
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        headers: { Authorization: ['Bearer', accessToken].join(' ') },
+      });
+    } catch {
+      throw new AppError('NETWORK_ERROR', { message: 'Spotify 暫時連不上，請稍後再試。' });
+    }
+    if (!response.ok) {
+      logger.error('spotify_me_failed', { status: response.status });
+      throw new AppError('NETWORK_ERROR', { message: 'Spotify 暫時沒有回應，請稍後再試。' });
+    }
+    const parsed = MeSchema.safeParse(await response.json().catch(() => null));
+    if (!parsed.success) throw new AppError('INTERNAL', { message: 'Spotify 帳號回應格式不正確。' });
+    return parsed.data.id;
   }
 
   /** 給 SDK／Web API 用的短期 access token；必要時以 refresh token 換新（單一進行中的換新）。 */

@@ -5,7 +5,7 @@
  * - 送出 play（伺服器代理、帶 device_id）後，要等 player_state_changed 確認真的在播才回報 started。
  * - 不疊音（Policy III.7）：每次切段都換「世代」。play 在路上時被 stop／暫停，生效後一律暫停；
  *   我方不要聲音時 SDK 若回報在播，一律再暫停；在路上或待確認靜音期間都算「可能出聲」。
- * - SDK 會先回報「載入中／已暫停」、約 80ms 後才真的出聲（BRA-111）：待確認靜音時，那一首的「已暫停」
+ * - 假設 SDK 可能先回報「載入中／已暫停」、短暫後才真的出聲（BRA-111；80ms 是模擬假設，非實測，真機見 BRA-114）：待確認靜音時，那一首的「已暫停」
  *   要不是載入中、且穩定 SILENCE_SETTLE_MS 沒有再出聲才算安靜；stop 時已生效但還沒確認在播的那首也照此等待。
  * - 暫停超過約 10 分鐘視為需重連；只在頁面回到前景時讀狀態；不做靜音保活、wake lock 或背景計時器。
  */
@@ -33,7 +33,7 @@ const READY_TIMEOUT_MS = 8000;
 const CONFIRM_TIMEOUT_MS = 10_000;
 /** 遲到的 play 被暫停後，等 SDK 回報已暫停的時間；逾時重讀一次狀態。 */
 const SILENCE_RECHECK_MS = 1500;
-/** 「已暫停」要穩定這麼久才算安靜（涵蓋 SDK 先報已暫停、約 80ms 後才出聲）。 */
+/** 「已暫停」要穩定這麼久才算安靜（涵蓋「先報已暫停、短暫後才出聲」的假設；模擬用 80ms，真機待 BRA-114）。 */
 const SILENCE_SETTLE_MS = 500;
 
 export interface WebPlaybackDeps {

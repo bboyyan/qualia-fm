@@ -58,7 +58,7 @@ describe('路徑 P：play 在路上時切段', () => {
     expect(pauses(ctx.sdk.player.calls)).toBe(before + 2);
     expect(ctx.adapter.isAudible()).toBe(true);
     ctx.sdk.player.state(TEST_URI, true, 120);
-    // BRA-111：已暫停要穩定 500ms 才算安靜（SDK 可能先報已暫停、約 80ms 後才出聲）。
+    // BRA-111：已暫停要穩定 500ms 才算安靜（假設 SDK 可能先報已暫停、短暫後才出聲；80ms 為模擬值）。
     expect(ctx.adapter.isAudible()).toBe(true);
     await ctx.clock.advance(500);
     expect(ctx.adapter.isAudible()).toBe(false);

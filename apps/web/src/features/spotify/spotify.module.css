@@ -32,12 +32,21 @@
 .trackBody { min-width: 0; display: grid; gap: 4px; }
 .trackBody h2 { font-size: 17px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trackBody p { font-size: 13px; color: var(--q-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trackText { min-width: 0; display: grid; gap: 4px; }
 .trackBody .album { font-size: 12px; }
+/* 展開：曲名／歌手／專輯換行顯示全文（Spotify：使用者一定能看到完整 metadata）。 */
+.trackText[data-expanded='true'] :is(h2, p) { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.metaToggle {
+  justify-self: start; min-height: 32px; padding: 0; border: 0; background: none;
+  font: inherit; font-size: 12px; color: var(--q-muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.metaToggle:hover { color: var(--q-ink); }
+.metaToggle:focus-visible { outline: 2px solid var(--q-focus); outline-offset: 2px; border-radius: 4px; }
 .trackMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
-/* 官方圖示 21px（數位最小尺寸），四周留白＝圖示高度一半（11px）。左側以負邊距對齊文字欄：
+/* 完整官方 logo 顯示 80×22（數位最小寬 70px），四周留白＝圖示高度一半（11px）。左側以負邊距對齊文字欄：
    左邊緊鄰的是封面與欄距（14px），仍大於 11px；上下右的留白不被其他元素佔用。 */
 .brand { display: inline-flex; padding: 11px; margin-left: -11px; }
-.brand svg { display: block; }
+.brand img { display: block; }
 .confirmed { font-size: 12px; color: var(--q-primary); font-weight: 600; }
 .openLink {
   display: inline-flex; align-items: center; min-height: 32px; font-size: 13px; font-weight: 600;

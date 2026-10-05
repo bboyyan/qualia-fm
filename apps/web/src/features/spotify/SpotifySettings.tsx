@@ -73,7 +73,7 @@ export function SpotifyLinkView({ linked, linkedElsewhere = false, djApproved, c
           <p>不會：</p>
           <ul className={styles.list}>
             <li>讀你的收藏或播放紀錄</li>
-            <li>讀你的 Email 或個人資料（Spotify 播放器規定要有這兩個權限，本站不呼叫讀取它們的 API）</li>
+            <li>讀你的 Email 或個人資料（Spotify 播放器規定要有這兩個權限；本站只在連結時讀一次帳號 ID，確認是設定的擁有者，不保存名稱或 Email）</li>
             <li>把任何 Spotify 資料交給 AI</li>
           </ul>
           <p>需要 Spotify Premium。可隨時在下方中斷連結。</p>

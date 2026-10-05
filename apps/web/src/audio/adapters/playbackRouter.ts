@@ -120,8 +120,14 @@ export class PlaybackRouter implements MediaAdapter {
   private startBase(output: SpotifyOutput, request: StartRequest): Promise<void> {
     const started = this.base.start(request);
     // 換段、停止、換輸出都會解除守候（endHold），所以 onLeak 只會在這段介紹期間被呼叫。
-    if (request.owner === 'speech') this.releaseHold = output.holdSilence(() => this.onLeak(request));
-    return started;
+    if (request.owner !== 'speech') return started;
+    const release = output.holdSilence(() => this.onLeak(request));
+    this.releaseHold = release;
+    // 介紹沒開始（例如需要點一下）：沒有東西要守，立刻解除，不輪詢。
+    return started.catch((error: unknown) => {
+      if (this.releaseHold === release) this.endHold();
+      throw error;
+    });
   }
 
   /** Spotify 在介紹期間出聲（輸出已自行再暫停）：介紹還在出聲就停掉，回報失敗讓引擎改顯示文字並進歌。 */

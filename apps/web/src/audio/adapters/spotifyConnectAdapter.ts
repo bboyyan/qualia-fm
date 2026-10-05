@@ -6,6 +6,7 @@
  * - 不疊音（Policy III.7）：每次切段換「世代」；stop 只要有進行中的一首就送 pause（即使還沒確認在播）。
  *   play 在路上時被切段或暫停，生效後再送一次 pause，並以狀態查詢確認靜音；在路上或待確認期間都算「可能出聲」。
  * - 介紹播放期間（holdSilence）低頻輪詢：裝置可能在 play 回應約 2 秒後才出聲（BRA-111），出聲就再暫停並通知 router 停介紹。
+ *   守候最多 GUARD_MAX_MS（介紹被暫停或等點擊時不無限輪詢）；殘餘疊音上限約一次輪詢間隔＋pause 生效時間（BRA-114 真機量測）。
  */
 import type { SpotifyPlayback } from '@qualia/contracts';
 import {
@@ -33,6 +34,8 @@ const SILENCE_WATCH_MAX_MS = 30_000;
 const CONFIRM_TIMEOUT_MS = 12_000;
 /** 介紹期間的守候輪詢間隔（低頻，與播放中輪詢相同，避免 429）。 */
 const GUARD_POLL_MS = 2000;
+/** 守候總時長上限（從 holdSilence 起算）：最多約 30 次查詢；晚出聲多發生在 play 生效後數秒內。 */
+const GUARD_MAX_MS = 60_000;
 
 export interface ConnectDeps {
   readonly remote: SpotifyRemote;
@@ -78,6 +81,8 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
   /** 介紹播放期間的守候：Spotify 出聲時通知（一次）。 */
   private onLeak: (() => void) | null = null;
   private guardTimer: unknown = null;
+  /** 守候截止時間；過了就不再查（直到下一次 holdSilence）。 */
+  private guardUntil = 0;
   private readonly unwatch: () => void;
 
   constructor(private readonly deps: ConnectDeps) {
@@ -180,6 +185,7 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
 
   holdSilence(onLeak: () => void): () => void {
     this.onLeak = onLeak;
+    this.guardUntil = this.deps.now() + GUARD_MAX_MS;
     // 正在確認靜音時由 checkSilence 負責；確認結束後才改用低頻守候。
     if (!this.pendingSilence) this.scheduleGuard();
     return () => {
@@ -327,6 +333,7 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
 
   private scheduleGuard(): void {
     this.clearGuard();
+    // 上限由 guard() 判斷（到期時不查詢並解除），這裡不重複檢查。
     if (!this.onLeak || this.pendingSilence || !this.deps.visibility.isVisible()) return;
     this.guardTimer = this.deps.timers.setTimeout(() => {
       this.guardTimer = null;
@@ -341,9 +348,16 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
   }
 
   /** 介紹期間低頻確認：這台在播且我方不要聲音 → 再暫停、通知停介紹，並回到主動確認靜音。 */
+  /** 守候已到上限：解除，之後回前景也不再查。 */
+  private guardExpired(): boolean {
+    if (this.deps.now() < this.guardUntil) return false;
+    this.onLeak = null;
+    return true;
+  }
+
   private async guard(): Promise<void> {
     this.clearGuard();
-    if (!this.onLeak || this.pendingSilence) return;
+    if (!this.onLeak || this.pendingSilence || this.guardExpired()) return;
     const playback = await this.deps.remote.playback().catch(() => null);
     if (!this.onLeak || this.pendingSilence) return;
     if (playback) this.last = { ...playback, at: this.deps.now() };

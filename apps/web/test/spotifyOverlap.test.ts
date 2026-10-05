@@ -9,7 +9,7 @@ import { FakeClock, FakeRemote, FakeSdk, FakeVisibility, SlowBase, TEST_URI, flu
  * BRA-111 啟用前事項：兩種實測／推演出的短暫疊音（Policy III.7）。
  * - 路徑 C：play 回應後超過約 1.9 秒裝置才出聲，靜音確認已結束、介紹已開始 → 疊音。
  *   修法：介紹播放期間低頻持續檢查，Spotify 出聲就停介紹（並再暫停 Spotify）。
- * - 路徑 P：SDK 先回報「載入中／已暫停」，約 80ms 後才真的出聲 → 介紹與歌曲短暫重疊。
+ * - 路徑 P（假設情境，非 SDK 實測）：SDK 先回報「載入中／已暫停」，80ms（模擬值）後才真的出聲 → 介紹與歌曲短暫重疊。
  *   修法：已暫停要穩定一段時間（且不是載入中）才算安靜；stop 時已生效但未確認的那首也要等穩定靜音。
  */
 
@@ -145,7 +145,7 @@ describe('路徑 C：play 回應後超過約 1.9 秒才出聲', () => {
   });
 });
 
-describe('路徑 P：SDK 先回報載入中／已暫停，約 80ms 後才出聲', () => {
+describe('路徑 P（模擬假設）：SDK 先回報載入中／已暫停，80ms 後才出聲', () => {
   it('play 已生效、SDK 只回報已暫停時切段 → 介紹不立刻開始；80ms 後出聲被暫停；穩定靜音後才開始，全程不疊', async () => {
     const ctx = webRouter();
     await ctx.online();
@@ -342,6 +342,70 @@ describe('mutation 補測（BRA-111）', () => {
     const callsBefore = ctx.remote.playbackCalls;
     await ctx.clock.advance(10_000);
     expect(ctx.remote.playbackCalls - callsBefore).toBe(5);
+  });
+});
+
+describe('守候上限（審查建議 1：介紹暫停／等點擊時不能無限輪詢）', () => {
+  it('介紹被暫停、頁面一直在前景 10 分鐘：守候最多 60 秒（≤ 30 次查詢），之後不再查', async () => {
+    const ctx = connectRouter();
+    await introAfterSlowLanding(ctx);
+    ctx.router.pause();
+    const callsBefore = ctx.remote.playbackCalls;
+    await ctx.clock.advance(60_000);
+    const withinCap = ctx.remote.playbackCalls - callsBefore;
+    expect(withinCap).toBeGreaterThan(0);
+    expect(withinCap).toBeLessThanOrEqual(30);
+    await ctx.clock.advance(9 * 60_000);
+    expect(ctx.remote.playbackCalls - callsBefore).toBe(withinCap);
+  });
+
+  it('上限是硬上限：所有守候查詢都在介紹開始後 60 秒內（到點那一刻也不再查）', async () => {
+    const ctx = connectRouter();
+    let introAt = -1;
+    const start = ctx.base.start.bind(ctx.base);
+    ctx.base.start = (request) => ((introAt = ctx.clock.now), start(request));
+    const checkedAt: number[] = [];
+    const playback = ctx.remote.playback;
+    ctx.remote.playback = () => (checkedAt.push(ctx.clock.now), playback());
+    await introAfterSlowLanding(ctx);
+    ctx.router.pause();
+    await ctx.clock.advance(120_000);
+    const guardChecks = checkedAt.filter((at) => at > introAt);
+    expect(Math.max(...guardChecks)).toBeLessThan(introAt + 60_000);
+    expect(Math.max(...guardChecks)).toBeGreaterThanOrEqual(introAt + 56_000);
+  });
+
+  it('超過上限後切到背景再回前景：不會重新開始守候', async () => {
+    const ctx = connectRouter();
+    await introAfterSlowLanding(ctx);
+    await ctx.clock.advance(61_000);
+    ctx.visibility.set(false);
+    const callsBefore = ctx.remote.playbackCalls;
+    ctx.visibility.set(true);
+    await ctx.clock.advance(10_000);
+    expect(ctx.remote.playbackCalls).toBe(callsBefore);
+  });
+
+  it('上限內仍照常：守候開始 58 秒時出聲也會停介紹', async () => {
+    const ctx = connectRouter();
+    await introAfterSlowLanding(ctx);
+    await ctx.clock.advance(56_000);
+    ctx.remote.playbackState = playingOn(TEST_URI);
+    await ctx.clock.advance(2000);
+    expect(ctx.events.map((e) => e.type)).toEqual(['failed']);
+  });
+
+  it('介紹的 <audio> 開始被拒（例如需要點一下）：立刻解除守候，不輪詢', async () => {
+    const ctx = connectRouter();
+    ctx.base.start = (request) => {
+      ctx.base.starts.push(request.owner);
+      return Promise.reject(new DOMException('需要點一下才能繼續播放。', 'NotAllowedError'));
+    };
+    await introAfterSlowLanding(ctx);
+    expect(ctx.base.starts).toEqual(['speech']);
+    const callsBefore = ctx.remote.playbackCalls;
+    await ctx.clock.advance(10_000);
+    expect(ctx.remote.playbackCalls).toBe(callsBefore);
   });
 });
 

@@ -34,6 +34,7 @@ const EnvSchema = z.object({
   SPOTIFY_TOKEN_ENC_KEY: z.preprocess(blankToUndefined, z.string().optional()),
   SPOTIFY_TOKEN_FILE: z.preprocess(blankToUndefined, z.string().default('./data/spotify-token.enc')),
   SPOTIFY_APPROVAL_REFERENCE: z.preprocess(blankToUndefined, z.string().max(300).optional()),
+  SPOTIFY_OWNER_USER_ID: z.preprocess(blankToUndefined, z.string().optional()),
   SPOTIFY_LOVED_PLAYLIST_ID: z.preprocess(blankToUndefined, z.string().regex(/^[A-Za-z0-9]{22}$/).default(DEFAULT_LOVED_PLAYLIST_ID)),
   PLAN_DEADLINE_MS: int(60_000, 1_000, 120_000),
   MAX_LLM_CALLS_PER_PLAN: int(2, 1, 2),
@@ -110,7 +111,15 @@ export interface SpotifyConfig {
   readonly tokenFile: string;
   readonly approvalReference: string | undefined;
   readonly lovedPlaylistId: string;
+  /**
+   * 唯一能成為擁有者的 Spotify 帳號 id（/v1/me 的 id，非秘密）。未設定＝拒絕任何連結（fail closed）。
+   * 開發者 allowlist 擋不住佔位：不在 allowlist 的帳號仍可能完成 OAuth。
+   */
+  readonly ownerUserId: string | undefined;
 }
+
+/** Spotify 帳號 id 的寬鬆格式檢查（英數與 . _ -）；只用來擋明顯打錯，比對以 /v1/me 為準。 */
+export const SPOTIFY_USER_ID = /^[A-Za-z0-9._-]{1,128}$/;
 
 export class ConfigError extends Error {
   override name = 'ConfigError';
@@ -154,6 +163,8 @@ function assertSpotifyGate(env: ParsedEnv): void {
     !env.SPOTIFY_CLIENT_ID || !/^[A-Za-z0-9]{16,64}$/.test(env.SPOTIFY_CLIENT_ID) ? 'SPOTIFY_CLIENT_ID' : null,
     !env.SPOTIFY_REDIRECT_URI || !isAcceptableRedirect(env.SPOTIFY_REDIRECT_URI) ? 'SPOTIFY_REDIRECT_URI' : null,
     !decodeTokenKey(env.SPOTIFY_TOKEN_ENC_KEY) ? 'SPOTIFY_TOKEN_ENC_KEY' : null,
+    // 未設定可以啟動（連結會被拒絕）；設定了但格式不對＝打錯，拒絕啟動。
+    env.SPOTIFY_OWNER_USER_ID !== undefined && !SPOTIFY_USER_ID.test(env.SPOTIFY_OWNER_USER_ID) ? 'SPOTIFY_OWNER_USER_ID' : null,
   ].filter((name): name is string => name !== null);
   if (missing.length > 0) {
     throw new ConfigError(`SPOTIFY_ENABLED=true is refused: missing or invalid ${missing.join(', ')} (redirect must be HTTPS or a loopback IP and end in ${SPOTIFY_CALLBACK_PATHS.join(' or ')}; key must decode to 32 bytes).`);
@@ -223,6 +234,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
       tokenKey: decodeTokenKey(env.SPOTIFY_TOKEN_ENC_KEY),
       tokenFile: env.SPOTIFY_TOKEN_FILE,
       approvalReference: env.SPOTIFY_APPROVAL_REFERENCE?.trim(),
+      ownerUserId: env.SPOTIFY_OWNER_USER_ID,
       lovedPlaylistId: env.SPOTIFY_LOVED_PLAYLIST_ID,
     },
     limits: {

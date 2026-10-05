@@ -40,7 +40,8 @@ export type Capabilities = z.infer<typeof CapabilitiesSchema>;
 
 /**
  * Spotify 最小權限（REQUIREMENTS B2）。user-read-email／user-read-private 是 Web Playback SDK 官方要求的
- * 必要 scope；本站不呼叫任何讀取個人資料（/me 等）的 API。不含收藏、播放紀錄、top 等擴大資料面的 scope。
+ * 必要 scope。本站只在連結完成時呼叫一次 /v1/me、只讀 id（比對 SPOTIFY_OWNER_USER_ID），不保存名稱、email 等。
+ * 不含收藏、播放紀錄、top 等擴大資料面的 scope。
  */
 export const SPOTIFY_SCOPES = [
   'streaming',

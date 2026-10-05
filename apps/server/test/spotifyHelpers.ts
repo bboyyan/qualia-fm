@@ -14,6 +14,8 @@ export const SPOTIFY_TEST_ENV = {
   SPOTIFY_CLIENT_ID: '00000000000000000000000000000000',
   SPOTIFY_REDIRECT_URI: 'https://qualia.example.test/callback',
   SPOTIFY_TOKEN_ENC_KEY: randomBytes(32).toString('base64'),
+  /** 只有這個 Spotify 帳號（/v1/me 的 id）能成為擁有者；假帳號。 */
+  SPOTIFY_OWNER_USER_ID: 'TESTowner',
 } as const;
 
 export const DJ_TEST_ENV = { ...SPOTIFY_TEST_ENV, SPOTIFY_DJ_APPROVED: 'true', SPOTIFY_APPROVAL_REFERENCE: 'BRA-109 TEST approval' } as const;
@@ -63,6 +65,8 @@ export class FakeSpotify {
   playlist: string[] = [];
   player: Record<string, unknown> | null = null;
   rotateRefresh = false;
+  /** /v1/me 回傳的帳號 id（模擬「誰完成了 Spotify 授權」）。 */
+  meId = 'TESTowner';
   private readonly overrides: Override[] = [];
   private readonly validAccess = new Set<string>();
   private readonly validRefresh = new Set<string>();
@@ -138,6 +142,7 @@ export class FakeSpotify {
       const items = this.tracks.filter((t) => q.toLowerCase().includes(`track:${t.name.split(' - ')[0]!.toLowerCase()} `)).map((t) => this.trackJson(t));
       return json(200, { tracks: { items } });
     }
+    if (method === 'GET' && path === '/me') return json(200, { id: this.meId, display_name: 'TEST Display Name', email: 'test-owner@example.test', country: 'TW', product: 'premium' });
     if (method === 'GET' && path === '/me/player/devices') return json(200, { devices: this.devices });
     if (method === 'GET' && path === '/me/player') return this.player ? json(200, this.player) : new Response(null, { status: 204 });
     if (method === 'PUT' && (path === '/me/player/play' || path === '/me/player/pause')) {
