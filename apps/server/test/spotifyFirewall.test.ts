@@ -90,6 +90,8 @@ describe('資料防火牆：Spotify 資料只用於播放與 Loved，不進 LLM�
     const show = (await dj.client.agent.get(`/api/shows/${job.showId}`)).body;
     expect(show.segments.map((s: { candidate: { title: string } }) => s.candidate.title)).toEqual(['TEST Nominated 1', 'TEST Nominated 4', 'TEST Nominated 5', 'TEST Nominated 6', 'TEST Nominated 7']);
     expect(show.unavailable.map((c: { title: string }) => c.title)).toEqual(['TEST Nominated 2', 'TEST Nominated 3']);
+    expect(show.warnings).toContain('Spotify 找不到曲名與藝人都相符（且可播放）的曲目，已略過 2 首提名，改用下一首。');
+    expect(show.warnings.join('\n')).not.toMatch(/TEST-(access|refresh)|Bearer/);
 
     const failing = catalog();
     for (let i = 0; i < 7; i += 1) failing.respondOnce('GET', '/v1/search', 503, { error: { status: 503, message: 'TEST down' } });

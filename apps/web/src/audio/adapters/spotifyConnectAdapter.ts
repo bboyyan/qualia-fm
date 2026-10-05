@@ -3,6 +3,8 @@
  * - 每首前就緒檢查（裝置清單裡要有這台）；不在就停下，不盲送 play。
  * - 以狀態查詢確認真的在播才回報 started；只在頁面可見時輪詢，暫停時不輪詢。
  * - 暫停超過約 10 分鐘視為需重連（官方 Connect 說明）。
+ * - 不疊音（Policy III.7）：每次切段換「世代」；stop 只要有進行中的一首就送 pause（即使還沒確認在播）。
+ *   play 在路上時被切段或暫停，生效後再送一次 pause，並以狀態查詢確認靜音；在路上或待確認期間都算「可能出聲」。
  */
 import type { SpotifyPlayback } from '@qualia/contracts';
 import {
@@ -56,6 +58,12 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
   private pollTimer: unknown = null;
   private pausedAt: number | null = null;
   private localPause = false;
+  /** 每次 start／stop 加一；play 回來時世代不同＝已被切段。 */
+  private generation = 0;
+  /** 已送出、伺服器還沒回應的 play 數。 */
+  private inflight = 0;
+  /** 遲到的 play 已送 pause，但還沒查到 Spotify 停了。 */
+  private pendingSilence = false;
   private readonly unwatch: () => void;
 
   constructor(private readonly deps: ConnectDeps) {
@@ -69,22 +77,27 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     const locator = request.segment.track.audioLocator;
     if (request.owner !== 'track' || locator.kind !== 'spotify_uri') return Promise.reject(notSupported('Spotify app 只播放 Spotify 曲目。'));
     const gesture = this.deps.hasUserGesture();
-    this.resetAttempt();
-    return this.ensureDevice(gesture).then(() => this.play(request.attemptId, locator.uri, request.fromMs));
+    this.supersede();
+    this.pendingSilence = false;
+    const generation = this.generation;
+    return this.ensureDevice(gesture).then(() => {
+      if (generation !== this.generation) return;
+      return this.play(request.attemptId, locator.uri, request.fromMs, generation);
+    });
   }
 
   pause(): void {
     this.localPause = true;
     this.pausedAt = this.deps.now();
     this.clearPoll();
-    void this.deps.remote.pause(this.deps.deviceId).catch(() => undefined);
+    this.sendPause();
   }
 
   resume(attemptId: number): Promise<void> {
     const current = this.current;
     if (!current) return Promise.reject(deviceUnavailable());
     if (this.pausedAt !== null && this.deps.now() - this.pausedAt > PAUSE_RECONNECT_MS) {
-      this.current = null;
+      this.supersede();
       this.report('offline', 'paused_too_long');
       return Promise.reject(deviceUnavailable());
     }
@@ -92,7 +105,12 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     const position = this.last?.progressMs ?? 0;
     this.localPause = false;
     this.pausedAt = null;
-    return this.ensureDevice(gesture).then(() => this.play(attemptId, current.uri, position));
+    this.pendingSilence = false;
+    const generation = this.generation;
+    return this.ensureDevice(gesture).then(() => {
+      if (generation !== this.generation || this.localPause) return;
+      return this.play(attemptId, current.uri, position, generation);
+    });
   }
 
   seek(positionMs: number): void {
@@ -101,11 +119,12 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     void this.deps.remote.play({ deviceId: this.deps.deviceId, uri: current.uri, positionMs: Math.max(0, Math.round(positionMs)) }).catch(() => undefined);
   }
 
+  /** 切段／回饋／換模式：只要有進行中的一首（含還在路上、尚未確認）或可能出聲，就送 pause。 */
   stop(): void {
-    const audible = this.isAudible();
-    this.resetAttempt();
+    const active = this.current !== null || this.isAudible();
+    this.supersede();
     this.localPause = true;
-    if (audible) void this.deps.remote.pause(this.deps.deviceId).catch(() => undefined);
+    if (active) this.sendPause();
   }
 
   getState(): ProviderState | null {
@@ -116,18 +135,23 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     return { positionMs: last.durationMs === null ? position : Math.min(position, last.durationMs), durationMs: last.durationMs, paused: !last.isPlaying, ready: true };
   }
 
+  /** 「可能出聲」：play 在路上、遲到的 play 尚未確認停止，或最近一次查詢顯示這台正在播。 */
   isAudible(): boolean {
-    return this.state === 'online' && this.last !== null && this.last.isPlaying && this.last.deviceId === this.deps.deviceId;
+    return this.inflight > 0 || this.pendingSilence || (this.state === 'online' && this.last !== null && this.last.isPlaying && this.last.deviceId === this.deps.deviceId);
   }
 
-  /** 送出暫停後以狀態查詢確認靜音（逾時回 false，交由呼叫端不疊音）。 */
+  /** 以狀態查詢確認靜音（在路上的 play 也要等它生效並被暫停）；逾時回 false，交由呼叫端不疊音。 */
   async whenSilent(timeoutMs: number): Promise<boolean> {
     const deadline = this.deps.now() + timeoutMs;
     while (this.isAudible()) {
       if (this.deps.now() >= deadline) return false;
       await new Promise<void>((resolve) => this.deps.timers.setTimeout(resolve, SILENCE_POLL_MS));
+      if (this.inflight > 0) continue;
       const playback = await this.deps.remote.playback().catch(() => null);
-      if (playback) this.last = { ...playback, at: this.deps.now() };
+      if (!playback) continue;
+      this.last = { ...playback, at: this.deps.now() };
+      if (!playback.isPlaying || playback.deviceId !== this.deps.deviceId) this.pendingSilence = false;
+      else if (this.current === null || this.localPause) this.sendPause();
     }
     return true;
   }
@@ -146,7 +170,7 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
 
   destroy(): void {
     this.unwatch();
-    this.resetAttempt();
+    this.supersede();
     this.listeners.clear();
   }
 
@@ -170,19 +194,32 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     throw gesture ? deviceUnavailable() : gestureNeeded();
   }
 
-  private async play(attemptId: number, uri: string, positionMs: number): Promise<void> {
+  private async play(attemptId: number, uri: string, positionMs: number, generation: number): Promise<void> {
     const attempt: Attempt = { attemptId, uri, confirmed: false, deadline: this.deps.now() + CONFIRM_TIMEOUT_MS };
     this.current = attempt;
+    this.inflight += 1;
     try {
       await this.deps.remote.play({ deviceId: this.deps.deviceId, uri, positionMs: Math.max(0, Math.round(positionMs)) });
     } catch (error: unknown) {
+      this.inflight -= 1;
       if (this.current === attempt) this.current = null;
       const reason = remoteReason(error);
       if (reason === 'other') throw error;
       this.report('offline', reason);
       throw deviceUnavailable();
     }
-    if (this.current === attempt) this.schedulePoll();
+    this.inflight -= 1;
+    if (generation !== this.generation || this.current !== attempt || this.localPause) {
+      // 在路上時被切段或按了暫停：play 剛生效，再送一次 pause，待查詢確認停止才算安靜。
+      this.pendingSilence = true;
+      this.sendPause();
+      return;
+    }
+    this.schedulePoll();
+  }
+
+  private sendPause(): void {
+    void this.deps.remote.pause(this.deps.deviceId).catch(() => undefined);
   }
 
   private schedulePoll(): void {
@@ -239,7 +276,9 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     }
   }
 
-  private resetAttempt(): void {
+  /** 換世代：目前這一首（含還在路上的）作廢。 */
+  private supersede(): void {
+    this.generation += 1;
     this.clearPoll();
     this.current = null;
     this.localPause = false;

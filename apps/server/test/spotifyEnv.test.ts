@@ -85,7 +85,8 @@ describe('SPOTIFY_ENABLED=true 嚴格閘門（fail closed）', () => {
     expect(caps.spotifyEnabled).toBe(true);
     expect(caps.spotifyDjApproved).toBe(false);
     expect(caps.spotify).toMatchObject({ linked: false, lovedPlaylistId: '0dF9anAJZv0IotD6lo2kl2', clientId: SPOTIFY_TEST_ENV.SPOTIFY_CLIENT_ID });
-    expect(caps.spotify?.scopes).toEqual(['streaming', 'user-read-playback-state', 'user-modify-playback-state', 'playlist-modify-private', 'playlist-read-private']);
+    // 鎖定白名單（不引用常數）：多一個或少一個 scope 都要讓測試失敗。
+    expect(caps.spotify?.scopes).toEqual(['streaming', 'user-read-email', 'user-read-private', 'user-read-playback-state', 'user-modify-playback-state', 'playlist-modify-private', 'playlist-read-private']);
     expect(caps.restrictions.join('\n')).not.toContain('Spotify 尚未啟用');
   });
 });

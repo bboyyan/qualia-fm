@@ -113,7 +113,7 @@ export class FakeSpotify {
       access_token: access,
       token_type: 'Bearer',
       expires_in: 3600,
-      scope: 'streaming user-read-playback-state user-modify-playback-state playlist-modify-private playlist-read-private',
+      scope: 'streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state playlist-modify-private playlist-read-private',
       ...(issueRefresh ? { refresh_token: refresh } : {}),
     });
   }

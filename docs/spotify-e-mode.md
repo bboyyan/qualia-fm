@@ -11,10 +11,11 @@
 | token 小檔 | `apps/server/src/spotify/tokenStore.ts` | 只存 refresh token；AES-256-GCM（AAD 固定）、權限 600、原子寫入。缺金鑰或金鑰錯誤：不寫、讀取視為未連結。refresh 被撤銷（invalid_grant）→ 刪檔要求重新連結。access token 只在記憶體。 |
 | 短期 token | `POST /api/spotify/token` | session＋CSRF，且需 E 模式核可；只給瀏覽器 Web Playback SDK。`Cache-Control: no-store`，不寫日誌。 |
 | 播放代理 | `GET /api/spotify/devices`、`GET /api/spotify/playback`、`POST /api/spotify/play`、`POST /api/spotify/pause` | 需 E 模式核可。指令一律帶 `device_id`；`play` 只接受本 session 節目裡由伺服器對應出的 URI。404 → `DEVICE_UNAVAILABLE`、403 Premium → `SPOTIFY_ACCOUNT_ERROR`、其他 403 → `SPOTIFY_NOT_ALLOWLISTED`、429 → `RATE_LIMITED`（帶 Retry-After）、401 → 換新一次再送。 |
-| 曲目對應 | `apps/server/src/spotify/resolver.ts` | Search（`type=track`、`limit=5`、`market=from_token`）**只**把 LLM 提名的曲名／藝人對應成可播放 URI；藝人要對得上、不可播就換下一位候選。MOCK 提名不送 Search。結果只進 `segment.track`（播放與 Loved 用）。 |
+| 曲目對應 | `apps/server/src/spotify/resolver.ts` | Search（`type=track`、`limit=5`、`market=from_token`）**只**把 LLM 提名的曲名／藝人對應成可播放 URI；**曲名與藝人都要在正規化後對上**（NFKC 全半形、大小寫、標點；允許 Spotify 的「 - Remastered」後綴與括號註記；部分重疊不算），不可播或對不上就標 unavailable、換下一位候選，並在節目 warnings 記「已略過 N 首提名」（只有數量，不含 token 或 Spotify 內容）。MOCK 提名不送 Search。結果只進 `segment.track`（播放與 Loved 用）。 |
 | Qualia Loved | `apps/server/src/spotify/loved.ts`、`POST /api/spotify/loved` | 只需 `SPOTIFY_ENABLED`＋已連結。URI 由伺服器依節目查（用戶端只送 showId／segmentId）。先讀 `GET /playlists/{id}/items` 去重，不在才 `POST /playlists/{id}/items`；同一首並行只寫一次；**沒有任何刪除**。 |
 | 資料防火牆 | `PlanService.feedback`、`editorialInput.ts` | 帳本只寫日期／種子／LLM 提名的曲名・藝人／評價／原因；LLM 只吃種子、調整文字與帳本列。測試：`apps/server/test/spotifyFirewall.test.ts`。 |
-| 網頁播放 | `apps/web/src/audio/adapters/` | `PlaybackRouter`（預設原樣交給單一 `<audio>`）＋`SpotifyWebPlaybackAdapter`（路徑 P）＋`SpotifyConnectAdapter`（路徑 C）。介紹（`<audio>`）停了並確認已停才送 play；Spotify 出聲時要播介紹，先暫停並等確認靜音，確認不了就不播介紹。 |
+| 網頁播放 | `apps/web/src/audio/adapters/` | `PlaybackRouter`（預設原樣交給單一 `<audio>`）＋`SpotifyWebPlaybackAdapter`（路徑 P）＋`SpotifyConnectAdapter`（路徑 C）。介紹（`<audio>`）停了並確認已停才送 play（`<audio>` 停止若非立即，最多等 1 秒，確認不了就不放歌）；Spotify 出聲時要播介紹，先暫停並等確認靜音，確認不了就不播介紹。 |
+| 切段競態（B1） | 同上 | 每次切段換「世代」。play 還在路上時被下一首／JUMP／暫停：P 在生效後立刻 `player.pause()`，且我方不要聲音時 SDK 若回報在播一律再暫停；C 的 stop 只要有進行中的一首就送 pause，生效後再送一次並輪詢確認停止。「play 在路上」與「遲到的 play 待確認靜音」都算可能出聲，介紹會等到確認靜音才開始；等待期間若又被切段，那段介紹就不再開始。介紹播放中若 Spotify 遲到回報 started，router 停掉 Spotify、不轉給引擎。測試：`apps/web/test/spotifyRace.test.ts`。 |
 | 網頁 UI | `apps/web/src/features/spotify/`、`features/player/LoveStep.tsx` | 沿用既有 `--q-*` 配色與 Button／InlineRecovery／BottomSheet／設定頁 group 元件；design-v1 只採旅程、文案與狀態。 |
 
 ## 2. 新增 env
@@ -30,7 +31,7 @@
 | `SPOTIFY_TOKEN_FILE` | `./data/spotify-token.enc` | 加密 token 小檔；建議設絕對路徑（相對路徑會隨啟動目錄改變，等於未連結）。 |
 | `SPOTIFY_LOVED_PLAYLIST_ID` | `0dF9anAJZv0IotD6lo2kl2` | Qualia Loved。若改成公開歌單需另加 `playlist-modify-public`（本版未要求）。 |
 
-Scopes 固定五個：`streaming`、`user-read-playback-state`、`user-modify-playback-state`、`playlist-modify-private`、`playlist-read-private`。
+Scopes 固定七個（測試鎖定白名單）：`streaming`、`user-read-email`、`user-read-private`（這兩個是 Web Playback SDK 官方要求；本站**不呼叫** `/me` 或任何讀取個人資料的 API）、`user-read-playback-state`、`user-modify-playback-state`、`playlist-modify-private`、`playlist-read-private`。
 
 ## 3. 啟用 checklist（L2）
 
@@ -66,10 +67,14 @@ Scopes 固定五個：`streaming`、`user-read-playback-state`、`user-modify-pl
 3. 到 Spotify 帳戶「應用程式」頁撤銷 Qualia FM 授權。
 4. 程式層：revert 本 PR；`.env.example` 的 Spotify 值本來就是空／false。
 
-## 7. 已知缺口
+## 7. 啟用前事項（本 PR 不做，啟用 E 模式前要處理或明確接受）
+
+- **A1｜token 綁擁有者**：目前 refresh token 是整台伺服器一份；任何能開這個網址的 session 都能用同一個 Spotify 連結（取 SDK token、播放、加 Loved）。啟用前要把連結綁定到擁有者（例如登入者或單一裝置憑證），或明確接受「只在 Tailscale 私網、單人使用」的前提。
+- **A2｜Spotify 標示規範**：換成 Spotify Design Guidelines 的官方 logo 素材與留白；封面圓角改為規範的 4px（小尺寸）／8px（大尺寸）（目前 12px）；顯示完整 metadata（曲名、藝人、專輯）與規範要求的標示位置。
+- **真機驗證（G0-C）**：見第 5 節，全部未驗。
+
+## 8. 已知缺口
 
 - Notion 帳本仍未接線（`app.ts` 預設 `InMemoryLedger`）；UI 模式列如實顯示「TEST 假帳本」。
-- 已連結 token 為單一裝置（Mac mini）層級：任何能開這個網址的 session 都會使用同一個 Spotify 連結（僅 Tailscale 私網、單人使用的前提）。
-- Spotify 標示目前是文字標籤；正式需換成 Spotify Design Guidelines 的官方 logo 素材。
 - 「改用手動播放」後回到該首開頭會重播介紹。
 - 封面來自 `i.scdn.co`，只顯示、不快取、不進 AI；E2E 以 data URI 假封面驗證。

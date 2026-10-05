@@ -39,6 +39,8 @@ export interface QualiaApp {
   app: Express;
   plans: PlanService;
   sessions: SessionStore;
+  /** 只在 SPOTIFY_ENABLED=true 時存在；關閉時不建立任何 Spotify 物件、不讀 token 檔。 */
+  spotify: SpotifyServices | undefined;
 }
 
 function serveStatic(app: Express, dir: string): void {
@@ -96,5 +98,5 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
   if (spotify) app.get('/callback', spotifyCallback(apiDeps));
   if (config.staticDir && existsSync(join(config.staticDir, 'index.html'))) serveStatic(app, config.staticDir);
   app.use(errorHandler);
-  return { app, plans, sessions };
+  return { app, plans, sessions, spotify };
 }

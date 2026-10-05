@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { PlaybackMode } from '../audio/types';
-import { LINK_MESSAGES, effectivePlaybackMode, readLinkOutcome } from '../features/spotify/spotifyMode';
+import { LINK_MESSAGES, effectivePlaybackMode, readLinkOutcome, urlWithoutLinkOutcome } from '../features/spotify/spotifyMode';
 import { api } from './services';
 import { useAppStore, type Tab } from './appStore';
 
@@ -16,7 +16,7 @@ export function useEffectivePlaybackMode(): PlaybackMode {
 function announceLinkOutcome(): void {
   const outcome = readLinkOutcome(window.location.search);
   if (!outcome) return;
-  window.history.replaceState(window.history.state, '', window.location.pathname);
+  window.history.replaceState(window.history.state, '', urlWithoutLinkOutcome(window.location.pathname, window.location.search, window.location.hash));
   const store = useAppStore.getState();
   store.showToast(LINK_MESSAGES[outcome]);
   if (outcome === 'linked') {

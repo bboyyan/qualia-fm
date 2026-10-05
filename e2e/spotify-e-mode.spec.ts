@@ -169,10 +169,15 @@ test.describe('BRA-109 E 模式（假 Spotify）', () => {
     expect(health.headers()['content-security-policy']).not.toContain('sdk.scdn.co');
   });
 
-  test('登入流程（假）：同意 sheet → 伺服器 login → /callback → 回到 App 顯示已連結', async ({ page }) => {
+  test('登入流程（假）：同意 sheet → 伺服器 login → 回到 App 顯示已連結', async ({ page }) => {
     const server = await fakeEModeServer(page, { linked: false });
-    await page.route('**/api/auth/spotify/login', (route) => route.fulfill({ status: 302, headers: { Location: '/callback?code=E2E-code&state=E2E-state' } }));
-    await page.route(/\/callback\?/, (route) => {
+    // page.route 只攔轉址鏈的第一個請求：假 login 若再轉到 /callback，後續請求不會進 handler，
+    // 且 E2E 伺服器 Spotify 關閉、沒有 /callback 路由（會落到 SPA）。所以假 login 直接模擬
+    // 「Spotify 授權＋伺服器 /callback 處理完成」的最終結果。真正的 /callback（state、PKCE、303）由
+    // apps/server/test/spotifyAuth.test.ts 以假 fetch 驗證。
+    let loginNavigations = 0;
+    await page.route('**/api/auth/spotify/login', (route) => {
+      loginNavigations += 1;
       server.linked = true;
       return route.fulfill({ status: 303, headers: { Location: '/?spotify=linked' } });
     });
@@ -185,6 +190,7 @@ test.describe('BRA-109 E 模式（假 Spotify）', () => {
     await expect(consent).toContainText('這是本專案內部的授權，不等於 Spotify 官方核可這個用途。');
     await consent.getByTestId('consent-link').click();
     await expect(page).toHaveURL(/\/$/);
+    expect(loginNavigations).toBe(1);
     await expect(page.getByTestId('toast').first()).toContainText('已連結 Spotify');
     await expect(page.getByTestId('spotify-link-state')).toHaveText('已連結');
     await expect(page.getByRole('radio', { name: 'E · Spotify 自動串接' })).toBeChecked();

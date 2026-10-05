@@ -6,13 +6,32 @@ import type { Candidate, ResolvedTrack } from '@qualia/contracts';
 import type { CatalogResolver, ResolverContext } from '../providers/types.js';
 import type { ApiTrack, SpotifyWebApi } from './webApi.js';
 
+/** 只需要 Search；方便以假物件測試。 */
+export type TrackSearch = Pick<SpotifyWebApi, 'searchTracks'>;
+
 const ARTWORK_HOST = 'i.scdn.co';
 const EXTERNAL_PREFIX = 'https://open.spotify.com/';
 const PREFERRED_ARTWORK_PX = 300;
 
 /** Spotify 查詢語法用的字串：去掉引號與欄位分隔符，避免把提名文字變成查詢運算子。 */
 const clean = (value: string): string => value.replace(/["':]/g, ' ').replace(/\s+/g, ' ').trim();
-const normalize = (value: string): string => value.normalize('NFKC').toLowerCase().replace(/[\s\p{P}]+/gu, '');
+/** NFKC（全形→半形）＋小寫＋去掉空白與標點。 */
+const normalize = (value: string): string => value.normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+
+/** 去掉版本註記：「 - Remastered 2024」這類後綴與括號內容（含全形括號，NFKC 後一併處理）。 */
+const stripDecorations = (value: string): string =>
+  value
+    .normalize('NFKC')
+    .replace(/\s+-\s+.*$/u, '')
+    .replace(/[([{][^)\]}]*[)\]}]/gu, ' ')
+    .trim();
+
+/** 曲名要對上：正規化後完全相同（允許 Spotify 的版本後綴／括號註記），部分重疊不算。 */
+export function titlesMatch(nominated: string, spotifyName: string): boolean {
+  const wanted = normalize(stripDecorations(nominated)) || normalize(nominated);
+  const actual = normalize(stripDecorations(spotifyName)) || normalize(spotifyName);
+  return wanted.length > 0 && wanted === actual;
+}
 
 export function searchQuery(candidate: Pick<Candidate, 'title' | 'artist'>): string {
   return `track:${clean(candidate.title)} artist:${clean(candidate.artist)}`;
@@ -69,12 +88,17 @@ const unavailable = (candidate: Candidate): ResolvedTrack => ({
 });
 
 export class SpotifyCatalogResolver implements CatalogResolver {
-  constructor(private readonly api: SpotifyWebApi) {}
+  constructor(private readonly api: TrackSearch) {}
 
   async resolve(candidate: Candidate, context: ResolverContext): Promise<ResolvedTrack> {
     if (context.signal.aborted) throw context.signal.reason;
     const results = await this.api.searchTracks(searchQuery(candidate), context.signal);
-    const match = results.find((track) => track.is_playable !== false && /^spotify:track:[A-Za-z0-9]{22}$/.test(track.uri) && artistMatches(track, candidate.artist));
+    // 曲名與藝人都要對上（正規化後），且可播放；對不上就標 unavailable，由 PlanService 換下一位候選並記 warning。
+    const match = results.find((track) =>
+      track.is_playable !== false &&
+      /^spotify:track:[A-Za-z0-9]{22}$/.test(track.uri) &&
+      titlesMatch(candidate.title, track.name) &&
+      artistMatches(track, candidate.artist));
     return match ? toResolved(match) : unavailable(candidate);
   }
 }

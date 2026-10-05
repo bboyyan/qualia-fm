@@ -37,6 +37,7 @@ const TARGET_SEGMENTS = 5;
 const SPEECH_DEADLINE_MARGIN_MS = 250;
 const monotonicNow = (): number => performance.now();
 const SPOTIFY_RESOLVE_WARNING = 'Spotify 對應暫時失敗，部分曲目改列待確認。';
+const spotifyMismatchWarning = (count: number): string => `Spotify 找不到曲名與藝人都相符（且可播放）的曲目，已略過 ${count} 首提名，改用下一首。`;
 
 export interface PlanServiceDeps {
   /** SPOTIFY_ENABLED 且已連結時，把真實提名對應成 Spotify URI；MOCK 提名不送 Search。 */
@@ -236,9 +237,12 @@ export class PlanService {
     const spotify = !mock && this.deps.spotify?.linked() ? this.deps.spotify.resolver : null;
     const { playable, unavailable, failed } = await this.resolveAll(spotify ?? this.deps.resolver, draft.candidates, input.scenario, signal);
     await this.enter(jobId, 'preparing', phaseMs, signal);
+    // 只說數量（提名來自 LLM），不含 token 或任何 Spotify 回傳內容。
+    const mismatched = spotify ? unavailable.length - failed : 0;
+    const resolveWarnings = [...(failed > 0 ? [SPOTIFY_RESOLVE_WARNING] : []), ...(mismatched > 0 ? [spotifyMismatchWarning(mismatched)] : [])];
     const plan = buildShowPlan({
       seed: input.request.seed,
-      draft: failed ? { ...draft, warnings: [SPOTIFY_RESOLVE_WARNING, ...draft.warnings].slice(0, 10) } : draft,
+      draft: resolveWarnings.length > 0 ? { ...draft, warnings: [...resolveWarnings, ...draft.warnings].slice(0, 10) } : draft,
       playable,
       unavailable,
       speech: editorial.djEnabled ? { kind: 'mock_chime', durationMs: speechMs } : { kind: 'none' },
@@ -325,7 +329,7 @@ export class PlanService {
   private async resolveAll(resolver: CatalogResolver, candidates: readonly Candidate[], scenario: MockScenario, signal: AbortSignal) {
     const playable: ResolvedCandidate[] = [];
     const unavailable: Candidate[] = [];
-    let failed = false;
+    let failed = 0;
     const limit = Math.min(candidates.length, this.deps.config.limits.maxCandidatesPerPlan);
     for (let index = 0; index < limit && playable.length < TARGET_SEGMENTS; index += 1) {
       const candidate = candidates[index];
@@ -336,7 +340,7 @@ export class PlanService {
       } catch (error) {
         if (signal.aborted) throw signal.reason;
         if (resolver === this.deps.resolver) throw error;
-        failed = true;
+        failed += 1;
         unavailable.push(candidate);
         continue;
       }

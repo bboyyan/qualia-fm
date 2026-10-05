@@ -3,6 +3,8 @@
  * - SDK 只在使用者點擊（connect）時載入；有播放器時 activateElement 同步留在手勢內。
  * - 每首前就緒檢查：不在且不在手勢內 → NotAllowedError（點一下繼續）；手勢內 → 重新接上，仍不行 → 裝置離線。
  * - 送出 play（伺服器代理、帶 device_id）後，要等 player_state_changed 確認真的在播才回報 started。
+ * - 不疊音（Policy III.7）：每次切段都換「世代」。play 在路上時被 stop／暫停，生效後一律暫停；
+ *   我方不要聲音時 SDK 若回報在播，一律再暫停；在路上或待確認靜音期間都算「可能出聲」。
  * - 暫停超過約 10 分鐘視為需重連；只在頁面回到前景時讀狀態；不做靜音保活、wake lock 或背景計時器。
  */
 import type { SdkLoader, SdkPlaybackState, SdkPlayer } from '../spotify/sdk';
@@ -27,6 +29,8 @@ export { PAUSE_RECONNECT_MS };
 const PLAYER_NAME = 'Qualia FM';
 const READY_TIMEOUT_MS = 8000;
 const CONFIRM_TIMEOUT_MS = 10_000;
+/** 遲到的 play 被暫停後，等 SDK 回報已暫停的時間；逾時重讀一次狀態。 */
+const SILENCE_RECHECK_MS = 1500;
 
 export interface WebPlaybackDeps {
   readonly loadSdk: SdkLoader;
@@ -74,6 +78,15 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
   private pausedAt: number | null = null;
   private localPause = false;
   private confirmTimer: unknown = null;
+  /** 每次 start／stop 加一；play 回來時世代不同＝已被切段。 */
+  private generation = 0;
+  /** 已送出、伺服器還沒回應的 play 數。 */
+  private inflight = 0;
+  /** 遲到的 play 已被暫停，但 SDK 還沒回報已暫停。 */
+  private pendingSilence = false;
+  private silenceTimer: unknown = null;
+  /** 被切掉的曲目；它遲到的「播放中」狀態不能當成新一首的確認。 */
+  private readonly staleUris = new Set<string>();
   private readyWaiters: ((ok: boolean) => void)[] = [];
   private silentWaiters: (() => void)[] = [];
   private readonly unwatch: () => void;
@@ -110,24 +123,30 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
     const locator = request.segment.track.audioLocator;
     if (request.owner !== 'track' || locator.kind !== 'spotify_uri') return Promise.reject(notSupported('Spotify 播放器只播放 Spotify 曲目。'));
     const gesture = this.deps.hasUserGesture();
-    this.resetAttempt();
-    if (this.isOnline()) return this.play(request, locator.uri);
+    this.supersede();
+    this.pendingSilence = false;
+    this.clearSilenceTimer();
+    const generation = this.generation;
+    if (this.isOnline()) return this.play(request, locator.uri, generation);
     if (!gesture) return Promise.reject(gestureNeeded());
-    return this.connect().then((ok) => (ok ? this.play(request, locator.uri) : Promise.reject(deviceUnavailable())));
+    return this.connect().then((ok) => {
+      if (generation !== this.generation) return;
+      return ok ? this.play(request, locator.uri, generation) : Promise.reject(deviceUnavailable());
+    });
   }
 
   pause(): void {
     this.localPause = true;
     this.pausedAt = this.deps.now();
     this.clearConfirm();
-    void this.player?.pause().catch(() => undefined);
+    this.silencePlayer();
   }
 
   resume(attemptId: number): Promise<void> {
     const current = this.current;
     if (!current) return Promise.reject(deviceUnavailable());
     if (this.pausedAt !== null && this.deps.now() - this.pausedAt > PAUSE_RECONNECT_MS) {
-      this.current = null;
+      this.supersede();
       this.report('offline', 'paused_too_long');
       return Promise.reject(deviceUnavailable());
     }
@@ -135,7 +154,10 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
     this.current = { ...current, attemptId, confirmed: false, fresh: false };
     this.localPause = false;
     this.pausedAt = null;
-    void this.player?.resume().catch(() => undefined);
+    this.pendingSilence = false;
+    this.clearSilenceTimer();
+    // play 還在路上：等它生效即可（生效時 localPause 已解除）；否則請 SDK 繼續。
+    if (this.inflight === 0) void this.player?.resume().catch(() => undefined);
     this.armConfirm(attemptId);
     return Promise.resolve();
   }
@@ -144,11 +166,12 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
     void this.player?.seek(positionMs).catch(() => undefined);
   }
 
+  /** 切段／回饋／換模式：一律請 SDK 暫停（即使 play 還在路上或尚未確認），世代換新。 */
   stop(): void {
     const active = this.current !== null || this.isAudible();
-    this.resetAttempt();
+    this.supersede();
     this.localPause = true;
-    if (active) void this.player?.pause().catch(() => undefined);
+    if (active) this.silencePlayer();
   }
 
   getState(): ProviderState | null {
@@ -160,8 +183,9 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
     return { positionMs: duration === null ? position : Math.min(position, duration), durationMs: duration, paused: last.paused, ready: true };
   }
 
+  /** 「可能出聲」：play 在路上、遲到的 play 尚未確認暫停，或 SDK 回報正在播。 */
   isAudible(): boolean {
-    return this.state === 'online' && this.last !== null && !this.last.paused;
+    return this.inflight > 0 || this.pendingSilence || (this.state === 'online' && this.last !== null && !this.last.paused);
   }
 
   whenSilent(timeoutMs: number): Promise<boolean> {
@@ -192,7 +216,8 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
 
   destroy(): void {
     this.unwatch();
-    this.resetAttempt();
+    this.supersede();
+    this.clearSilenceTimer();
     this.player?.disconnect();
     this.player = null;
     this.listeners.clear();
@@ -200,6 +225,11 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
 
   private isOnline(): boolean {
     return this.state === 'online' && this.deviceId !== null;
+  }
+
+  /** 我方此刻不要聲音：沒有進行中的一首，或使用者按了暫停。 */
+  private wantsSilence(): boolean {
+    return this.current === null || this.localPause;
   }
 
   private activate(player: SdkPlayer): void {
@@ -272,23 +302,32 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
 
   private onNotReady(): void {
     this.deviceId = null;
+    this.pendingSilence = false;
     this.report('offline', 'not_found');
-    this.flushSilent();
-    if (this.current) {
-      this.resetAttempt();
-      this.emit({ type: 'device_lost' });
-    }
+    const hadAttempt = this.current !== null;
+    if (hadAttempt) this.supersede();
+    this.checkSilent();
+    if (hadAttempt) this.emit({ type: 'device_lost' });
   }
 
   private onState(sdk: SdkPlaybackState | null): void {
     if (!sdk) {
       this.last = null;
-      this.flushSilent();
+      this.pendingSilence = false;
+      this.checkSilent();
       return;
     }
     const uri = sdk.track_window.current_track?.uri ?? null;
     this.last = { paused: sdk.paused, position: sdk.position, duration: sdk.duration, at: this.deps.now(), uri };
-    if (sdk.paused) this.flushSilent();
+    if (sdk.paused) {
+      this.pendingSilence = false;
+      this.clearSilenceTimer();
+    } else if (this.wantsSilence()) {
+      // 遲到生效的 play 或我方已要求暫停：不論誰讓它出聲，一律再暫停（不疊音）。
+      this.silencePlayer();
+      return;
+    }
+    this.checkSilent();
     const current = this.current;
     if (!current) return;
     if (!current.confirmed) {
@@ -304,11 +343,11 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
   }
 
   private maybeConfirm(current: Attempt, sdk: SdkPlaybackState, uri: string | null): void {
-    if (sdk.paused) return;
-    const matches = uri === current.uri || (current.playingUri !== null && uri === current.playingUri) || (current.fresh && uri !== null && uri !== current.beforeUri);
+    if (sdk.paused || uri === null) return;
+    const matches = uri === current.uri || uri === current.playingUri || (current.fresh && uri !== current.beforeUri && !this.staleUris.has(uri));
     if (!matches) return;
     this.clearConfirm();
-    this.current = { ...current, confirmed: true, playingUri: uri ?? current.uri };
+    this.current = { ...current, confirmed: true, playingUri: uri };
     this.pausedAt = null;
     this.emit({ type: 'started', attemptId: current.attemptId, owner: 'track' });
   }
@@ -321,22 +360,52 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
     return sdk.paused && sdk.position === 0 && !this.localPause && (uri === playing || inPrevious);
   }
 
-  private async play(request: StartRequest, uri: string): Promise<void> {
+  private async play(request: StartRequest, uri: string, generation: number): Promise<void> {
     const deviceId = this.deviceId;
     if (!deviceId) throw deviceUnavailable();
+    this.staleUris.delete(uri);
     const attempt: Attempt = { attemptId: request.attemptId, uri, fresh: true, beforeUri: this.last?.uri ?? null, confirmed: false, playingUri: null };
     this.current = attempt;
+    this.inflight += 1;
     try {
       await this.deps.remote.play({ deviceId, uri, positionMs: request.fromMs });
     } catch (error: unknown) {
+      this.inflight -= 1;
       if (this.current === attempt) this.current = null;
+      this.checkSilent();
       const reason = remoteReason(error);
       if (reason === 'other') throw error;
       if (reason === 'not_found') this.deviceId = null;
       this.report('offline', reason);
       throw deviceUnavailable();
     }
-    if (this.current === attempt) this.armConfirm(attempt.attemptId);
+    this.inflight -= 1;
+    if (generation !== this.generation || this.current !== attempt) {
+      // 在路上時被切段：這個 play 剛生效，立刻暫停，並等 SDK 確認靜音才算安靜。
+      this.staleUris.add(uri);
+      this.silenceLatePlay();
+      return;
+    }
+    if (this.localPause) {
+      // 在路上時使用者按了暫停：保留這一首（可以繼續），但現在就暫停。
+      this.silenceLatePlay();
+      return;
+    }
+    this.armConfirm(attempt.attemptId);
+  }
+
+  private silenceLatePlay(): void {
+    this.pendingSilence = true;
+    this.silencePlayer();
+    this.clearSilenceTimer();
+    this.silenceTimer = this.deps.timers.setTimeout(() => {
+      this.silenceTimer = null;
+      void this.refresh();
+    }, SILENCE_RECHECK_MS);
+  }
+
+  private silencePlayer(): void {
+    void this.player?.pause().catch(() => undefined);
   }
 
   /** 送出後一直沒確認在播：當成需要使用者點一下，同時暫停，避免晚到的聲音和「點一下繼續」同時出現。 */
@@ -346,7 +415,7 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
       this.confirmTimer = null;
       if (this.current?.attemptId !== attemptId || this.current.confirmed) return;
       this.fail(attemptId, 'AUTOPLAY_BLOCKED');
-      void this.player?.pause().catch(() => undefined);
+      this.silencePlayer();
     }, CONFIRM_TIMEOUT_MS);
   }
 
@@ -356,8 +425,17 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
     this.confirmTimer = null;
   }
 
-  private resetAttempt(): void {
+  private clearSilenceTimer(): void {
+    if (this.silenceTimer === null) return;
+    this.deps.timers.clearTimeout(this.silenceTimer);
+    this.silenceTimer = null;
+  }
+
+  /** 換世代：目前這一首（含還在路上的）作廢。 */
+  private supersede(): void {
+    this.generation += 1;
     this.clearConfirm();
+    if (this.current && !this.current.confirmed) this.staleUris.add(this.current.uri);
     this.current = null;
     this.localPause = false;
     this.pausedAt = null;
@@ -376,7 +454,8 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
     if (sdk !== undefined) this.onState(sdk);
   }
 
-  private flushSilent(): void {
+  private checkSilent(): void {
+    if (this.isAudible()) return;
     const waiters = this.silentWaiters;
     this.silentWaiters = [];
     for (const waiter of waiters) waiter();

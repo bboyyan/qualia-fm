@@ -151,8 +151,19 @@ export class FakeRemote implements SpotifyRemote {
     this.playbackCalls += 1;
     return Promise.resolve(this.playbackState);
   };
+  /** 設為 true 時 play 不會自己完成，要由測試呼叫 landPlay()／failPlay() 模擬「指令還在路上」。 */
+  deferPlays = false;
+  private readonly pending: { resolve: () => void; reject: (error: unknown) => void }[] = [];
+  get pendingPlays(): number {
+    return this.pending.length;
+  }
+  /** 讓最早送出、還在路上的 play 生效（伺服器回 204）。 */
+  landPlay(): void {
+    this.pending.shift()?.resolve();
+  }
   play = (request: SpotifyPlayRequest): Promise<void> => {
     this.plays.push(request);
+    if (this.deferPlays) return new Promise<void>((resolve, reject) => this.pending.push({ resolve, reject }));
     if (this.failNextPlay) {
       const code = this.failNextPlay;
       this.failNextPlay = null;

@@ -36,6 +36,14 @@ export function readLinkOutcome(search: string): LinkOutcome | null {
   return LINK_OUTCOMES.find((outcome) => outcome === value) ?? null;
 }
 
+/** 授權回來後清掉網址上的 ?spotify=…（只移除這個參數，保留其他參數與 hash）。 */
+export function urlWithoutLinkOutcome(pathname: string, search: string, hash = ''): string {
+  const params = new URLSearchParams(search);
+  params.delete('spotify');
+  const rest = params.toString();
+  return `${pathname}${rest ? `?${rest}` : ''}${hash}`;
+}
+
 export interface ModeStripLabels {
   readonly selection: string;
   readonly playback: string;

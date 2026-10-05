@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SPOTIFY_SCOPES } from '@qualia/contracts';
 import { setLoggerSilent } from '../src/http/log.js';
 import { ORIGIN, bootstrap, testApp } from './helpers.js';
 import { DJ_TEST_ENV, FakeSpotify, SPOTIFY_TEST_ENV, challengeOf, linkedApp, post, tokenFile } from './spotifyHelpers.js';
@@ -30,7 +29,7 @@ describe('Spotify 關閉時（預設）與現況相同', () => {
 });
 
 describe('Authorization Code + PKCE', () => {
-  it('login 綁 session 後轉到 Spotify authorize：S256 challenge、state、只有五個 scope、沒有 secret', async () => {
+  it('login 綁 session 後轉到 Spotify authorize：S256 challenge、state、只有白名單 scope、沒有 secret', async () => {
     const { app } = testApp({ ...SPOTIFY_TEST_ENV, SPOTIFY_TOKEN_FILE: tokenFile() });
     const client = await bootstrap(app);
     const res = await login(client.agent).expect(302);
@@ -41,8 +40,9 @@ describe('Authorization Code + PKCE', () => {
       response_type: 'code',
       redirect_uri: SPOTIFY_TEST_ENV.SPOTIFY_REDIRECT_URI,
       code_challenge_method: 'S256',
-      scope: SPOTIFY_SCOPES.join(' '),
     });
+    // 鎖定白名單（不引用常數）：Web Playback SDK 必要的 email／private＋播放與 Loved 所需，不多不少。
+    expect(url.searchParams.get('scope')?.split(' ')).toEqual(['streaming', 'user-read-email', 'user-read-private', 'user-read-playback-state', 'user-modify-playback-state', 'playlist-modify-private', 'playlist-read-private']);
     expect(url.searchParams.get('code_challenge')).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(url.searchParams.get('state')).toMatch(/^[A-Za-z0-9_-]{32,}$/);
     expect(url.searchParams.has('client_secret')).toBe(false);
@@ -206,5 +206,50 @@ describe('日誌不含 token、code 或 state', () => {
     err.mockRestore();
     expect(lines.length).toBeGreaterThan(0);
     expect(lines.join('')).not.toMatch(/TEST-(access|refresh|code)|state=|code=/);
+  });
+});
+
+describe('PKCE code_verifier（RFC 7636）', () => {
+  it('長度 43–128、只含 unreserved 字元，且每次登入都不同', async () => {
+    const fake = new FakeSpotify();
+    const { app } = testApp({ ...SPOTIFY_TEST_ENV, SPOTIFY_TOKEN_FILE: tokenFile() }, { fetchImpl: fake.fetch });
+    const verifiers: string[] = [];
+    for (let i = 0; i < 2; i += 1) {
+      const client = await bootstrap(app);
+      const state = stateOf(String((await login(client.agent)).headers.location));
+      await client.agent.get(`/callback?code=TEST-code&state=${state}`).expect(303);
+      verifiers.push(new URLSearchParams(fake.callsTo('POST', '/api/token').at(-1)?.body ?? '').get('code_verifier') ?? '');
+    }
+    for (const verifier of verifiers) {
+      expect(verifier.length).toBeGreaterThanOrEqual(43);
+      expect(verifier.length).toBeLessThanOrEqual(128);
+      expect(verifier).toMatch(/^[A-Za-z0-9._~-]+$/);
+    }
+    expect(verifiers[0]).not.toBe(verifiers[1]);
+  });
+});
+
+describe('Spotify 關閉時不建立任何 Spotify 物件（M4b）', () => {
+  it('不建立服務、不讀 token 檔，即使檔案路徑已設定；各端點也不觸發讀檔', async () => {
+    const { SpotifyTokenStore } = await import('../src/spotify/tokenStore.js');
+    const load = vi.spyOn(SpotifyTokenStore.prototype, 'load');
+    const save = vi.spyOn(SpotifyTokenStore.prototype, 'save');
+    const fake = new FakeSpotify();
+    const qualia = testApp({ SPOTIFY_TOKEN_FILE: tokenFile(), SPOTIFY_TOKEN_ENC_KEY: SPOTIFY_TEST_ENV.SPOTIFY_TOKEN_ENC_KEY }, { fetchImpl: fake.fetch });
+    expect(qualia.spotify).toBeUndefined();
+    const client = await bootstrap(qualia.app);
+    await client.agent.get('/api/capabilities').expect(200);
+    await post(client, '/api/spotify/token').expect(403);
+    await post(client, '/api/spotify/loved', { showId: 'x', segmentId: 'y' }).expect(403);
+    await client.agent.get('/api/auth/spotify/login').expect(403);
+    expect(load).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(fake.calls).toEqual([]);
+    load.mockRestore();
+    save.mockRestore();
+  });
+
+  it('啟用時才建立服務（對照組）', () => {
+    expect(testApp({ ...SPOTIFY_TEST_ENV, SPOTIFY_TOKEN_FILE: tokenFile() }).spotify).toBeDefined();
   });
 });

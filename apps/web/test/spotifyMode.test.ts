@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Capabilities } from '@qualia/contracts';
-import { effectivePlaybackMode, eModeAvailable, lovedAvailable, modeStrip, readLinkOutcome } from '../src/features/spotify/spotifyMode';
+import { effectivePlaybackMode, eModeAvailable, lovedAvailable, modeStrip, readLinkOutcome, urlWithoutLinkOutcome } from '../src/features/spotify/spotifyMode';
 import { segment } from './fixtures';
 import { spotifySegment } from './spotifyFakes';
 
@@ -54,6 +54,12 @@ describe('登入回呼結果與模式列', () => {
     expect(readLinkOutcome('?spotify=denied')).toBe('denied');
     expect(readLinkOutcome('?spotify=<script>')).toBeNull();
     expect(readLinkOutcome('')).toBeNull();
+  });
+
+  it('授權回來後清掉 ?spotify=…：/?spotify=linked → /（E2E 的 toHaveURL 結尾斜線斷言依賴這個）', () => {
+    expect(urlWithoutLinkOutcome('/', '?spotify=linked')).toBe('/');
+    expect(urlWithoutLinkOutcome('/', '?spotify=denied&x=1', '#top')).toBe('/?x=1#top');
+    expect(urlWithoutLinkOutcome('/', '')).toBe('/');
   });
 
   it('模式列如實標示 MOCK／真 AI／Spotify 與 TEST 帳本', () => {
