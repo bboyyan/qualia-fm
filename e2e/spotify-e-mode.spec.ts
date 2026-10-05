@@ -175,11 +175,17 @@ test.describe('BRA-109 E 模式（假 Spotify）', () => {
     // 且 E2E 伺服器 Spotify 關閉、沒有 /callback 路由（會落到 SPA）。所以假 login 直接模擬
     // 「Spotify 授權＋伺服器 /callback 處理完成」的最終結果。真正的 /callback（state、PKCE、303）由
     // apps/server/test/spotifyAuth.test.ts 以假 fetch 驗證。
+    // WebKit 不接受 route.fulfill 回 3xx（Cannot fulfill with redirect status），改回 200 頁面在用戶端導回，
+    // 兩種瀏覽器行為一致；location.replace 不留下 login 這一頁的歷史紀錄，meta refresh 為備援。
     let loginNavigations = 0;
     await page.route('**/api/auth/spotify/login', (route) => {
       loginNavigations += 1;
       server.linked = true;
-      return route.fulfill({ status: 303, headers: { Location: '/?spotify=linked' } });
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/html; charset=utf-8',
+        body: '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/?spotify=linked"><script>location.replace("/?spotify=linked")</script>',
+      });
     });
     await page.goto('/');
     await page.getByTestId('tab-settings').click();
