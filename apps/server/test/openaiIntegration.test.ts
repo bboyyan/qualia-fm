@@ -1,8 +1,9 @@
 import { writeFileSync } from 'node:fs';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { ShowPlanSchema } from '@qualia/contracts';
 import { MockEditorialPlanner } from '../src/providers/mockPlanner.js';
 import { createApp } from '../src/app.js';
-import { fakeOpenAI, realConfig } from './openaiHelpers.js';
+import { MP3_BYTES, fakeOpenAI, realConfig } from './openaiHelpers.js';
 import { bootstrap, planRequest, postPlan, waitForJob } from './helpers.js';
 
 beforeEach(() => { vi.stubGlobal('fetch', () => { throw new Error('禁止真實網路'); }); });
@@ -66,7 +67,16 @@ it.each(['openai', 'mock'] as const)('每日 plan 上限拒絕 %s 選歌的整�
   now = Date.parse('2026-10-05T16:00:00Z');
   const nextDay = await waitForJob(client, (await postPlan(client, planRequest())).body.jobId);
   expect(nextDay.status).toBe('completed');
-  expect((await client.agent.get(`/api/shows/${nextDay.showId}`)).body.warnings.join(' ')).not.toContain('預算');
+  const show = ShowPlanSchema.parse((await client.agent.get(`/api/shows/${nextDay.showId}`).expect(200)).body);
+  expect(show.warnings.join(' ')).not.toContain('預算');
+  for (const segment of show.segments) {
+    expect(segment.speech).toMatchObject({ kind: 'ai_audio', aiVoice: true });
+    if (segment.speech.kind !== 'ai_audio') throw new Error('換日後應保留 AI 語音');
+    expect(segment.speech.url).toMatch(new RegExp(`^/api/media/tts/${show.showId}/${segment.segmentId}/[a-f0-9]{64}$`));
+    const audio = await client.agent.get(segment.speech.url).buffer(true).expect(200);
+    expect(audio.headers['content-type']).toBe('audio/mpeg');
+    expect(Buffer.from(audio.body)).toEqual(Buffer.from(MP3_BYTES));
+  }
   if (llm === 'openai') expect(fetchImpl.mock.calls.length).toBeGreaterThan(count);
 });
 it('無效 JSON 仍由 PlanService 驗證，最多兩次 LLM 呼叫，不把輸出當成有效節目（改用明示的 MOCK 降級）', async () => {
