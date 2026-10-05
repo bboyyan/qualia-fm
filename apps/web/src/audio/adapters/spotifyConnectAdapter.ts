@@ -407,7 +407,10 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
 
   private onPlayback(current: Attempt, playback: SpotifyPlayback): void {
     const before = this.last;
-    const nearEnd = before !== null && reachedEnd(before.progressMs + (before.isPlaying ? this.deps.now() - before.at : 0), before.durationMs);
+    const durationMs = before?.durationMs ?? playback.durationMs;
+    const nearEnd = before !== null && reachedEnd(before.progressMs + (before.isPlaying ? this.deps.now() - before.at : 0), durationMs);
+    const playedWithoutDuration = durationMs === null && before !== null && before.isPlaying && before.progressMs > 0
+      && before.uri === current.uri && before.deviceId === this.deps.deviceId;
     this.last = { ...playback, at: this.deps.now() };
     if (!current.confirmed) {
       if (playback.isPlaying && playback.uri === current.uri && playback.deviceId === this.deps.deviceId) {
@@ -428,8 +431,8 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
       this.emit({ type: 'device_lost' });
       return;
     }
-    // 停在 0 只有播到尾端附近才算播完；剛開始就停在 0 當作暫停（BRA-117）。
-    if (playback.uri !== current.uri || (!playback.isPlaying && playback.progressMs === 0 && nearEnd)) {
+    // 已知時長仍須接近尾端；時長缺失時，以同曲目曾在正位置播放、之後停止歸零判定完播（BRA-117 P2）。
+    if (playback.uri !== current.uri || (!playback.isPlaying && playback.progressMs === 0 && (nearEnd || playedWithoutDuration))) {
       this.current = null;
       this.emit({ type: 'ended', attemptId: current.attemptId, owner: 'track' });
       return;

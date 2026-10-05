@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { PlaybackEngine } from '../src/audio/engine';
+import { makeShow } from './fixtures';
 import { SpotifyConnectAdapter } from '../src/audio/adapters/spotifyConnectAdapter';
 import { PAUSE_RECONNECT_MS } from '../src/audio/adapters/spotifyWebPlaybackAdapter';
 import type { AdapterEvent } from '../src/audio/types';
@@ -116,6 +118,68 @@ describe('SpotifyConnectAdapter（路徑 C：遙控 Spotify app）', () => {
     expect(ctx.events.filter((e) => e.type === 'ended')).toEqual([{ type: 'ended', attemptId: 2, owner: 'track' }]);
   });
 
+  it('durationMs 為 null：曾播放後停在 0 → 播完一次，不誤當暫停（BRA-117 P2）', async () => {
+    const ctx = setup();
+    await startTrack(ctx, 2);
+    ctx.remote.playbackState = { ...playing(TEST_URI, 197_000), durationMs: null };
+    await ctx.clock.advance(2000);
+    ctx.remote.playbackState = { ...playing(TEST_URI, 0, false), durationMs: null };
+    await ctx.clock.advance(4000);
+    expect(ctx.events).toEqual([
+      { type: 'started', attemptId: 2, owner: 'track' },
+      { type: 'ended', attemptId: 2, owner: 'track' },
+    ]);
+  });
+
+  it.each([
+    { beforePosition: 0, pausedPosition: 0 },
+    { beforePosition: 5000, pausedPosition: 5000 },
+  ])('durationMs 為 null：$beforePosition → $pausedPosition，沒有播放後歸零訊號仍當暫停', async ({ beforePosition, pausedPosition }) => {
+    const ctx = setup();
+    await startTrack(ctx, 2);
+    ctx.remote.playbackState = { ...playing(TEST_URI, beforePosition), durationMs: null };
+    await ctx.clock.advance(2000);
+    ctx.remote.playbackState = { ...playing(TEST_URI, pausedPosition, false), durationMs: null };
+    await ctx.clock.advance(4000);
+    expect(ctx.events).toEqual([
+      { type: 'started', attemptId: 2, owner: 'track' },
+      { type: 'paused', attemptId: 2, owner: 'track', positionMs: pausedPosition },
+    ]);
+  });
+
+  it('durationMs 為 null：尚未確認在播時停在 0，不當完播', async () => {
+    const ctx = setup();
+    await startTrack(ctx, 2);
+    ctx.remote.playbackState = { ...playing(TEST_URI, 0, false), durationMs: null };
+    await ctx.clock.advance(4000);
+    expect(ctx.events).toEqual([]);
+  });
+
+  it.each([
+    { beforeDuration: 200_000, stoppedDuration: null },
+    { beforeDuration: null, stoppedDuration: 200_000 },
+  ])('可取得時長（$beforeDuration → $stoppedDuration）時，開頭停在 0 仍當暫停', async ({ beforeDuration, stoppedDuration }) => {
+    const ctx = setup();
+    await startTrack(ctx, 2);
+    ctx.remote.playbackState = { ...playing(TEST_URI, 1000), durationMs: beforeDuration };
+    await ctx.clock.advance(2000);
+    ctx.remote.playbackState = { ...playing(TEST_URI, 0, false), durationMs: stoppedDuration };
+    await ctx.clock.advance(2000);
+    expect(ctx.events.at(-1)).toEqual({ type: 'paused', attemptId: 2, owner: 'track', positionMs: 0 });
+    expect(ctx.events.filter((e) => e.type === 'ended')).toEqual([]);
+  });
+
+  it('durationMs 為 null：使用者主動暫停後停在 0，不當完播', async () => {
+    const ctx = setup();
+    await startTrack(ctx, 2);
+    ctx.remote.playbackState = { ...playing(TEST_URI, 5000), durationMs: null };
+    await ctx.clock.advance(2000);
+    ctx.adapter.pause();
+    ctx.remote.playbackState = { ...playing(TEST_URI, 0, false), durationMs: null };
+    await ctx.clock.advance(4000);
+    expect(ctx.events).toEqual([{ type: 'started', attemptId: 2, owner: 'track' }]);
+  });
+
   it('暫停時停止輪詢；暫停超過 10 分鐘 → 需重連，不直接送 play', async () => {
     const ctx = setup();
     await startTrack(ctx, 2);
@@ -150,3 +214,24 @@ describe('mutation 補測（BRA-111 重跑 PR #6）', () => {
   });
 });
 
+describe('BRA-117：Connect 未知時長', () => {
+  it('曾播放正位置後重設為 0 且停止 → ended 一次，引擎進入 feedback', async () => {
+    const ctx = setup();
+    const engine = new PlaybackEngine(ctx.adapter, { djEnabled: false, canSeek: true, playbackMode: 'spotify', feedbackEnabled: true });
+    engine.loadShow({ ...makeShow(), segments: [spotifySegment()] });
+    engine.play();
+    await flush();
+    ctx.remote.playbackState = { ...playing(TEST_URI, 197_000), durationMs: null };
+    await ctx.clock.advance(2000);
+    expect(engine.getState().phase).toBe('track_playing');
+    ctx.remote.playbackState = { ...playing(TEST_URI, 0, false), durationMs: null };
+    await ctx.clock.advance(2000);
+    expect(ctx.events.filter((e) => e.type === 'ended')).toHaveLength(1);
+    expect(ctx.events.filter((e) => e.type === 'paused')).toEqual([]);
+    expect(engine.getState().phase).toBe('feedback');
+    await ctx.clock.advance(6000);
+    expect(ctx.events.filter((e) => e.type === 'ended')).toHaveLength(1);
+    engine.destroy();
+  });
+
+});
