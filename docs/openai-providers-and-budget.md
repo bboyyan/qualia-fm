@@ -64,6 +64,9 @@ iPhone 實測原本的聲線「不像台灣腔」。用同一段文稿比較 voi
 | OPENAI_TTS_MODEL / OPENAI_TTS_VOICE | 無 | 必須明確填支援 instructions 的模型（`tts-1`／`tts-1-hd` 不支援，設定即降級）與非真人模仿 voice；B2 選定 `cedar` |
 | OPENAI_TTS_INSTRUCTIONS | 無（用內建 B2 instr-zh），≤1500 code points | 覆寫 TTS 聲線指示；空值／空白視為未設，超長拒絕啟動 |
 | OPENAI_MAX_OUTPUT_TOKENS | 4096，256–16384 | 每次模型輸出硬上限，含模型回報的輸出用量 |
+| MAX_CANDIDATES_PER_PLAN | 12，5–12 | （BRA-127）候選池最多對應幾首；不可播就補抽下一首，直到 5 首可播或試滿 |
+| PLAN_EXPLORATION_PCT | 50，0–100 | （BRA-127）候選池抽樣的探索度；0＝關閉抽樣、照模型排序；同種子每多一輪近期紀錄＋15 |
+| PLAN_RECENT_RUNS | 3，0–10 | （BRA-127）同種子排除最近幾輪已選；0＝不排除 |
 | OPENAI_PRICE_INPUT_PER_1M_TOKENS | 無，>0 且 ≤100000 | USD／一百萬輸入 tokens，無快取折扣 |
 | OPENAI_PRICE_OUTPUT_PER_1M_TOKENS | 無，>0 且 ≤100000 | USD／一百萬輸出 tokens |
 | OPENAI_PRICE_TTS_PER_1M_CHARS | 無，>0 且 ≤100000 | USD／一百萬 Unicode code points 的保守全費用上界 |
@@ -196,3 +199,10 @@ node --env-file-if-exists=.env --env-file=$HOME/.config/qualia/openai.env apps/s
 | PWA 測試 | `generate-icons.mjs` 接受輸出目錄參數；測試寫暫存目錄，比對確定性、與已追蹤檔案一致，並斷言 public 圖示的 mtime 與位元組不變 | `pwa.test.ts` |
 
 後續（不在本 PR）：service worker 與離線頁、截圖瘦身、iPhone 真機（主畫面、背景、鎖屏）驗證、手機可達的 HTTPS 入口、strict 模式支援關鍵字的原文查證、首次真實呼叫後依帳單校正單價與 TTS 每字元上界。
+
+## BRA-127：候選池 8–12 首與選歌多樣化
+
+- 請求內容多了 `candidateLimit`（8–12）、`candidateMin`（8），`editorialInput` 多了 `recentPicks`（同種子最近幾輪已選的 LLM 提名曲名／藝人）與 `exploration`（0–1）。不含任何 Spotify 回傳欄位。
+- `candidateLimit` 依 `OPENAI_MAX_OUTPUT_TOKENS` 計算：(上限−600)÷450 取整後夾在 8–12。預設 4096 只要 8 首，避免 12 首加厚台詞被截斷成無效 JSON；要滿 12 首請把上限調到 6000 以上（單次預扣隨之提高，仍受日額 10% 上限）。
+- 伺服器端：去重 → 排除同種子近期已選 → 依探索度加權抽樣 → 逐首對應、不可播就補抽；新曲不夠 5 首時才把最早那輪的拿回來。詳見 decision-log D-23／D-24。
+

@@ -5,6 +5,7 @@ import type { OpenAIConfig, RealProviderRuntime } from '../../budget/runtime.js'
 import { AppError } from '../../http/errors.js';
 import { openAIRequest } from './http.js';
 import { PLAN_JSON_SCHEMA, SYSTEM_PROMPT } from './resources.js';
+import { POOL_MAX, POOL_MIN } from '../../services/candidatePool.js';
 
 /**
  * 輸入 token 上界＝完整請求 JSON 的 UTF-8 位元組數＋固定框架餘裕。
@@ -15,6 +16,16 @@ import { PLAN_JSON_SCHEMA, SYSTEM_PROMPT } from './resources.js';
 export const REQUEST_OVERHEAD_TOKENS = 2048;
 /** 單次 LLM 呼叫預扣不得超過每日額度的此比例，避免貴模型或過大 max_output_tokens 一次吃光日額。 */
 export const MAX_CALL_SHARE_OF_DAILY = 0.1;
+/**
+ * BRA-127 候選池上限隨輸出 token 上限調整，避免 12 首加厚台詞被截斷成無效 JSON（截斷＝兩次修復都失敗→改用 MOCK）。
+ * 每首約 450 token（繁中台詞約 1 token／字，含 JSON 欄位）保守估，另留 600 給 analysis／warnings。
+ */
+export const TOKENS_PER_CANDIDATE = 450;
+export const DRAFT_FIXED_TOKENS = 600;
+export function candidateLimitFor(maxOutputTokens: number): number {
+  const fits = Math.floor((maxOutputTokens - DRAFT_FIXED_TOKENS) / TOKENS_PER_CANDIDATE);
+  return Math.min(POOL_MAX, Math.max(POOL_MIN, fits));
+}
 
 const responseSchema = z.object({
   output: z.array(z.object({ type: z.string(), content: z.array(z.object({ type: z.string(), text: z.string().optional() })).optional() })),
@@ -43,7 +54,7 @@ export class OpenAIEditorialPlanner implements EditorialPlanner {
   static requestBody(config: OpenAIConfig, input: EditorialInput) {
     return {
       model: config.textModel, max_output_tokens: config.maxOutputTokens, store: false,
-      input: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: JSON.stringify({ editorialInput: input, candidateLimit: 7, requestedCount: 5 }) }],
+      input: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: JSON.stringify({ editorialInput: input, candidateLimit: candidateLimitFor(config.maxOutputTokens), candidateMin: POOL_MIN, requestedCount: 5 }) }],
       text: { format: { type: 'json_schema', name: 'plan_draft', strict: true, schema: SENT_SCHEMA } },
     };
   }

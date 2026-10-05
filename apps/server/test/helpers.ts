@@ -13,6 +13,8 @@ export function testConfig(env: Record<string, string> = {}): ServerConfig {
     MOCK_SLOW_PHASE_MS: '40',
     MOCK_TRACK_MS: '5000',
     MOCK_SPEECH_MS: '800',
+    // 預設照模型排序（不抽樣），既有測試的選曲可重現；多樣化測試自行調高或注入 random（BRA-127）。
+    PLAN_EXPLORATION_PCT: '0',
     ...env,
   });
 }

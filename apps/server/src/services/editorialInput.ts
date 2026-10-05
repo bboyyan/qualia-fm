@@ -4,6 +4,7 @@
  * response. Extra properties smuggled onto the request object are dropped here.
  */
 import type { LedgerRow, PlanRequest } from '@qualia/contracts';
+import type { TrackRef } from './candidatePool.js';
 
 export interface EditorialInput {
   readonly history: readonly LedgerRow[];
@@ -13,6 +14,10 @@ export interface EditorialInput {
   readonly tuning: string | null;
   readonly djEnabled: boolean;
   readonly djLength: 'short' | 'standard';
+  /** BRA-127：同種子最近幾輪已選（只來自先前 LLM 提名的曲名／藝人，不含 Spotify 回傳欄位）。 */
+  readonly recentPicks: readonly TrackRef[];
+  /** BRA-127：0–1，越高越往較少被想到的 Vibe Cousins 走。 */
+  readonly exploration: number;
 }
 
 export const EDITORIAL_INPUT_KEYS: readonly (keyof EditorialInput)[] = [
@@ -23,6 +28,8 @@ export const EDITORIAL_INPUT_KEYS: readonly (keyof EditorialInput)[] = [
   'tuning',
   'djEnabled',
   'djLength',
+  'recentPicks',
+  'exploration',
 ];
 
 export function toEditorialInput(request: PlanRequest): EditorialInput {
@@ -34,5 +41,7 @@ export function toEditorialInput(request: PlanRequest): EditorialInput {
     tuning: request.tuning,
     djEnabled: request.dj.enabled,
     djLength: request.dj.length,
+    recentPicks: [],
+    exploration: 0,
   };
 }

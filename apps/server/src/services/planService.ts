@@ -26,6 +26,8 @@ import type { CatalogResolver, EditorialPlanner, PhaseClock } from '../providers
 import { WindowLimiter } from '../security/rateLimit.js';
 import type { JobStore} from '../stores/jobStore.js';
 import { toJobInfo, type JobRecord } from '../stores/jobStore.js';
+import { RecentPicks, type RecentSelection } from '../stores/recentPicks.js';
+import { drawOrder, effectiveExploration, type PoolEntry } from './candidatePool.js';
 import { toEditorialInput, type EditorialInput } from './editorialInput.js';
 import { buildShowPlan, type ResolvedCandidate } from './showBuilder.js';
 
@@ -53,6 +55,10 @@ export interface PlanServiceDeps {
   readonly store: JobStore;
   readonly clock: PhaseClock;
   readonly now: () => number;
+  /** BRA-127：同種子近期已選；未注入時依 config.limits.recentSeedRuns 建立。 */
+  readonly recentPicks?: RecentPicks;
+  /** BRA-127：候選池抽樣用的亂數；測試注入固定序列。 */
+  readonly random?: () => number;
 }
 
 export interface StartPlanInput {
@@ -78,9 +84,13 @@ export const realClock: PhaseClock = {
 export class PlanService {
   private readonly sessionLimiter: WindowLimiter;
   private readonly globalLimiter = new WindowLimiter(GLOBAL_PLAN_CAP_PER_HOUR, HOUR_MS);
+  private readonly recentPicks: RecentPicks;
+  private readonly random: () => number;
 
   constructor(private readonly deps: PlanServiceDeps) {
     this.sessionLimiter = new WindowLimiter(deps.config.limits.planRateLimitPerHour, HOUR_MS);
+    this.recentPicks = deps.recentPicks ?? new RecentPicks(deps.config.limits.recentSeedRuns);
+    this.random = deps.random ?? Math.random;
   }
 
   start(input: StartPlanInput): JobInfo {
@@ -173,6 +183,7 @@ export class PlanService {
   forgetOwner(ownerId: string): void {
     for (const job of this.deps.store.ownedBy(ownerId)) job.controller.abort('cancel');
     this.deps.store.forgetOwner(ownerId);
+    this.recentPicks.forget(ownerId);
   }
 
   private owned(ownerId: string, jobId: string): JobRecord {
@@ -207,8 +218,10 @@ export class PlanService {
         warning = '未讀到帳本：本輪只用種子曲。';
       }
       if (signal.aborted) throw signal.reason;
-      const editorial = { ...toEditorialInput(request), history };
-      const result = await this.pipeline(job.jobId, editorial, { ...input, request }, signal, deadlineAt);
+      const recent = this.recentPicks.recent(job.ownerId, request.seed);
+      const exploration = effectiveExploration(this.deps.config.limits.planExploration, recent.runs);
+      const editorial = { ...toEditorialInput(request), history, recentPicks: recent.tracks, exploration };
+      const result = await this.pipeline(job.jobId, editorial, { ...input, request }, signal, deadlineAt, recent.history);
       const plan = warning ? { ...result, warnings: [...result.warnings, warning] } : result;
       this.deps.store.putShow(job.ownerId, plan, this.deps.now());
       this.finish(job, plan);
@@ -219,7 +232,7 @@ export class PlanService {
     }
   }
 
-  private async pipeline(jobId: string, editorial: EditorialInput, input: StartPlanInput, signal: AbortSignal, deadlineAt: number): Promise<ShowPlan> {
+  private async pipeline(jobId: string, editorial: EditorialInput, input: StartPlanInput, signal: AbortSignal, deadlineAt: number, recentRuns: RecentSelection['history']): Promise<ShowPlan> {
     const { phaseMs, slowPhaseMs, speechMs } = this.deps.config.mock;
     await this.enter(jobId, 'understanding', phaseMs, signal);
     // 供應商降級提示一律放在 warnings 最前面，模型自己的 warnings 再多也不會把它擠掉。
@@ -237,7 +250,11 @@ export class PlanService {
     await this.enter(jobId, 'matching', input.scenario === 'slow' ? slowPhaseMs : phaseMs, signal);
     await this.enter(jobId, 'resolving', phaseMs, signal);
     const spotify = !mock && input.spotifyOwner === true && this.deps.spotify?.linked() ? this.deps.spotify.resolver : null;
-    const { playable, unavailable, failed } = await this.resolveAll(spotify ?? this.deps.resolver, draft.candidates, input.scenario, signal);
+    // MOCK 提名是固定的虛構示意：不抽樣、不排除，保持可重現（E2E／截圖依賴固定順序）。
+    const pool = drawOrder(draft.candidates, mock
+      ? { recentRuns: [], exploration: 0, random: this.random }
+      : { recentRuns, exploration: editorial.exploration, random: this.random });
+    const { playable, unavailable, failed } = await this.resolveAll(spotify ?? this.deps.resolver, pool, input.scenario, signal);
     await this.enter(jobId, 'preparing', phaseMs, signal);
     // 只說數量（提名來自 LLM），不含 token 或任何 Spotify 回傳內容。
     const mismatched = spotify ? unavailable.length - failed : 0;
@@ -250,6 +267,7 @@ export class PlanService {
       speech: editorial.djEnabled ? { kind: 'mock_chime', durationMs: speechMs } : { kind: 'none' },
       now: this.deps.now(),
     });
+    if (!mock) this.recentPicks.record(input.ownerId, input.request.seed, plan.segments.map(({ candidate }) => candidate));
     const segments = editorial.djEnabled && this.deps.tts && !realReason ? await this.withAiSpeech(plan, signal, notices, deadlineAt) : plan.segments;
     return { ...plan, segments, warnings: [...new Set([...notices, ...plan.warnings])].slice(0, 10) };
   }
@@ -327,15 +345,17 @@ export class PlanService {
     throw new AppError('PLAN_INVALID');
   }
 
-  /** 單一候選對應失敗（例如 Spotify 暫時沒回應）只把該首列為待確認，不讓整輪失敗。 */
-  private async resolveAll(resolver: CatalogResolver, candidates: readonly Candidate[], scenario: MockScenario, signal: AbortSignal) {
-    const playable: ResolvedCandidate[] = [];
+  /**
+   * 照抽樣順序逐首對應，不可播就補抽下一首，直到 5 首可播或試滿 MAX_CANDIDATES_PER_PLAN。
+   * 單一候選對應失敗（例如 Spotify 暫時沒回應）只把該首列為待確認，不讓整輪失敗。
+   * 可播的依模型原始順序排回去，讓相鄰的 transitionBridge 有機會保留。
+   */
+  private async resolveAll(resolver: CatalogResolver, pool: readonly PoolEntry[], scenario: MockScenario, signal: AbortSignal) {
+    const playable: (ResolvedCandidate & { readonly index: number })[] = [];
     const unavailable: Candidate[] = [];
     let failed = 0;
-    const limit = Math.min(candidates.length, this.deps.config.limits.maxCandidatesPerPlan);
-    for (let index = 0; index < limit && playable.length < TARGET_SEGMENTS; index += 1) {
-      const candidate = candidates[index];
-      if (!candidate) break;
+    for (const { candidate, index } of pool.slice(0, this.deps.config.limits.maxCandidatesPerPlan)) {
+      if (playable.length >= TARGET_SEGMENTS) break;
       let track: ResolvedTrack;
       try {
         track = await resolver.resolve(candidate, { signal, scenario, index });
@@ -346,10 +366,11 @@ export class PlanService {
         unavailable.push(candidate);
         continue;
       }
-      if (track.canAttemptPlayback && track.availability === 'resolved') playable.push({ candidate, track });
+      if (track.canAttemptPlayback && track.availability === 'resolved') playable.push({ candidate, track, index });
       else unavailable.push(candidate);
     }
-    return { playable, unavailable, failed };
+    const inDraftOrder = [...playable].sort((a, b) => a.index - b.index).map(({ candidate, track }) => ({ candidate, track }));
+    return { playable: inDraftOrder, unavailable, failed };
   }
 
   private finish(job: JobRecord, plan: ShowPlan): void {

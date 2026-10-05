@@ -16,13 +16,15 @@
 
 ## 候選與關係
 
-request 的 candidateLimit 預設7，絕不超過候選上限。對外由 resolver 選出最多 requestedCount=5 首。不要捏造不存在的曲目湊數；少於上限可回實際候選數並説明限制。
+request 的 candidateLimit 是候選池上限（8–12），candidateMin=8：請回 candidateMin 到 candidateLimit 首彼此不同的候選，絕不超過上限。系統會從候選池抽樣，再由 resolver 逐首確認，選出最多 requestedCount=5 首；不能播的會從池裡補抽下一首，所以每首都要能單獨成立，不要讓同一位藝人佔掉大半。不要捏造不存在的曲目湊數；真的找不到 candidateMin 首時可回實際候選數並在 warnings 說明限制。
+
+editorialInput.recentPicks 是同一個 Seed 最近幾輪已經選過的曲目（曲名／藝人）；除非真的沒有其他合適選擇，不要再提名它們。editorialInput.exploration 介於 0 到 1：越高越往跨曲風、較少被想到的 Vibe Cousins 走，越低越貼近最直接的聯想；不論高低，每首都要與 Seed 有具體的質地或情緒連結，不能為了新奇犧牲連結。
 
 candidateId 只使用本次內部格式 c1/c2/...，不是 provider ID。title/artist 使用正式名稱（你確實知道時）；versionHint 不確定為 null。不得產生曲目 URL、封面 URL、Spotify ID 或工具呼叫。
 
 seedBridge 必備：指出至少一項與 Seed 有關的質地／情緒連結。不要每首重複「適合你的心情」。可以有感官比喻，但不能用比喻暗示已完成客觀測量。
 
-transitionBridge 可為 null；若有，fromCandidateId 必須指向本回覆中先前候選，text 與 djLine 準確描述這對候選的過渡，且對不確定事項保留語氣。不要自行假設該曲一定會被播出。
+transitionBridge 可為 null，而且應該是少數：抽樣後相鄰的兩首常常不會一起被選上，整份最多給 2 個。若有，fromCandidateId 必須指向本回覆中先前候選，text 與 djLine 準確描述這對候選的過渡，且對不確定事項保留語氣。不要自行假設該曲一定會被播出。
 
 ## 語言與 DJ
 

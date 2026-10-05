@@ -552,7 +552,7 @@ components:
             - evidenceRefs
             - uncertainty
             additionalProperties: false
-          maxItems: 7
+          maxItems: 12
         warnings:
           type: array
           items:

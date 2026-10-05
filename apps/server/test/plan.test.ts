@@ -69,7 +69,8 @@ describe('POST /api/plan job lifecycle', () => {
     const client = await bootstrap(testApp().app);
     const job = await waitForJob(client, (await postPlan(client, planRequest(), newKey(), 'three')).body.jobId);
     const show = await showOf(client, job.showId);
-    expect([job.status, show.segments.length, show.unavailable.length]).toEqual(['partial', 3, 4]);
+    // BRA-127：12 首候選池補抽到底仍只有 3 首可播，其餘 9 首如實列為待確認。
+    expect([job.status, show.segments.length, show.unavailable.length]).toEqual(['partial', 3, 9]);
   });
 
   it('drops a transitionBridge whose previous candidate was not resolved', async () => {

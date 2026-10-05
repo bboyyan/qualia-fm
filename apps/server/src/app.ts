@@ -33,6 +33,8 @@ export interface AppOverrides {
   clock?: PhaseClock;
   planner?: EditorialPlanner;
   resolver?: CatalogResolver;
+  /** 候選池抽樣亂數（BRA-127）。 */
+  random?: () => number;
 }
 
 export interface QualiaApp {
@@ -88,6 +90,7 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
     store: overrides.store ?? new JobStore(now),
     clock: overrides.clock ?? realClock,
     now,
+    random: overrides.random,
   });
   const app = express();
   app.disable('x-powered-by');

@@ -38,7 +38,11 @@ const EnvSchema = z.object({
   SPOTIFY_LOVED_PLAYLIST_ID: z.preprocess(blankToUndefined, z.string().regex(/^[A-Za-z0-9]{22}$/).default(DEFAULT_LOVED_PLAYLIST_ID)),
   PLAN_DEADLINE_MS: int(60_000, 1_000, 120_000),
   MAX_LLM_CALLS_PER_PLAN: int(2, 1, 2),
-  MAX_CANDIDATES_PER_PLAN: int(10, 5, 10),
+  MAX_CANDIDATES_PER_PLAN: int(12, 5, 12),
+  /** BRA-127 探索度（百分比）：0＝照模型排序取前 5 首；100＝候選池均勻抽樣。 */
+  PLAN_EXPLORATION_PCT: int(50, 0, 100),
+  /** BRA-127 同種子排除最近幾輪已選的曲目；0＝不排除。 */
+  PLAN_RECENT_RUNS: int(3, 0, 10),
   PLAN_RATE_LIMIT_PER_HOUR: int(10, 1, 500),
   SESSION_RATE_LIMIT_PER_MIN: int(30, 1, 5_000),
   MOCK_TRACK_MS: int(30_000, 1_000, 600_000),
@@ -84,6 +88,9 @@ export interface ServerConfig {
     planDeadlineMs: number;
     maxLlmCallsPerPlan: number;
     maxCandidatesPerPlan: number;
+    /** 0–1。 */
+    planExploration: number;
+    recentSeedRuns: number;
     planRateLimitPerHour: number;
     sessionRateLimitPerMin: number;
   };
@@ -241,6 +248,8 @@ export function loadConfig(source: Record<string, string | undefined> = process.
       planDeadlineMs: env.PLAN_DEADLINE_MS,
       maxLlmCallsPerPlan: env.MAX_LLM_CALLS_PER_PLAN,
       maxCandidatesPerPlan: env.MAX_CANDIDATES_PER_PLAN,
+      planExploration: env.PLAN_EXPLORATION_PCT / 100,
+      recentSeedRuns: env.PLAN_RECENT_RUNS,
       planRateLimitPerHour: env.PLAN_RATE_LIMIT_PER_HOUR,
       sessionRateLimitPerMin: env.SESSION_RATE_LIMIT_PER_MIN,
     },

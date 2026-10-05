@@ -1,4 +1,7 @@
-/** Fictional TEST catalogue: titles are retained for UI identity only, with no taste claims. */
+/**
+ * Fictional TEST catalogue: titles are retained for UI identity only, with no taste claims.
+ * BRA-127：候選池 8–12 首（BASE 12、TUNE 8）；前幾首順序固定，E2E 依賴。
+ */
 export const MOCK_ARTIST = 'Qualia Mock · 虛構藝人';
 export interface MockEntry {
   readonly title: string;
@@ -23,5 +26,5 @@ function testEntry(title: string, index: number, transitions: boolean): MockEntr
     } : null,
   };
 }
-export const BASE_POOL: readonly MockEntry[] = ['微光偏航', '雨後的底片', '柔焦公路', '低空漂浮', '第一道晨光', '慢行星', '夜色餘溫'].map((title, index) => testEntry(title, index, true));
-export const TUNE_POOL: readonly MockEntry[] = ['紙飛機練習曲', '城市換氣', '有人在唱', '未命名的島', '慢慢醒來'].map((title, index) => testEntry(title, index, false));
+export const BASE_POOL: readonly MockEntry[] = ['微光偏航', '雨後的底片', '柔焦公路', '低空漂浮', '第一道晨光', '慢行星', '夜色餘溫', '霧中電車', '遠方的回音', '月台慢板', '玻璃溫室', '最後一班渡輪'].map((title, index) => testEntry(title, index, true));
+export const TUNE_POOL: readonly MockEntry[] = ['紙飛機練習曲', '城市換氣', '有人在唱', '未命名的島', '慢慢醒來', '午後的窗', '輕輕晃動', '回家的路'].map((title, index) => testEntry(title, index, false));
