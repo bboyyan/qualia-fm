@@ -10,7 +10,7 @@ const PHASE_LABEL: Record<Phase, string> = {
   loading_speech: '準備介紹…',
   speaking: 'DJ 介紹中',
   loading_track: '準備曲目…',
-  track_playing: 'MOCK 合成測試音播放中',
+  track_playing: '播放中',
   paused: '已暫停',
   awaiting_gesture: '需要點一下才能繼續',
   reconciling: '正在確認播放狀態',

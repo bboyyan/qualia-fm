@@ -1,5 +1,6 @@
 /** App-wide singletons: exactly one API client, one generation per purpose and exactly one playback engine. */
-import { createApiClient, newIdempotencyKey } from '../api/client';
+import { developerMode, canPresentShow } from './developerMode';
+import { createApiClient, localError, newIdempotencyKey } from '../api/client';
 import { createAdapter } from '../audio/adapters/createAdapter';
 import { HtmlAudioAdapter } from '../audio/adapters/htmlAudioAdapter';
 import { PlaybackRouter } from '../audio/adapters/playbackRouter';
@@ -15,14 +16,21 @@ export const feedbackForms = new FeedbackFormStore();
 export const loveFlows = new LoveFlowStore();
 
 const deps: GenerationDeps = {
-  api,
+  api: {
+    ...api,
+    getShow: async (id) => {
+      const show = await api.getShow(id);
+      if (!canPresentShow(show, useAppStore.getState().capabilities?.providers?.llm, developerMode())) throw localError('INTERNAL');
+      return show;
+    },
+  },
   timers: {
     setTimeout: (fn, ms) => window.setTimeout(fn, ms),
     clearTimeout: (handle) => window.clearTimeout(handle as number),
   },
   isHidden: () => document.visibilityState === 'hidden',
   newKey: newIdempotencyKey,
-  scenario: () => useAppStore.getState().mockScenario,
+  scenario: () => developerMode() ? useAppStore.getState().mockScenario : undefined,
 };
 
 /** 開台 generation (S02/S03). */

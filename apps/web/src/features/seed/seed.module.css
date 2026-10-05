@@ -132,3 +132,12 @@
   .pickAll, .pickRow { transition: none; }
   .pickAll:active { transform: none; }
 }
+
+.partialNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--q-muted);
+  font-size: 13px;
+}

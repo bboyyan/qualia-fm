@@ -85,8 +85,9 @@ it('AI 語音 URL 只接受同源 /api/media/tts 路徑，外部或穿越路徑�
 it('節目 warnings 中的供應商降級提示會顯示（不再只顯示帳本提醒），其他 warnings 不混入', () => {
   const warnings = [`${PROVIDER_NOTICES.llm}：OpenAI 尚待簽收上限數字，已降級為 mock。`, `${PROVIDER_NOTICES.tts}：今日或總預算已達上限。`, '模型自己的提醒'];
   const html = renderToStaticMarkup(createElement(ProviderNotices, { warnings }));
-  expect(html).toContain('尚待簽收');
-  expect(html).toContain('今日或總預算已達上限');
+  expect(html).toContain('選曲服務暫時無法使用');
+  expect(html).not.toContain('mock');
+  expect(html).toContain('語音暫時無法使用');
   expect(html).not.toContain('模型自己的提醒');
   expect(renderToStaticMarkup(createElement(ProviderNotices, { warnings: ['模型自己的提醒'] }))).toBe('');
 });

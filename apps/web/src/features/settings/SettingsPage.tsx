@@ -1,3 +1,4 @@
+import { DeveloperOnly } from '../../app/developerMode';
 import { ProviderStatus } from './ProviderStatus';
 import { useId } from 'react';
 import type { MockScenario } from '@qualia/contracts';
@@ -24,7 +25,7 @@ function DjSettings() {
       <div className={styles.row}>
         <div>
           <h3>讓 DJ 說一點話</h3>
-          <p id={`${id}-dj`}>每首歌前用一句話接住感覺。MOCK 模式只有文字與合成提示音。</p>
+          <p id={`${id}-dj`}>每首歌前用一句話接住感覺。</p>
         </div>
         <Switch label="DJ 介紹" describedBy={`${id}-dj`} checked={settings.djEnabled} onChange={(djEnabled) => setSettings({ djEnabled })} />
       </div>
@@ -47,9 +48,8 @@ function DjSettings() {
       <div className={styles.row}>
         <div>
           <h3>語音聲線</h3>
-          <p>伺服器目前只允許「MOCK 合成提示音」，不是 AI 語音。</p>
+          <p>AI 語音播放時會標示；無法播放時保留文字介紹。</p>
         </div>
-        <span className={styles.pill}>提示音</span>
       </div>
     </section>
   );
@@ -185,7 +185,7 @@ export function SettingsPage() {
         <Eyebrow>MAKE IT YOURS</Eyebrow>
         <h1>剛剛好的陪伴。</h1>
       </header>
-      {caps?.spotifyEnabled && <ModeStrip labels={modeStrip(caps, effectiveMode)} />}
+      {caps?.spotifyEnabled && <DeveloperOnly><ModeStrip labels={modeStrip(caps, effectiveMode)} /></DeveloperOnly>}
       <PlaybackModeSettings
         mode={settings.playbackMode}
         disabled={feedbackPending}
@@ -204,12 +204,12 @@ export function SettingsPage() {
       />
       <SpotifySettingsSection />
       <DjSettings />
-      <EnvironmentSettings />
-      <ScenarioSettings />
+      <DeveloperOnly><EnvironmentSettings /></DeveloperOnly>
+      <DeveloperOnly><ScenarioSettings /></DeveloperOnly>
       <section className={styles.info} aria-labelledby="data-title">
         <h3 id="data-title">關於聲音與資料</h3>
         <p>
-          你的輸入只用於這次節目，存在伺服器記憶體中，重新啟動即消失；回饋只寫入 TEST 假帳本，請填假資料；重啟即清除。本機只記住 DJ 與播放模式設定。MOCK 模式不呼叫任何 AI 或音樂服務。OpenAI 僅在伺服器簽收並完成設定後啟用，會接收本輪允許的輸入；AI 語音會清楚標示。
+          你的輸入只用於這次節目，服務重新啟動後不會保留。本機只記住 DJ 與播放模式設定；AI 語音會清楚標示。
         </p>
       </section>
       <Button

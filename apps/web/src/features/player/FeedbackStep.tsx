@@ -29,7 +29,7 @@ export function FeedbackStep({ state }: { state: EngineState }) {
         loveFlows.begin(key, new LoveFlowModel(receipt, () => api.spotifyLoved(target)));
         return;
       }
-      useAppStore.getState().showToast(receipt.mode === 'fake' ? '已記錄至 TEST 假帳本。' : '已記錄至帳本。');
+      useAppStore.getState().showToast(receipt.mode === 'fake' ? '已收到這次回饋；服務重啟後不保留。' : '已記錄回饋。');
       getEngine().completeFeedback();
     }, () => {
       if (!isCurrent()) return;

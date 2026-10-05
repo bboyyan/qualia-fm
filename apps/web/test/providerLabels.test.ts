@@ -5,10 +5,10 @@ import { DjIntroduction } from '../src/features/player/DjIntroduction';
 import { ProviderStatus } from '../src/features/settings/ProviderStatus';
 
 beforeEach(() => { vi.stubGlobal('fetch', () => { throw new Error('禁止真實網路'); }); });
-it('DJ 播放處明示 AI 合成語音，舊 MOCK 節目保留提示音標示', () => {
+it('DJ 播放處明示 AI 合成語音，其他介紹不露出測試標示', () => {
   const props = { djLine: '你好', paused: false, onSkip: () => undefined };
   expect(renderToStaticMarkup(createElement(DjIntroduction, { ...props, aiVoice: true }))).toContain('AI 合成語音');
-  expect(renderToStaticMarkup(createElement(DjIntroduction, props))).toContain('MOCK 提示音，非 AI 語音');
+  expect(renderToStaticMarkup(createElement(DjIntroduction, props))).not.toContain('MOCK');
 });
 it('設定頁呈現供應商降級原因', () => {
   expect(renderToStaticMarkup(createElement(ProviderStatus, { providers: { llm: 'mock', tts: 'mock', reason: 'OpenAI 尚待簽收上限數字，已降級為 mock。' } }))).toContain('尚待簽收');

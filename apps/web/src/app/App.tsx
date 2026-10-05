@@ -1,3 +1,4 @@
+import { DeveloperOnly } from './developerMode';
 import { useEffect } from 'react';
 import { bindMediaSession } from '../audio/mediaSession';
 import { useEngineState } from '../audio/useEngine';
@@ -31,7 +32,7 @@ function BootError() {
         </Button>
       }
     >
-      請確認服務已啟動（pnpm dev 或 pnpm start），你的輸入不會遺失。
+      請稍後再試，你的輸入不會遺失。
     </InlineRecovery>
   );
 }
@@ -130,7 +131,7 @@ export function App() {
       miniPlayer={hasActiveShow && tab !== 'listen' ? <MiniPlayer state={engineState} /> : undefined}
       sheets={
         <>
-          <EnvironmentSheet />
+          <DeveloperOnly><EnvironmentSheet /></DeveloperOnly>
           <BridgeSheet />
           <QueueSheet />
           <TuneSheet />

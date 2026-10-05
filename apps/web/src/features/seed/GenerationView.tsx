@@ -2,6 +2,7 @@
  * S02 生成中. Stage checks appear only when the server has moved past that phase; there is no
  * percentage. Cancel keeps the input. Failures show reason + next step inline (docs/02 S02).
  */
+import { DeveloperOnly } from '../../app/developerMode';
 import { useEffect } from 'react';
 import type { JobPhase } from '@qualia/contracts';
 import { useAppStore } from '../../app/appStore';
@@ -88,7 +89,7 @@ export function GenerationView({ state, seedText, onCancel, onRetry, onEdit }: G
           <Button block variant="outline" onClick={onCancel} data-testid="cancel-generation">
             取消，保留我的輸入
           </Button>
-          <p className={styles.genNote}>MOCK：不會呼叫 AI，也沒有分析任何音訊；階段文字來自伺服器實際進度。</p>
+          <DeveloperOnly><p className={styles.genNote}>MOCK：不會呼叫 AI，也沒有分析任何音訊；階段文字來自伺服器實際進度。</p></DeveloperOnly>
         </>
       )}
     </section>

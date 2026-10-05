@@ -1,7 +1,8 @@
 /**
- * Mobile-first shell: brand + truthful mode badge, one scroll container, explicit 3-tab nav
+ * Mobile-first shell: brand + opt-in developer diagnostics, one scroll container, explicit 3-tab nav
  * with labels, optional mini-player above the nav (never on the listen tab), toast + live region.
  */
+import { DeveloperOnly } from './developerMode';
 import type { CSSProperties, ReactNode } from 'react';
 import { CapabilityBadge } from '../ui/Feedback';
 import { Icon, type IconName } from '../ui/Icon';
@@ -32,7 +33,7 @@ function TopBar() {
       <p className={styles.brand} aria-label="Qualia FM">
         Qualia <span>fm</span>
       </p>
-      <CapabilityBadge mode={mode} onClick={() => openSheet('environment')} />
+      <DeveloperOnly><CapabilityBadge mode={mode} onClick={() => openSheet('environment')} /></DeveloperOnly>
     </header>
   );
 }
@@ -93,7 +94,7 @@ export function AppShell({ children, miniPlayer, sheets }: AppShellProps) {
       <aside className={styles.side} aria-label="關於 Qualia FM">
         <h2>Feel the connection.</h2>
         <p>手機優先的私人電台。不是找同類型，是找到同一種感覺。</p>
-        <p>目前為 MOCK 模式：只播放合成測試音，曲目皆為虛構。</p>
+        <DeveloperOnly><p>目前為 MOCK 模式：只播放合成測試音，曲目皆為虛構。</p></DeveloperOnly>
       </aside>
     </div>
   );

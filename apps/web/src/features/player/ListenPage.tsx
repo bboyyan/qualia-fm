@@ -2,6 +2,7 @@
  * S04 收聽頁, first-screen priority: context + provider status → soundscape → title/artist →
  * short Bridge → progress → transport → next up → tune. No second mini-player here.
  */
+import { DeveloperOnly } from '../../app/developerMode';
 import { useAppStore } from '../../app/appStore';
 import { getEngine } from '../../app/services';
 import { currentBridge, currentItem, nextItem } from '../../audio/queue';
@@ -48,7 +49,7 @@ export function ListenEmpty() {
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
-/** E 模式才出現：模式列＋常駐裝置狀態（預設模式不顯示，畫面與以前相同）。 */
+/** 僅開發者模式掛載：模式列＋常駐裝置狀態。 */
 function SpotifyStatusBar({ state }: { state: EngineState }) {
   const caps = useAppStore((s) => s.capabilities);
   const status = useDeviceStatus();
@@ -66,7 +67,7 @@ function ListenHeader({ state }: { state: EngineState }) {
   return (
     <div className={styles.listenTop}>
       <div className={styles.listenContext}>
-        <p className={styles.kicker}>{state.playbackMode === 'spotify' ? '你的私人電台 · Spotify E 模式' : '你的私人電台 · MOCK 示範節目'}</p>
+        <p className={styles.kicker}>你的私人電台</p>
         <p className={styles.seedLine}>{state.show?.seed.text}</p>
       </div>
       <button
@@ -163,7 +164,7 @@ export function ListenPage() {
       {state.speechFallbackId === item.segment.segmentId && (
         <SpeechFallbackNotice djLine={currentBridge(state)?.djLine ?? candidate.djLine} onRetry={() => engine.replayIntro()} />
       )}
-      {eMode && <SpotifyStatusBar state={state} />}
+      {eMode && <DeveloperOnly><SpotifyStatusBar state={state} /></DeveloperOnly>}
       <ListenHeader state={state} />
       {/* 回饋時也保留曲目視覺與曲名：回饋卡要讓人知道是在回饋哪一首（BRA-117）。 */}
       <ListenArtwork state={state} segment={item.segment} />
@@ -171,7 +172,7 @@ export function ListenPage() {
         {feedback && <p className={styles.kicker} data-testid="feedback-for">剛剛聽的這一首</p>}
         <h1 data-testid="track-title">{candidate.title}</h1>
         <p>
-          {candidate.artist} {track.provider === 'mock' && <span className={styles.mockTag}>MOCK 虛構曲目</span>}
+          {candidate.artist} {track.provider === 'mock' && <DeveloperOnly><span className={styles.mockTag}>MOCK 虛構曲目</span></DeveloperOnly>}
           {spotifyTrack && <span className={styles.mockTag}>AI 提名</span>}
         </p>
       </div>
@@ -183,7 +184,7 @@ export function ListenPage() {
         manualTrack ? <ManualControls phase={state.phase} onStart={() => engine.manualStarted()} onFinish={() => engine.manualFinished()} onSkip={() => engine.next()} /> :
         <><SeekBar state={state} /><Transport state={state} /></>}
 
-      {eMode && <DevicePanel />}
+      {eMode && <DeveloperOnly><DevicePanel /></DeveloperOnly>}
       <NextUp state={state} />
     </section>
   );

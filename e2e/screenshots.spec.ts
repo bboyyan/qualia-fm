@@ -153,7 +153,7 @@ const SCREENS: readonly Screen[] = [
     prepare: async (page) => {
       await startPlaying(page);
       await page.getByTestId('open-tune').click();
-      await page.getByTestId('tune-sheet').getByRole('button', { name: 'TEST 微調一' }).click();
+      await page.getByTestId('tune-sheet').getByRole('button', { name: '再安靜一點' }).click();
     },
   },
   {

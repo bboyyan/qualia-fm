@@ -53,8 +53,8 @@ test.describe('T02 shell and design foundation', () => {
 
   test('example chip only fills the composer and never starts generation', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'TEST 假起點一' }).click();
-    await expect(page.getByTestId('seed-input')).toHaveValue('TEST 假起點一');
+    await page.getByRole('button', { name: '夜裡慢慢放鬆' }).click();
+    await expect(page.getByTestId('seed-input')).toHaveValue('夜裡慢慢放鬆');
     await expect(page.getByRole('heading', { name: /不是同類型/ })).toBeVisible();
   });
 
