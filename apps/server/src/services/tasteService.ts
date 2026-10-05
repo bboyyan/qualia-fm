@@ -44,6 +44,9 @@ function failureOf(error: unknown): string {
 }
 
 export class TasteService {
+  /** 同一伺服器的手動編輯依序執行，名額檢查到寫入之間不能插入另一筆釘選。 */
+  private edits: Promise<void> = Promise.resolve();
+
   constructor(private readonly ledger: TasteLedger, private readonly now: () => number) {}
 
   /** 開台前必讀；失敗不擋開台，但回傳明示 warning 並記錄錯誤。 */
@@ -89,7 +92,14 @@ export class TasteService {
   }
 
   /** 手動改評價／標記；回傳更新後的 TrackMark。 */
-  async edit(target: TasteTarget, request: Omit<TasteEditRequest, 'target'>): Promise<TrackMark> {
+  edit(target: TasteTarget, request: Omit<TasteEditRequest, 'target'>): Promise<TrackMark> {
+    const result = this.edits.then(() => this.editSerially(target, request));
+    // 錯誤仍交給這次呼叫者；佇列恢復，後續取消／重試不會被前一筆失敗堵住。
+    this.edits = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private async editSerially(target: TasteTarget, request: Omit<TasteEditRequest, 'target'>): Promise<TrackMark> {
     const track = await this.resolve(target);
     const fields = this.trackFields(track);
     if (request.mark === 'pinned') await this.assertPinRoom(fields.trackKey);
@@ -122,8 +132,8 @@ export class TasteService {
   /** 新增釘選時檢查上限；已釘選的再送一次不算新增。上限前的舊帳本（超過上限）照常讀，只擋新增。 */
   private async assertPinRoom(trackKey: string): Promise<void> {
     const marks = await this.read(() => this.ledger.marks());
-    const others = marks.filter((mark) => mark.mark === 'pinned' && mark.trackKey !== trackKey);
-    if (others.length >= PINNED_LIMIT) throw new AppError('PIN_LIMIT_REACHED', { message: PIN_LIMIT_MESSAGE });
+    if (marks.some((mark) => mark.trackKey === trackKey && mark.mark === 'pinned')) return;
+    if (marks.filter((mark) => mark.mark === 'pinned').length >= PINNED_LIMIT) throw new AppError('PIN_LIMIT_REACHED', { message: PIN_LIMIT_MESSAGE });
   }
 
   private async resolve(target: TasteTarget): Promise<TrackRef> {

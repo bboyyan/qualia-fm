@@ -194,3 +194,87 @@ test('BRA-135：帳本讀不到時明示錯誤並可重試，不顯示假清單'
   await expect(page.getByTestId('songs-error')).toHaveCount(0);
   await expect(page.getByTestId('pin-status').or(page.getByTestId('songs-empty'))).toBeVisible();
 });
+
+test('BRA-135 回歸：釘選歌可取消收藏再收藏，釘選狀態保持', async ({ page }) => {
+  const { titles } = await seedLedger(page.request);
+  const title = titles[1]!;
+  await page.goto('/');
+  await page.getByTestId('tab-mine').click();
+  await search(page, title);
+  await toggle(page, title, '釘選');
+  const row = rowOf(page, title);
+  await expect(row.getByRole('button', { name: '釘選', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await toggle(page, title, '收藏');
+  await expect(row.getByRole('button', { name: '收藏', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(row.getByTestId('song-rating')).toContainText('還行');
+  await toggle(page, title, '收藏');
+  await expect(row.getByRole('button', { name: '收藏', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(row.getByTestId('song-rating')).toContainText('愛');
+  await expect(row.getByRole('button', { name: '釘選', exact: true })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('BRA-135 回歸：重讀失敗保留舊清單並提示過期，可由 inline recovery 重試', async ({ page }) => {
+  const { titles } = await seedLedger(page.request);
+  await page.goto('/');
+  await page.getByTestId('tab-mine').click();
+  await expect(rowOf(page, titles[0]!)).toBeVisible();
+  let failing = true;
+  await page.route('**/api/taste/marks', async (route) => {
+    if (failing && route.request().method() === 'GET') await route.fulfill({ status: 500, json: { error: { code: 'INTERNAL', message: '品味帳本目前無法讀取，請稍後再試。', retryable: true, requestId: 'e2e', retryAfterMs: null } } });
+    else await route.continue();
+  });
+  await page.getByTestId('tab-home').click();
+  await page.getByTestId('tab-mine').click();
+  const recovery = page.getByTestId('songs-error');
+  await expect(recovery).toContainText('上次讀到的清單');
+  await expect(recovery).toContainText('可能已過期');
+  await expect(rowOf(page, titles[0]!)).toBeVisible();
+  await recovery.getByRole('button', { name: '重新讀取' }).click();
+  await expect(recovery.getByRole('button', { name: '重新讀取' })).toBeEnabled();
+  await expect(recovery).toBeVisible();
+  failing = false;
+  await recovery.getByRole('button', { name: '重新讀取' }).click();
+  await expect(recovery).toHaveCount(0);
+  await expect(rowOf(page, titles[0]!)).toBeVisible();
+  await expectClean(page);
+});
+
+test('BRA-135 回歸：寫入失敗持續顯示錯誤，搜尋後仍可重試原動作', async ({ page }) => {
+  const { titles } = await seedLedger(page.request);
+  const title = titles[0]!;
+  let failing = true;
+  const edits: unknown[] = [];
+  await page.route('**/api/taste/marks', async (route) => {
+    if (route.request().method() === 'POST') {
+      edits.push(route.request().postDataJSON());
+      if (failing) {
+        await route.fulfill({ status: 500, json: { error: { code: 'INTERNAL', message: '品味帳本寫入失敗，請再試一次。', retryable: true, requestId: 'e2e', retryAfterMs: null } } });
+        return;
+      }
+    }
+    await route.continue();
+  });
+  await page.goto('/');
+  await page.getByTestId('tab-mine').click();
+  await search(page, title);
+  await toggle(page, title, '收藏');
+  const recovery = page.getByTestId('songs-action-error');
+  await expect(recovery).toContainText('品味帳本寫入失敗');
+  await expect(recovery).toContainText(title);
+  await expect(rowOf(page, title).getByRole('button', { name: '收藏', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByTestId('toast')).toHaveCount(0, { timeout: 7_000 });
+  await search(page, titles[1]!);
+  await expect(recovery).toBeVisible();
+  await recovery.getByRole('button', { name: '重試收藏', exact: true }).click();
+  await expect(recovery.getByRole('button', { name: '重試收藏', exact: true })).toBeEnabled();
+  await expect(recovery).toBeVisible();
+  failing = false;
+  await recovery.getByRole('button', { name: '重試收藏', exact: true }).click();
+  await expect(recovery).toHaveCount(0);
+  expect(edits).toHaveLength(3);
+  expect(edits[1]).toEqual(edits[0]);
+  expect(edits[2]).toEqual(edits[0]);
+  await search(page, title);
+  await expect(rowOf(page, title).getByRole('button', { name: '收藏', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expectClean(page);
+});

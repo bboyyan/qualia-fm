@@ -25,8 +25,8 @@ const normalize = (value: string): string => value.normalize('NFKC').toLowerCase
 
 export const isBlocked = (song: TrackMark): boolean => song.mark === 'blocked';
 export const isPinned = (song: TrackMark): boolean => song.mark === 'pinned';
-/** 收藏：評價「愛」或已釘選（釘選一定是想留下的歌）；封鎖優先。 */
-export const isLoved = (song: TrackMark): boolean => !isBlocked(song) && (song.rating === '愛' || isPinned(song));
+/** 收藏按鈕只反映評價；釘選與評價是各自獨立的狀態。 */
+export const isLoved = (song: TrackMark): boolean => song.rating === '愛';
 
 /** 最近一次動到這首歌的時間（評價／標記或播出，取較新的）。 */
 export function lastActivity(song: TrackMark): string {
@@ -44,7 +44,8 @@ function matchesFilter(song: TrackMark, filter: SongFilter, now: number): boolea
     case 'all':
       return true;
     case 'loved':
-      return isLoved(song);
+      // 濾鏡沿用「愛或釘選、封鎖優先」；不影響收藏按鈕的切換。
+      return !isBlocked(song) && (isLoved(song) || isPinned(song));
     case 'blocked':
       return isBlocked(song);
     case 'recent':

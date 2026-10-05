@@ -50,7 +50,10 @@ describe('濾鏡、搜尋與排序', () => {
 
   it('收藏＝評價「愛」或已釘選；封鎖的不算收藏', () => {
     expect(titles(visibleSongs(LIBRARY, { filter: 'loved', query: '' }, NOW))).toEqual(['霧中電車', '遠方的燈']);
-    expect(isLoved(LIBRARY[2]!)).toBe(false);
+  });
+
+  it.each([null, '還行', '不對', '愛'] as const)('釘選歌的收藏按鈕只看評價：%s', (rating) => {
+    expect(isLoved(song('釘選歌', { mark: 'pinned', rating }))).toBe(rating === '愛');
   });
 
   it('封鎖只列封鎖的歌', () => {
@@ -164,7 +167,7 @@ describe('MySongsModel（接品味帳本 API）', () => {
     expect(model.getState().songs).toHaveLength(LIBRARY.length);
   });
 
-  it('讀取失敗顯示錯誤；已有清單時背景重讀失敗不清空畫面', async () => {
+  it('讀取失敗顯示錯誤；背景重讀失敗保留舊清單、明示過期並可重試', async () => {
     const failing = new MySongsModel({ ...fakeApi(), tasteMarks: async () => { throw localError('NETWORK_ERROR'); } });
     await failing.load();
     expect(failing.getState().status).toBe('error');
@@ -172,8 +175,16 @@ describe('MySongsModel（接品味帳本 API）', () => {
     const model = await loaded(api);
     api.tasteMarks = async () => { throw localError('NETWORK_ERROR'); };
     await model.load();
-    expect(model.getState()).toMatchObject({ status: 'ready' });
+    expect(model.getState()).toMatchObject({ status: 'ready', loadError: expect.any(String), loadedAt: NOW });
     expect(model.getState().songs).toHaveLength(LIBRARY.length);
+    const html = renderToStaticMarkup(createElement(MySongsPage, { model, onSeed: () => undefined }));
+    expect(html).toContain('songs-error');
+    expect(html).toContain('上次讀到的清單');
+    expect(html).toContain('重新讀取');
+    api.tasteMarks = async () => [];
+    await model.load();
+    expect(model.getState()).toMatchObject({ status: 'ready', loadError: null, songs: [] });
+    expect(renderToStaticMarkup(createElement(MySongsPage, { model, onSeed: () => undefined }))).not.toContain('songs-error');
   });
 
   it('收藏：送 trackKey＋愛，成功後換掉那一列並回完成訊息', async () => {
@@ -208,11 +219,24 @@ describe('MySongsModel（接品味帳本 API）', () => {
   it('寫入失敗：清單原樣保留、可再試', async () => {
     const api = fakeApi();
     const model = await loaded(api);
+    const successfulEdit = api.tasteEdit;
     api.tasteEdit = async () => { throw localError('NETWORK_ERROR'); };
     const outcome = await model.act(LIBRARY[0]!.trackKey, 'block', true);
     expect(outcome.ok).toBe(false);
     expect(model.getState().songs[0]?.mark).toBeNull();
     expect(model.getState().pending).toBeNull();
+    expect(model.getState()).toMatchObject({ actionError: { trackKey: LIBRARY[0]!.trackKey, action: 'block', on: true, message: outcome.message } });
+    const html = renderToStaticMarkup(createElement(MySongsPage, { model, onSeed: () => undefined }));
+    expect(html).toContain('songs-action-error');
+    expect(html).toContain(outcome.message);
+    expect(html).toContain('重試封鎖');
+    // 重讀成功不代表之前的寫入已成功，錯誤仍須保留。
+    await model.load();
+    expect(renderToStaticMarkup(createElement(MySongsPage, { model, onSeed: () => undefined }))).toContain('songs-action-error');
+    api.tasteEdit = successfulEdit;
+    await model.act(LIBRARY[0]!.trackKey, 'block', true);
+    expect(model.getState()).toMatchObject({ actionError: null });
+    expect(model.getState().songs[0]?.mark).toBe('blocked');
   });
 
   it('同時只送一個動作', async () => {
@@ -296,6 +320,10 @@ describe('畫面（靜態輸出）', () => {
 
   it('釘選已滿時，未釘選的「釘選」鈕指向名額說明', () => {
     expect(row(LIBRARY[0]!, true)).toContain('aria-describedby="pin-status"');
+  });
+
+  it.each([null, '還行'] as const)('釘選但評價為 %s 的歌，收藏按鈕未按下', (rating) => {
+    expect(row(song('釘選歌', { mark: 'pinned', rating }))).toMatch(/aria-pressed="false"[^>]*>.*?收藏<\/button>/);
   });
 
   it('封鎖列：只留「封鎖」（可解除）與紀錄，不能收藏、釘選或當種子', () => {

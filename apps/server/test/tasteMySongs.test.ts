@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PINNED_LIMIT, ShowPlanSchema, TASTE_HISTORY_LIMIT, TasteHistoryResponseSchema, trackKeyOf, type ShowPlan } from '@qualia/contracts';
 import { TasteLedger, memoryPersistence } from '../src/ledger/tasteStore.js';
+import { TasteService } from '../src/services/tasteService.js';
 import { ORIGIN, bootstrap, planRequest, postPlan, testApp, waitForJob, type Client } from './helpers.js';
 
 /** BRA-135「我的歌」用到的品味帳本 API：釘選上限與單曲帳本紀錄。 */
@@ -32,6 +33,34 @@ async function setup(): Promise<{ client: Client; show: ShowPlan }> {
 }
 
 describe('釘選上限（POST /api/taste/marks）', () => {
+  it('已有一首釘選時併發釘兩首不同歌：只成功一筆，另一筆 409，且失敗不堵住後續編輯', async () => {
+    const ledger = new TasteLedger(memoryPersistence());
+    const service = new TasteService(ledger, Date.now);
+    const tracks = ['a', 'b', 'c'].map((title) => ({ title, artist: 'artist' }));
+    await service.edit(tracks[0]!, { mark: 'pinned' });
+    const results = await Promise.allSettled(tracks.slice(1).map((track) => service.edit(track, { mark: 'pinned' })));
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toEqual([
+      { status: 'rejected', reason: expect.objectContaining({ code: 'PIN_LIMIT_REACHED', status: 409 }) },
+    ]);
+    expect((await ledger.marks()).filter((mark) => mark.mark === 'pinned')).toHaveLength(2);
+    await service.edit(tracks[0]!, { mark: null });
+    const refused = tracks[results[0]!.status === 'rejected' ? 1 : 2]!;
+    await expect(service.edit(refused, { mark: 'pinned' })).resolves.toMatchObject({ mark: 'pinned' });
+    expect((await ledger.marks()).filter((mark) => mark.mark === 'pinned')).toHaveLength(2);
+  });
+
+  it('舊帳本已有三首釘選：重送既有釘選成功，只擋新增', async () => {
+    const ledger = new TasteLedger(memoryPersistence());
+    const tracks = ['a', 'b', 'c'].map((title) => ({ title, artist: 'artist', trackKey: trackKeyOf('artist', title) }));
+    await ledger.record(tracks.map((track, index) => ({ ...track, kind: 'mark', mark: 'pinned', entryId: `old-mark-${index}`, at: '2026-10-05T12:00:00.000Z' })));
+    const client = await bootstrap(testApp({}, { tasteLedger: ledger }).app);
+    await post(client, '/api/taste/marks', { target: { trackKey: tracks[0]!.trackKey }, mark: 'pinned' }).expect(200);
+    const service = new TasteService(ledger, Date.now);
+    await expect(service.edit({ title: 'd', artist: 'artist' }, { mark: 'pinned' })).rejects.toMatchObject({ code: 'PIN_LIMIT_REACHED', status: 409 });
+    expect((await ledger.marks()).filter((mark) => mark.mark === 'pinned')).toHaveLength(3);
+  });
+
   it(`上限 ${PINNED_LIMIT} 首：滿了再釘回 409 PIN_LIMIT_REACHED，訊息說明上限與下一步`, async () => {
     const { client, show } = await setup();
     const keys = await rateFirst(client, show, PINNED_LIMIT + 1);

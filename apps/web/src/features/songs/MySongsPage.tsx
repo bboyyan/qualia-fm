@@ -37,19 +37,10 @@ interface SongListProps {
   state: MySongsState;
   songs: readonly TrackMark[];
   onSeed: (song: TrackMark) => void;
+  onAction: (trackKey: string, action: SongAction, on: boolean) => Promise<void>;
 }
 
-function SongList({ model, state, songs, onSeed }: SongListProps) {
-  const showToast = useAppStore((s) => s.showToast);
-  const announce = useAppStore((s) => s.announce);
-  const act = useCallback(
-    async (song: TrackMark, action: SongAction, on: boolean) => {
-      const outcome = await model.act(song.trackKey, action, on);
-      showToast(outcome.message);
-      announce(outcome.message);
-    },
-    [model, showToast, announce],
-  );
+function SongList({ model, state, songs, onSeed, onAction }: SongListProps) {
   const loadHistory = useCallback((trackKey: string) => void model.loadHistory(trackKey), [model]);
   return (
     <ul className={styles.list} aria-label="歌曲清單">
@@ -61,7 +52,7 @@ function SongList({ model, state, songs, onSeed }: SongListProps) {
           busy={state.pending === song.trackKey}
           disabled={state.pending !== null}
           history={state.history[song.trackKey]}
-          onAction={(action, on) => void act(song, action, on)}
+          onAction={(action, on) => void onAction(song.trackKey, action, on)}
           onSeed={() => onSeed(song)}
           onLoadHistory={() => loadHistory(song.trackKey)}
         />
@@ -85,6 +76,16 @@ function EmptyLibrary() {
 
 export function MySongsPage({ model, onSeed }: MySongsPageProps) {
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
+  const showToast = useAppStore((s) => s.showToast);
+  const announce = useAppStore((s) => s.announce);
+  const act = useCallback(
+    async (trackKey: string, action: SongAction, on: boolean) => {
+      const outcome = await model.act(trackKey, action, on);
+      showToast(outcome.message);
+      announce(outcome.message);
+    },
+    [model, showToast, announce],
+  );
   const [filter, setFilter] = useState<SongFilter>('all');
   const [query, setQuery] = useState('');
   const searchId = useId();
@@ -93,6 +94,8 @@ export function MySongsPage({ model, onSeed }: MySongsPageProps) {
   }, [model]);
   const songs = visibleSongs(state.songs, { filter, query }, state.loadedAt);
   const hasLibrary = state.songs.length > 0;
+  const actionError = state.actionError;
+  const retryLabel = actionError ? `${actionError.on ? '' : '取消'}${{ love: '收藏', pin: '釘選', block: '封鎖' }[actionError.action]}` : '';
 
   return (
     <div className={styles.page} data-testid="my-songs">
@@ -101,18 +104,34 @@ export function MySongsPage({ model, onSeed }: MySongsPageProps) {
         <h1>我的歌</h1>
         <p>收藏、封鎖與釘選，下一次開台前都會先讀。</p>
       </header>
-      {state.status === 'error' && (
+      {state.loadError && (
         <InlineRecovery
           tone="offline"
-          title="暫時讀不到我的歌"
+          title={state.status === 'ready' ? '重新讀取沒有成功' : '暫時讀不到我的歌'}
           testId="songs-error"
           actions={
-            <Button variant="outline" block onClick={() => void model.load()}>
+            <Button variant="outline" block loading={state.loading} disabled={state.pending !== null} onClick={() => void model.load()}>
               重新讀取
             </Button>
           }
         >
-          帳本沒有被更動，稍後再試即可。
+          <p>{state.loadError}</p>
+          <p>{state.status === 'ready' ? '目前顯示上次讀到的清單，可能已過期。請重新讀取。' : '帳本沒有被更動，稍後再試即可。'}</p>
+        </InlineRecovery>
+      )}
+      {actionError && (
+        <InlineRecovery
+          tone="error"
+          title="這次操作沒有完成"
+          testId="songs-action-error"
+          actions={
+            <Button variant="outline" block disabled={state.pending !== null} onClick={() => void act(actionError.trackKey, actionError.action, actionError.on)}>
+              重試{retryLabel}
+            </Button>
+          }
+        >
+          <p>〈<span data-song-data>{actionError.title}</span>〉的{retryLabel}沒有完成。</p>
+          <p>{actionError.message}</p>
         </InlineRecovery>
       )}
       {(state.status === 'loading' || state.status === 'idle') && <p className={styles.loading} role="status">讀取中…</p>}
@@ -137,7 +156,7 @@ export function MySongsPage({ model, onSeed }: MySongsPageProps) {
           </div>
           <PinStatus count={pinnedCount(state.songs)} />
           {songs.length > 0 ? (
-            <SongList model={model} state={state} songs={songs} onSeed={onSeed} />
+            <SongList model={model} state={state} songs={songs} onSeed={onSeed} onAction={act} />
           ) : (
             <p className={styles.filterEmpty} role="status" data-testid="songs-filter-empty">
               {emptyMessage(filter, query)}

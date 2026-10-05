@@ -21,6 +21,18 @@ export interface MySongsState {
   readonly history: Readonly<Record<string, HistoryState>>;
   /** 清單讀到的時間（epoch ms）；「最近」濾鏡以此為準，畫面重繪不會改變結果。 */
   readonly loadedAt: number;
+  readonly loading: boolean;
+  /** ready 時仍可能重讀失敗；保留舊清單並持續提示，成功重讀才清除。 */
+  readonly loadError: string | null;
+  readonly actionError: SongActionError | null;
+}
+
+export interface SongActionError {
+  readonly trackKey: string;
+  readonly title: string;
+  readonly action: SongAction;
+  readonly on: boolean;
+  readonly message: string;
 }
 
 export interface ActionOutcome {
@@ -34,7 +46,7 @@ const EDIT_FAILED = '這次沒有記下，請再試一次。';
 const messageOf = (error: unknown, fallback: string): string => (error instanceof ApiError ? error.message : fallback);
 
 export class MySongsModel {
-  private state: MySongsState = { status: 'idle', songs: [], pending: null, history: {}, loadedAt: 0 };
+  private state: MySongsState = { status: 'idle', songs: [], pending: null, history: {}, loadedAt: 0, loading: false, loadError: null, actionError: null };
   private readonly listeners = new Set<() => void>();
   private loadToken = 0;
 
@@ -60,12 +72,12 @@ export class MySongsModel {
   /** 每次進到「我的」都重讀；已有清單時保留畫面，只在背景更新。 */
   async load(): Promise<void> {
     const token = (this.loadToken += 1);
-    if (this.state.status !== 'ready') this.update({ status: 'loading' });
+    this.update({ loading: true, status: this.state.status === 'ready' ? 'ready' : 'loading' });
     try {
       const songs = await this.api.tasteMarks();
-      if (token === this.loadToken) this.update({ status: 'ready', songs, history: {}, loadedAt: this.now() });
-    } catch {
-      if (token === this.loadToken && this.state.status !== 'ready') this.update({ status: 'error' });
+      if (token === this.loadToken) this.update({ status: 'ready', songs, history: {}, loadedAt: this.now(), loading: false, loadError: null });
+    } catch (error) {
+      if (token === this.loadToken) this.update({ status: this.state.status === 'ready' ? 'ready' : 'error', loading: false, loadError: messageOf(error, LOAD_FAILED) });
     }
   }
 
@@ -77,16 +89,18 @@ export class MySongsModel {
     if (action === 'pin' && on && pinState(this.state.songs, song) === 'full') return { ok: false, message: PIN_FULL_MESSAGE };
     // 背景重讀若還在路上，它的結果比這次編輯舊：作廢，避免蓋掉剛更新的那一列。
     this.loadToken += 1;
-    this.update({ pending: trackKey });
+    this.update({ pending: trackKey, loading: false });
     try {
       const updated = await this.api.tasteEdit({ target: { trackKey }, ...editFor(action, on) });
       this.replace(updated);
+      if (this.state.actionError?.trackKey === trackKey && this.state.actionError.action === action) this.update({ actionError: null });
       return { ok: true, message: doneMessage(action, on, song.title) };
     } catch (error) {
-      this.update({ pending: null });
+      const message = messageOf(error, EDIT_FAILED);
+      this.update({ pending: null, actionError: { trackKey, title: song.title, action, on, message } });
       // 名額可能被別的分頁用掉：重讀清單讓畫面跟帳本一致。
       if (error instanceof ApiError && error.code === 'PIN_LIMIT_REACHED') void this.load();
-      return { ok: false, message: messageOf(error, EDIT_FAILED) };
+      return { ok: false, message };
     }
   }
 
