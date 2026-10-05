@@ -56,6 +56,17 @@ export interface SpotifyOutput extends MediaAdapter {
 /** 暫停超過約 10 分鐘，Spotify Connect 官方說明可能需要重新連線：一律先重新確認，不直接續播。 */
 export const PAUSE_RECONNECT_MS = 10 * 60 * 1000;
 
+/**
+ * 「停在 0、沒在播」只有在之前估計已播到尾端這段時間內才算播完；剛開始就停在 0 多半是載入中或外部暫停，
+ * 當成播完會讓引言一結束就跳進回饋（BRA-117）。
+ */
+export const END_WINDOW_MS = 5000;
+
+/** 依上一次狀態（位置＋經過時間）估計這首是否已播到尾端附近。 */
+export function reachedEnd(positionMs: number, durationMs: number | null): boolean {
+  return durationMs !== null && durationMs > 0 && positionMs >= durationMs - END_WINDOW_MS;
+}
+
 export const gestureNeeded = (): DOMException => new DOMException('需要點一下才能繼續播放。', 'NotAllowedError');
 export const deviceUnavailable = (): DOMException => new DOMException('播放裝置目前不在。', 'DeviceUnavailableError');
 export const notSupported = (message: string): DOMException => new DOMException(message, 'NotSupportedError');

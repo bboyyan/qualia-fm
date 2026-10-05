@@ -1,27 +1,17 @@
-import type { PlanRequest } from '@qualia/contracts';
-import { useAppStore, type Draft, type Settings } from '../../app/appStore';
+import { useAppStore } from '../../app/appStore';
 import { generation } from '../../app/services';
 import { Eyebrow } from '../../ui/Feedback';
 import { Icon } from '../../ui/Icon';
 import { GenerationView } from './GenerationView';
 import { ReadyView } from './ReadyView';
 import { SeedComposer } from './SeedComposer';
+import { toPlanRequest } from './seedList';
 import { useGeneration } from './useGeneration';
 import styles from './seed.module.css';
 
-export function toPlanRequest(draft: Draft, settings: Settings, tuning: string | null = null): PlanRequest {
-  const artist = draft.kind === 'song' && draft.artist.trim() ? draft.artist.trim() : null;
-  return {
-    seed: { kind: draft.kind, text: draft.text.trim(), artist },
-    requestedCount: 5,
-    dj: { enabled: settings.djEnabled, length: settings.djLength },
-    tuning,
-  };
-}
-
 interface HomePageProps {
   hasActiveShow: boolean;
-  onStartShow: () => void;
+  onStartShow: (segmentIds: readonly string[]) => void;
 }
 
 function Hero() {
@@ -46,7 +36,6 @@ function Hero() {
 export function HomePage({ hasActiveShow, onStartShow }: HomePageProps) {
   const state = useGeneration(generation);
   const draft = useAppStore((s) => s.draft);
-  const settings = useAppStore((s) => s.settings);
   const setTab = useAppStore((s) => s.setTab);
   const announce = useAppStore((s) => s.announce);
 
@@ -67,6 +56,7 @@ export function HomePage({ hasActiveShow, onStartShow }: HomePageProps) {
   if (state.status === 'ready' && state.show) {
     return (
       <ReadyView
+        key={state.show.showId}
         show={state.show}
         hasActiveShow={hasActiveShow}
         onStart={onStartShow}
@@ -80,8 +70,12 @@ export function HomePage({ hasActiveShow, onStartShow }: HomePageProps) {
     <>
       <Hero />
       <SeedComposer
-        submitLabel={hasActiveShow ? '建立下一段' : '為我開台'}
-        onSubmit={() => void generation.start(toPlanRequest(draft, settings))}
+        continuing={hasActiveShow}
+        onSubmit={() => {
+          // 讀送出當下的草稿（composer 可能剛把輸入框裡的歌加進清單）。
+          const { draft: current, settings } = useAppStore.getState();
+          void generation.start(toPlanRequest(current, settings));
+        }}
       />
       <div className={styles.note}>
         <span className={styles.noteIcon}>

@@ -13,6 +13,7 @@ import type { SdkLoader, SdkPlaybackState, SdkPlayer } from '../spotify/sdk';
 import {
   PAUSE_RECONNECT_MS,
   deviceUnavailable,
+  reachedEnd,
   gestureNeeded,
   notSupported,
   remoteReason,
@@ -337,6 +338,8 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
       return;
     }
     const uri = sdk.track_window.current_track?.uri ?? null;
+    const before = this.last;
+    const nearEnd = before !== null && reachedEnd(before.position + (before.paused ? 0 : this.deps.now() - before.at), before.duration);
     this.last = { paused: sdk.paused, position: sdk.position, duration: sdk.duration, at: this.deps.now(), uri };
     if (sdk.paused && sdk.loading !== true) {
       if (this.pendingSilence && uri === this.silenceUri) this.settleSilence();
@@ -358,7 +361,7 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
       this.maybeConfirm(current, sdk, uri);
       return;
     }
-    if (this.finished(current, sdk, uri)) {
+    if (this.finished(current, sdk, uri, nearEnd)) {
       this.current = null;
       this.generation += 1;
       this.emit({ type: 'ended', attemptId: current.attemptId, owner: 'track' });
@@ -377,12 +380,12 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
     this.emit({ type: 'started', attemptId: current.attemptId, owner: 'track' });
   }
 
-  /** 播完：曲目被推進「上一首」，或停在 0（不是我們自己按的暫停）。 */
-  private finished(current: Attempt, sdk: SdkPlaybackState, uri: string | null): boolean {
+  /** 播完：曲目被推進「上一首」，或播到尾端附近後停在 0（不是我們自己按的暫停）。 */
+  private finished(current: Attempt, sdk: SdkPlaybackState, uri: string | null, nearEnd: boolean): boolean {
     const playing = current.playingUri ?? current.uri;
     const inPrevious = sdk.track_window.previous_tracks.some((track) => track.uri === playing);
     if (uri !== playing && inPrevious) return true;
-    return sdk.paused && sdk.position === 0 && !this.localPause && (uri === playing || inPrevious);
+    return sdk.paused && sdk.position === 0 && !this.localPause && (inPrevious || (uri === playing && nearEnd));
   }
 
   private async play(request: StartRequest, uri: string, generation: number): Promise<void> {

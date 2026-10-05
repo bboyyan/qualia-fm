@@ -23,12 +23,39 @@ describe('POST /api/plan job lifecycle', () => {
     expect(show.segments.every((s) => s.track.provider === 'mock' && s.track.audioLocator.kind === 'mock_tone')).toBe(true);
   });
 
-  it('keeps every DJ line within 80 grapheme clusters for both lengths', async () => {
+  it('short DJ lines stay within 80 grapheme clusters; standard ones within 180 (BRA-117)', async () => {
     const client = await bootstrap(testApp().app);
-    const standard = planRequest({ dj: { enabled: true, length: 'standard' } });
-    const job = await waitForJob(client, (await postPlan(client, standard)).body.jobId);
-    const show = await showOf(client, job.showId);
-    expect(show.segments.every((s) => countGraphemes(s.candidate.djLine) <= 80)).toBe(true);
+    const lengths = async (length: 'short' | 'standard') => {
+      const job = await waitForJob(client, (await postPlan(client, planRequest({ dj: { enabled: true, length } }))).body.jobId);
+      return (await showOf(client, job.showId)).segments;
+    };
+    for (const length of ['short', 'standard'] as const) {
+      for (const { candidate } of await lengths(length)) {
+        const lines = [candidate.djLine, ...(candidate.transitionBridge ? [candidate.transitionBridge.djLine] : [])];
+        for (const line of lines) expect(countGraphemes(line)).toBeLessThanOrEqual(length === 'short' ? 80 : 180);
+        if (candidate.transitionBridge) {
+          expect(candidate.transitionBridge.djLine).toContain(candidate.title);
+          expect(candidate.transitionBridge.djLine).toContain(candidate.artist);
+          expect(candidate.transitionBridge.djLine).toContain('示範');
+          expect(candidate.transitionBridge.djLine).toContain('聽的時候');
+        }
+      }
+    }
+  });
+
+  it('standard (thick) mock intro names the title and artist, says why, and what to listen for (BRA-117)', async () => {
+    const client = await bootstrap(testApp().app);
+    const job = await waitForJob(client, (await postPlan(client, planRequest({ dj: { enabled: true, length: 'standard' } }))).body.jobId);
+    for (const { candidate } of (await showOf(client, job.showId)).segments) {
+      const lines = [candidate.djLine, ...(candidate.transitionBridge ? [candidate.transitionBridge.djLine] : [])];
+      for (const line of lines) {
+        expect(line).toContain(candidate.title);
+        expect(line).toContain(candidate.artist);
+        expect(line).toContain('為什麼');
+        expect(line).toContain('聽的時候');
+        expect(countGraphemes(line)).toBeGreaterThan(80);
+      }
+    }
   });
 
   it('uses no speech locator when DJ is disabled', async () => {

@@ -23,11 +23,11 @@ it('AI 語音標示與快取命中跨重啟保留；相同文字 model voice 只
   expect(fetchImpl).toHaveBeenCalledTimes(1);
   expect(runtime.ledger!.snapshot().totalUsd).toBeCloseTo(0.00003);
 });
-it('送出前以 grapheme 檢查 80 上限及每日字數預算，不呼叫 provider', async () => {
+it('送出前以 grapheme 檢查 180 上限（加厚引言）及每日字數預算，不呼叫 provider', async () => {
   const config = realConfig({ TTS_GRAPHEME_BUDGET_PER_DAY: '2' });
   const fetchImpl = vi.fn<typeof fetch>();
   const tts = new OpenAITtsProvider(config.openai, new RealProviderRuntime(config.openai), fetchImpl);
-  await expect(tts.synthesize('👨‍👩‍👧‍👦'.repeat(81), new AbortController().signal)).rejects.toThrow(/80/);
+  await expect(tts.synthesize('👨‍👩‍👧‍👦'.repeat(181), new AbortController().signal)).rejects.toThrow(/180/);
   await expect(tts.synthesize('你好。', new AbortController().signal)).rejects.toThrow(/預算/);
   expect(fetchImpl).not.toHaveBeenCalled();
 });

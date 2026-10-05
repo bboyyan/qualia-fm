@@ -72,6 +72,8 @@ export interface EngineState {
   readonly previousPlayedId: string | null;
   /** 這一段的 AI 語音播放失敗、已直接進曲目；UI 需顯示文字介紹，不可靜默。 */
   readonly speechFallbackId: string | null;
+  /** 目前這首的曲目確實播過（轉接器確認在播，或 B 手動已按「我開始播了」）；只有這時才問回饋（BRA-117）。 */
+  readonly trackHeard: boolean;
 }
 
 export interface ProviderState {

@@ -37,3 +37,9 @@ it('選歌提示詞要求台灣用語（禁大陸用語、數字中文念法、�
   for (const rule of ['30–55 grapheme clusters', '上限80', '不得引用歌詞', '不說自己真實身份或模仿特定真人', 'djLine 應能單獨依 Seed 成立'])
     expect(SYSTEM_PROMPT, rule).toContain(rule);
 });
+it('標準版引言加厚（BRA-117）：曲名、藝人、為什麼接這首、聽的時候注意什麼；長度依 djLength 區分', () => {
+  for (const rule of ['djLength', 'short', 'standard', '90–150 grapheme clusters', '上限180', '曲名', '藝人', '為什麼接這首', '聽的時候', '英文名字是'])
+    expect(SYSTEM_PROMPT, rule).toContain(rule);
+  // 不把 Spotify metadata 餵 LLM：提示詞仍明文禁止，且只靠 EditorialInput 防火牆提供輸入。
+  expect(SYSTEM_PROMPT).toContain('輸入不得包含 Spotify API 資料');
+});
