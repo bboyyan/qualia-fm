@@ -57,6 +57,8 @@ describe('候選池抽樣（BRA-127）', () => {
   it('種子 key 依種類、文字、藝人區分', () => {
     expect(seedKey(seed('深夜'))).toBe(seedKey(seed(' 深夜 ')));
     expect(seedKey(seed('深夜'))).not.toBe(seedKey({ kind: 'song', text: '深夜', artist: null }));
+    expect(seedKey({ kind: 'song', text: 'TEST 同名曲', artist: 'TEST Artist A' }))
+      .not.toBe(seedKey({ kind: 'song', text: 'TEST 同名曲', artist: 'TEST Artist B' }));
   });
 
   it('探索度 0 照模型原順序', () => {

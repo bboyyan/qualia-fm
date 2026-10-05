@@ -70,6 +70,16 @@ describe('開台候選 8–12 首、目標可播仍 5 首（BRA-127）', () => {
     expect([candidateLimitFor(256), candidateLimitFor(4096), candidateLimitFor(5000), candidateLimitFor(16384)]).toEqual([8, 8, 9, 12]);
   });
 
+  it.each([
+    [4200, [8, 8, 8]],
+    [4650, [8, 9, 9]],
+    [5100, [9, 10, 10]],
+    [5550, [10, 11, 11]],
+    [6000, [11, 12, 12]],
+  ])('token 門檻 %i 的前一個、當下、後一個 token', (threshold, expected) => {
+    expect([threshold - 1, threshold, threshold + 1].map(candidateLimitFor)).toEqual(expected);
+  });
+
   it('LLM 請求帶候選池上下限、同種子近期已選與探索度', () => {
     const recentPicks = [{ title: 'TEST Song 1', artist: 'TEST Artist 1' }];
     const body = OpenAIEditorialPlanner.requestBody(realConfig({ OPENAI_MAX_OUTPUT_TOKENS: '8192' }).openai, { ...input, recentPicks, exploration: 0.65 });

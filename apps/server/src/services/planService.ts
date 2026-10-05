@@ -221,10 +221,15 @@ export class PlanService {
       const recent = this.recentPicks.recent(job.ownerId, request.seed);
       const exploration = effectiveExploration(this.deps.config.limits.planExploration, recent.runs);
       const editorial = { ...toEditorialInput(request), history, recentPicks: recent.tracks, exploration };
-      const result = await this.pipeline(job.jobId, editorial, { ...input, request }, signal, deadlineAt, recent.history);
+      const { plan: result, mock } = await this.pipeline(job.jobId, editorial, { ...input, request }, signal, deadlineAt, recent.history);
+      // TTS 可能在取消／逾時後才回覆；交付前再次確認，晚回覆不能留下 show 或近期選曲。
+      if (signal.aborted) throw signal.reason;
+      if (this.deps.store.get(job.jobId, job.ownerId)?.status !== 'running') return;
       const plan = warning ? { ...result, warnings: [...result.warnings, warning] } : result;
       this.deps.store.putShow(job.ownerId, plan, this.deps.now());
       this.finish(job, plan);
+      // D-23：TTS 階段結束、節目儲存並交付後才記錄；只存實際交付的非 MOCK 提名。
+      if (!mock && plan.segments.length > 0) this.recentPicks.record(job.ownerId, plan.seed, plan.segments.map(({ candidate }) => candidate));
     } catch (error: unknown) {
       this.fail(job.jobId, signal, error);
     } finally {
@@ -232,7 +237,7 @@ export class PlanService {
     }
   }
 
-  private async pipeline(jobId: string, editorial: EditorialInput, input: StartPlanInput, signal: AbortSignal, deadlineAt: number, recentRuns: RecentSelection['history']): Promise<ShowPlan> {
+  private async pipeline(jobId: string, editorial: EditorialInput, input: StartPlanInput, signal: AbortSignal, deadlineAt: number, recentRuns: RecentSelection['history']): Promise<{ plan: ShowPlan; mock: boolean }> {
     const { phaseMs, slowPhaseMs, speechMs } = this.deps.config.mock;
     await this.enter(jobId, 'understanding', phaseMs, signal);
     // 供應商降級提示一律放在 warnings 最前面，模型自己的 warnings 再多也不會把它擠掉。
@@ -267,9 +272,8 @@ export class PlanService {
       speech: editorial.djEnabled ? { kind: 'mock_chime', durationMs: speechMs } : { kind: 'none' },
       now: this.deps.now(),
     });
-    if (!mock) this.recentPicks.record(input.ownerId, input.request.seed, plan.segments.map(({ candidate }) => candidate));
     const segments = editorial.djEnabled && this.deps.tts && !realReason ? await this.withAiSpeech(plan, signal, notices, deadlineAt) : plan.segments;
-    return { ...plan, segments, warnings: [...new Set([...notices, ...plan.warnings])].slice(0, 10) };
+    return { plan: { ...plan, segments, warnings: [...new Set([...notices, ...plan.warnings])].slice(0, 10) }, mock };
   }
 
   /**
