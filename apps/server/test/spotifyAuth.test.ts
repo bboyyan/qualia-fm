@@ -214,8 +214,9 @@ describe('PKCE code_verifier（RFC 7636）', () => {
     const fake = new FakeSpotify();
     const { app } = testApp({ ...SPOTIFY_TEST_ENV, SPOTIFY_TOKEN_FILE: tokenFile() }, { fetchImpl: fake.fetch });
     const verifiers: string[] = [];
+    // 同一個擁有者連續連結兩次（BRA-111 起，別的 session 不能覆蓋已有的連結）。
+    const client = await bootstrap(app);
     for (let i = 0; i < 2; i += 1) {
-      const client = await bootstrap(app);
       const state = stateOf(String((await login(client.agent)).headers.location));
       await client.agent.get(`/callback?code=TEST-code&state=${state}`).expect(303);
       verifiers.push(new URLSearchParams(fake.callsTo('POST', '/api/token').at(-1)?.body ?? '').get('code_verifier') ?? '');
@@ -251,5 +252,41 @@ describe('Spotify 關閉時不建立任何 Spotify 物件（M4b）', () => {
 
   it('啟用時才建立服務（對照組）', () => {
     expect(testApp({ ...SPOTIFY_TEST_ENV, SPOTIFY_TOKEN_FILE: tokenFile() }).spotify).toBeDefined();
+  });
+});
+
+describe('mutation 補測（BRA-111 重跑 PR #6）', () => {
+  it('S05：access token 在到期前 60 秒內就先換新（不讓 SDK 拿到快過期的 token）', async () => {
+    let now = Date.parse('2026-10-05T00:00:00Z');
+    const fake = new FakeSpotify();
+    const dj = await linkedApp(DJ_TEST_ENV, { now: () => now }, fake);
+    const first = (await post(dj.client, '/api/spotify/token').expect(200)).body.accessToken;
+    now += 3600 * 1000 - 61 * 1000;
+    expect((await post(dj.client, '/api/spotify/token').expect(200)).body.accessToken).toBe(first);
+    now += 2 * 1000;
+    expect((await post(dj.client, '/api/spotify/token').expect(200)).body.accessToken).not.toBe(first);
+  });
+
+  it('A106：Spotify 輪替 refresh token 時保留擁有者（擁有者仍可用，capabilities 仍為已連結）', async () => {
+    let now = Date.parse('2026-10-05T00:00:00Z');
+    const fake = new FakeSpotify();
+    fake.rotateRefresh = true;
+    const dj = await linkedApp(DJ_TEST_ENV, { now: () => now }, fake);
+    now += 3600 * 1000;
+    await post(dj.client, '/api/spotify/token').expect(200);
+    expect(new URLSearchParams(fake.callsTo('POST', '/api/token').at(-1)?.body ?? '').get('grant_type')).toBe('refresh_token');
+    now += 3600 * 1000;
+    await post(dj.client, '/api/spotify/token').expect(200);
+    expect((await dj.client.agent.get('/api/capabilities')).body.spotify.linked).toBe(true);
+  });
+
+  it('A111：未連結時中斷連結與 Loved 一律拒絕（沒有擁有者）', async () => {
+    const fake = new FakeSpotify();
+    const { app } = testApp({ ...DJ_TEST_ENV, SPOTIFY_TOKEN_FILE: tokenFile() }, { fetchImpl: fake.fetch });
+    const client = await bootstrap(app);
+    const logout = await post(client, '/api/auth/spotify/logout');
+    expect([logout.status, logout.body.error?.code]).toEqual([403, 'FEATURE_RESTRICTED']);
+    expect(logout.body.error.message).toContain('重新連結');
+    expect((await post(client, '/api/spotify/loved', { showId: 'show_x', segmentId: 'seg_x' })).status).toBe(403);
   });
 });

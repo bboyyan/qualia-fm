@@ -22,7 +22,10 @@ const SPOTIFY_ENABLED_RESTRICTIONS: readonly string[] = [
 const SPOTIFY_MANUAL_ONLY = 'E 模式（自動串接）未核可：只能登入與在 Spotify 開啟連結，自己播放。';
 
 export interface SpotifyStatus {
+  /** 這個請求是擁有者且已連結。 */
   readonly linked: boolean;
+  /** 已由別的裝置（擁有者）連結；這個請求不能使用。 */
+  readonly linkedElsewhere?: boolean;
 }
 
 function restrictionsFor(config: ServerConfig, aiVoiceLive: boolean, reason: string | null): string[] {
@@ -39,6 +42,7 @@ export function buildCapabilities(config: ServerConfig, reason: string | null = 
   const spotifyInfo = config.gates.spotifyEnabled
     ? { spotify: {
         linked: spotify.linked,
+        linkedElsewhere: spotify.linkedElsewhere ?? false,
         clientId: config.spotify.clientId ?? '',
         redirectUri: config.spotify.redirectUri ?? '',
         lovedPlaylistId: config.spotify.lovedPlaylistId,

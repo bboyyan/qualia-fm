@@ -3,8 +3,8 @@ import { PlaybackRouter } from '../src/audio/adapters/playbackRouter';
 import { SpotifyConnectAdapter } from '../src/audio/adapters/spotifyConnectAdapter';
 import { SpotifyWebPlaybackAdapter } from '../src/audio/adapters/spotifyWebPlaybackAdapter';
 import type { SpotifyOutput } from '../src/audio/spotify/types';
-import type { AdapterEvent, MediaAdapter, ProviderState, StartRequest } from '../src/audio/types';
-import { FakeClock, FakeRemote, FakeSdk, FakeVisibility, OTHER_URI, TEST_URI, flush, spotifySegment } from './spotifyFakes';
+import type { AdapterEvent } from '../src/audio/types';
+import { FakeClock, FakeRemote, FakeSdk, FakeVisibility, OTHER_URI, SlowBase, TEST_URI, flush, spotifySegment } from './spotifyFakes';
 
 /**
  * B1（Policy III.7）競態：Spotify play 還在路上時切段（下一首／JUMP／暫停）。
@@ -58,6 +58,9 @@ describe('路徑 P：play 在路上時切段', () => {
     expect(pauses(ctx.sdk.player.calls)).toBe(before + 2);
     expect(ctx.adapter.isAudible()).toBe(true);
     ctx.sdk.player.state(TEST_URI, true, 120);
+    // BRA-111：已暫停要穩定 500ms 才算安靜（假設 SDK 可能先報已暫停、短暫後才出聲；80ms 為模擬值）。
+    expect(ctx.adapter.isAudible()).toBe(true);
+    await ctx.clock.advance(500);
     expect(ctx.adapter.isAudible()).toBe(false);
     expect(ctx.events.filter((e) => e.type === 'started')).toEqual([]);
   });
@@ -96,6 +99,8 @@ describe('路徑 P：play 在路上時切段', () => {
     expect(silent).toBeNull();
     ctx.sdk.player.state(TEST_URI, true, 10);
     await flush();
+    expect(silent).toBeNull();
+    await ctx.clock.advance(500);
     expect(silent).toBe(true);
   });
 });
@@ -135,31 +140,6 @@ describe('路徑 C：play 在路上時切段', () => {
   });
 });
 
-/** 只記錄出聲狀態；stop 可設成「非同步才真的停」。 */
-class SlowBase implements MediaAdapter {
-  playing = false;
-  stopDelayMs = 0;
-  starts: string[] = [];
-  private listener: ((event: AdapterEvent) => void) | null = null;
-  constructor(private readonly clock: FakeClock) {}
-  start(request: StartRequest): Promise<void> {
-    this.starts.push(request.owner);
-    this.playing = true;
-    return Promise.resolve();
-  }
-  pause(): void { this.playing = false; }
-  resume(): Promise<void> { return Promise.resolve(); }
-  seek(): void {}
-  stop(): void {
-    if (this.stopDelayMs === 0) this.playing = false;
-    else if (Number.isFinite(this.stopDelayMs)) this.clock.setTimeout(() => (this.playing = false), this.stopDelayMs);
-  }
-  getState(): ProviderState | null { return { positionMs: 0, durationMs: null, paused: !this.playing, ready: true }; }
-  subscribe(listener: (event: AdapterEvent) => void): () => void { this.listener = listener; return () => (this.listener = null); }
-  destroy(): void {}
-  emit(event: AdapterEvent): void { this.listener?.(event); }
-}
-
 describe('Router：任何時刻只有一個來源出聲', () => {
   it('下一首在 Spotify play 途中：介紹等 Spotify 確認靜音才開始（整合 P 路徑）', async () => {
     const ctx = webPlayer();
@@ -179,6 +159,8 @@ describe('Router：任何時刻只有一個來源出聲', () => {
     expect(base.starts).toEqual([]);
     ctx.sdk.player.state(TEST_URI, true, 40);
     await flush();
+    expect(base.starts).toEqual([]);
+    await ctx.clock.advance(500);
     expect(base.starts).toEqual(['speech']);
     expect(ctx.sdk.player.current?.paused).toBe(true);
   });
@@ -190,7 +172,7 @@ describe('Router：任何時刻只有一個來源出聲', () => {
     const stops: number[] = [];
     const listeners: ((event: AdapterEvent) => void)[] = [];
     const output: SpotifyOutput = {
-      path: 'P', isAudible: () => false, whenSilent: () => Promise.resolve(true), recheck: () => Promise.resolve(true),
+      path: 'P', isAudible: () => false, whenSilent: () => Promise.resolve(true), recheck: () => Promise.resolve(true), holdSilence: () => () => undefined,
       start: () => Promise.resolve(), pause: () => undefined, resume: () => Promise.resolve(), seek: () => undefined,
       stop: () => { stops.push(1); }, getState: () => null, destroy: () => undefined,
       subscribe: (listener) => { listeners.push(listener); return () => undefined; },
@@ -252,7 +234,7 @@ describe('Router：等待靜音期間被切段', () => {
     ctx.remote.landPlay();
     await flush();
     ctx.sdk.player.state(TEST_URI, true, 10);
-    await flush();
+    await ctx.clock.advance(500);
     expect(base.starts).toEqual([]);
     expect((error as DOMException | null)?.name).toBe('AbortError');
   });
@@ -294,6 +276,8 @@ describe("B1'：play 在路上時連按兩次「下一首」", () => {
     expect(base.starts).toEqual([]);
     ctx.sdk.player.state(TEST_URI, true, 40);
     await flush();
+    expect(base.starts).toEqual([]);
+    await ctx.clock.advance(500);
     expect(base.starts).toEqual(['speech']);
   });
 
@@ -382,11 +366,13 @@ describe('合併前必修：P 的待確認靜音只接受遲到那首的「已�
     void ctx.adapter.whenSilent(2500).then((value) => (silent = value));
     ctx.sdk.player.state(OTHER_URI, true, 0);
     ctx.sdk.player.state(null, true, 0);
-    await flush();
+    await ctx.clock.advance(600);
     expect(ctx.adapter.isAudible()).toBe(true);
     expect(silent).toBeNull();
     ctx.sdk.player.state(TEST_URI, true, 5);
     await flush();
+    expect(silent).toBeNull();
+    await ctx.clock.advance(500);
     expect(silent).toBe(true);
   });
 });
@@ -428,3 +414,31 @@ describe('存活變異補測', () => {
     expect(ctx.events).toEqual([{ type: 'started', attemptId: 2, owner: 'track' }]);
   });
 });
+
+describe('mutation 補測（BRA-111 重跑 PR #6）', () => {
+  it('W15：路徑 P play 在路上時直接換下一首（沒有 stop）→ 舊的 play 生效後立刻暫停', async () => {
+    const ctx = webPlayer();
+    await ctx.online();
+    void ctx.adapter.start(track(1)).catch(() => undefined);
+    await flush();
+    void ctx.adapter.start({ owner: 'track', segment: spotifySegment(2, OTHER_URI), attemptId: 2, fromMs: 0 }).catch(() => undefined);
+    await flush();
+    const before = pauses(ctx.sdk.player.calls);
+    ctx.remote.landPlay();
+    await flush();
+    expect(pauses(ctx.sdk.player.calls)).toBe(before + 1);
+  });
+
+  it('W10：路徑 C play 在路上時直接換下一首（沒有 stop）→ 舊的 play 生效後送 pause', async () => {
+    const ctx = connectApp();
+    void ctx.adapter.start(track(1)).catch(() => undefined);
+    await flush();
+    void ctx.adapter.start({ owner: 'track', segment: spotifySegment(2, OTHER_URI), attemptId: 2, fromMs: 0 }).catch(() => undefined);
+    await flush();
+    expect(ctx.remote.pendingPlays).toBe(2);
+    ctx.remote.landPlay();
+    await flush();
+    expect(ctx.remote.pauses).toEqual(['TESTphone']);
+  });
+});
+

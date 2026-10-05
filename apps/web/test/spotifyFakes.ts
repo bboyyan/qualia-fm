@@ -1,6 +1,7 @@
 import type { Segment, SpotifyDevice, SpotifyPlayback, SpotifyPlayRequest } from '@qualia/contracts';
 import type { SdkPlaybackState, SdkPlayer, SdkPlayerOptions, SpotifySdk } from '../src/audio/spotify/sdk';
 import type { SpotifyRemote, Timers, Visibility } from '../src/audio/spotify/types';
+import type { AdapterEvent, MediaAdapter, ProviderState, StartRequest } from '../src/audio/types';
 import { localError } from '../src/api/client';
 import { segment } from './fixtures';
 
@@ -103,9 +104,11 @@ export class FakePlayer implements SdkPlayer {
   ready(deviceId = 'TESTdeviceP'): void {
     this.emit('ready', { device_id: deviceId });
   }
-  state(uri: string | null, paused: boolean, position = 0, previous: string[] = []): void {
+  /** loading＝SDK 已收到 play、還在載入（此時常回報 paused，但不代表之後不會出聲）。 */
+  state(uri: string | null, paused: boolean, position = 0, previous: string[] = [], loading?: boolean): void {
     this.current = {
       paused,
+      ...(loading === undefined ? {} : { loading }),
       position,
       duration: 200_000,
       track_window: { current_track: uri ? { uri } : null, previous_tracks: previous.map((u) => ({ uri: u })) },
@@ -194,4 +197,29 @@ export function spotifySegment(n = 1, uri = TEST_URI): Segment {
       audioLocator: { kind: 'spotify_uri', uri },
     },
   };
+}
+
+/** 只記錄出聲狀態；stop 可設成「非同步才真的停」。 */
+export class SlowBase implements MediaAdapter {
+  playing = false;
+  stopDelayMs = 0;
+  starts: string[] = [];
+  private listener: ((event: AdapterEvent) => void) | null = null;
+  constructor(private readonly clock: FakeClock) {}
+  start(request: StartRequest): Promise<void> {
+    this.starts.push(request.owner);
+    this.playing = true;
+    return Promise.resolve();
+  }
+  pause(): void { this.playing = false; }
+  resume(): Promise<void> { return Promise.resolve(); }
+  seek(): void {}
+  stop(): void {
+    if (this.stopDelayMs === 0) this.playing = false;
+    else if (Number.isFinite(this.stopDelayMs)) this.clock.setTimeout(() => (this.playing = false), this.stopDelayMs);
+  }
+  getState(): ProviderState | null { return { positionMs: 0, durationMs: null, paused: !this.playing, ready: true }; }
+  subscribe(listener: (event: AdapterEvent) => void): () => void { this.listener = listener; return () => (this.listener = null); }
+  destroy(): void {}
+  emit(event: AdapterEvent): void { this.listener?.(event); }
 }

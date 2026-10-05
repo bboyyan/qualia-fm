@@ -44,6 +44,11 @@ export interface SpotifyOutput extends MediaAdapter {
   isAudible(): boolean;
   /** 等到確認靜音（或逾時回 false）；介紹語音只在確認靜音後才開始。 */
   whenSilent(timeoutMs: number): Promise<boolean>;
+  /**
+   * 介紹（<audio>）播放期間持續守住靜音：Spotify 在我方不要聲音時出聲，就再暫停並呼叫 onLeak（只一次）。
+   * 回傳的函式解除守候。路徑 C 以低頻輪詢；路徑 P 由 SDK 事件即時回報。
+   */
+  holdSilence(onLeak: () => void): () => void;
   /** 「重新偵測」：重新確認裝置是否在；fromGesture 時可重新接上播放器。 */
   recheck(fromGesture: boolean): Promise<boolean>;
 }

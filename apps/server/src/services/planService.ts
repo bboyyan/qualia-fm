@@ -60,6 +60,8 @@ export interface StartPlanInput {
   readonly request: PlanRequest;
   readonly idempotencyKey: string;
   readonly scenario: MockScenario;
+  /** 這個請求出示了 Spotify 擁有者憑證（BRA-111 A1）；不是擁有者就不送 Search，照 MOCK／手動對應。 */
+  readonly spotifyOwner?: boolean;
 }
 
 const id = (prefix: string): string => `${prefix}_${randomBytes(8).toString('hex')}`;
@@ -234,7 +236,7 @@ export class PlanService {
     if (this.deps.tts && realReason) notices.push(`${PROVIDER_NOTICES.tts}：${realReason}`);
     await this.enter(jobId, 'matching', input.scenario === 'slow' ? slowPhaseMs : phaseMs, signal);
     await this.enter(jobId, 'resolving', phaseMs, signal);
-    const spotify = !mock && this.deps.spotify?.linked() ? this.deps.spotify.resolver : null;
+    const spotify = !mock && input.spotifyOwner === true && this.deps.spotify?.linked() ? this.deps.spotify.resolver : null;
     const { playable, unavailable, failed } = await this.resolveAll(spotify ?? this.deps.resolver, draft.candidates, input.scenario, signal);
     await this.enter(jobId, 'preparing', phaseMs, signal);
     // 只說數量（提名來自 LLM），不含 token 或任何 Spotify 回傳內容。

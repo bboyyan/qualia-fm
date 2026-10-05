@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigError, loadConfig } from '../src/config/env.js';
-import { buildCapabilities, MOCK_RESTRICTIONS } from '../src/services/capabilities.js';
+import { assertFeatureAllowed, buildCapabilities, MOCK_RESTRICTIONS } from '../src/services/capabilities.js';
 import { SPOTIFY_TEST_ENV } from './spotifyHelpers.js';
 
 beforeEach(() => { vi.stubGlobal('fetch', () => { throw new Error('禁止真實網路'); }); });
@@ -136,3 +136,32 @@ describe('.env.example 維持關閉、不含金鑰', () => {
     expect(hits).toEqual([]);
   });
 });
+
+describe('mutation 補測（BRA-111 重跑 PR #6）', () => {
+  it('S28：E 模式 gate 在執行期也要求 SPOTIFY_ENABLED（不只靠啟動檢查）', () => {
+    const base = loadConfig({});
+    const djOnly = { ...base, gates: { spotifyEnabled: false, spotifyDjApproved: true } };
+    expect(() => assertFeatureAllowed(djOnly, 'spotify_dj')).toThrow();
+    const both = { ...base, gates: { spotifyEnabled: true, spotifyDjApproved: true } };
+    expect(() => assertFeatureAllowed(both, 'spotify_dj')).not.toThrow();
+  });
+});
+
+describe('SPOTIFY_OWNER_USER_ID（BRA-111 審查必修）', () => {
+  it('預設未設定；SPOTIFY_ENABLED=true 時仍可啟動（連結會被拒絕）', () => {
+    expect(loadConfig({}).spotify.ownerUserId).toBeUndefined();
+    const { SPOTIFY_OWNER_USER_ID: _unset, ...env } = SPOTIFY_TEST_ENV;
+    expect(loadConfig(env).spotify.ownerUserId).toBeUndefined();
+  });
+
+  it('設定後原樣讀入（區分大小寫）', () => {
+    expect(loadConfig({ ...SPOTIFY_TEST_ENV, SPOTIFY_OWNER_USER_ID: 'TESTowner.Name_1' }).spotify.ownerUserId).toBe('TESTowner.Name_1');
+  });
+
+  it('啟用時格式明顯錯誤（空白、斜線）→ 拒絕啟動，只點名變數、不回顯值', () => {
+    const message = errorOf({ ...SPOTIFY_TEST_ENV, SPOTIFY_OWNER_USER_ID: 'bad id/with space' });
+    expect(message).toContain('SPOTIFY_OWNER_USER_ID');
+    expect(message).not.toContain('bad id');
+  });
+});
+

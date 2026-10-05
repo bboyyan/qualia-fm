@@ -1,5 +1,5 @@
 /**
- * Spotify Search 只做一件事：把 LLM 提名的曲名／藝人對應成可播放的 URI（含顯示用封面與外連）。
+ * Spotify Search 只做一件事：把 LLM 提名的曲名／藝人對應成可播放的 URI（含顯示用封面、專輯名與外連）。
  * 結果只進 ResolvedTrack（播放與 Loved 用），永遠不回到 planner、不寫進帳本（Policy III.13／III.14）。
  */
 import type { Candidate, ResolvedTrack } from '@qualia/contracts';
@@ -65,6 +65,7 @@ function toResolved(track: ApiTrack): ResolvedTrack {
     providerTrackId: track.id,
     canonicalTitle: track.name.slice(0, 200) || '（無曲名）',
     canonicalArtists: track.artists.map((a) => a.name.slice(0, 200)).filter(Boolean).slice(0, 10),
+    canonicalAlbum: track.album?.name?.slice(0, 200) || null,
     artworkUrl: artworkOf(track),
     durationMs: track.duration_ms > 0 ? track.duration_ms : null,
     externalUrl: external?.startsWith(EXTERNAL_PREFIX) ? external : null,
@@ -79,6 +80,7 @@ const unavailable = (candidate: Candidate): ResolvedTrack => ({
   providerTrackId: null,
   canonicalTitle: candidate.title,
   canonicalArtists: [candidate.artist],
+  canonicalAlbum: null,
   artworkUrl: null,
   durationMs: null,
   externalUrl: null,

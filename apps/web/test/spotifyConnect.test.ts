@@ -110,3 +110,22 @@ describe('SpotifyConnectAdapter（路徑 C：遙控 Spotify app）', () => {
     expect(ctx.statuses.at(-1)).toMatchObject({ reason: 'paused_too_long' });
   });
 });
+
+describe('mutation 補測（BRA-111 重跑 PR #6）', () => {
+  it('W04：送出後一直沒確認在播（12 秒）→ 當成需要點一下，並送 pause 避免晚到的聲音', async () => {
+    const ctx = setup();
+    await startTrack(ctx, 3);
+    await ctx.clock.advance(14_000);
+    expect(ctx.events).toEqual([{ type: 'failed', attemptId: 3, owner: 'track', code: 'AUTOPLAY_BLOCKED' }]);
+    expect(ctx.remote.pauses).toEqual(['TESTphone']);
+  });
+
+  it('W07：頁面在背景時開始播放 → 不輪詢', async () => {
+    const ctx = setup();
+    ctx.visibility.visible = false;
+    await startTrack(ctx);
+    await ctx.clock.advance(30_000);
+    expect(ctx.remote.playbackCalls).toBe(0);
+  });
+});
+

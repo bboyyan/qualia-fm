@@ -129,8 +129,9 @@ describe('「愛」→ 加入 Qualia Loved（只加不刪、去重）', () => {
     const dj = await djApp();
     const show = await spotifyShow(dj);
     expect((await post(dj.client, '/api/spotify/loved', { showId: show.showId, segmentId: 'nope' })).status).toBe(404);
+    // 別的 session：BRA-111 起先被擁有者檢查擋下（403），也就碰不到節目（原為 404）。
     const other = await bootstrap(dj.app.app);
-    expect((await other.agent.post('/api/spotify/loved').set('Origin', ORIGIN).set('X-CSRF-Token', other.csrf).send({ showId: show.showId, segmentId: show.segments[0]!.segmentId })).status).toBe(404);
+    expect((await other.agent.post('/api/spotify/loved').set('Origin', ORIGIN).set('X-CSRF-Token', other.csrf).send({ showId: show.showId, segmentId: show.segments[0]!.segmentId })).status).toBe(403);
     const disabled = await bootstrap(testApp().app);
     expect((await post(disabled, '/api/spotify/loved', { showId: 'x', segmentId: 'y' })).status).toBe(403);
     expect(dj.fake.callsTo('POST', '/v1/playlists/0dF9anAJZv0IotD6lo2kl2/items')).toEqual([]);

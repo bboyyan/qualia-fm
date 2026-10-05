@@ -22,7 +22,7 @@ export const ApiTrackSchema = z.object({
   duration_ms: z.number().int().nonnegative(),
   is_playable: z.boolean().optional(),
   artists: z.array(z.object({ name: z.string() })),
-  album: z.object({ images: z.array(ImageSchema) }).optional(),
+  album: z.object({ name: z.string().optional(), images: z.array(ImageSchema) }).optional(),
   external_urls: z.object({ spotify: z.string().optional() }).optional(),
 });
 export type ApiTrack = z.infer<typeof ApiTrackSchema>;

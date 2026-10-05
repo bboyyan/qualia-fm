@@ -5,6 +5,8 @@
  * - 送出 play（伺服器代理、帶 device_id）後，要等 player_state_changed 確認真的在播才回報 started。
  * - 不疊音（Policy III.7）：每次切段都換「世代」。play 在路上時被 stop／暫停，生效後一律暫停；
  *   我方不要聲音時 SDK 若回報在播，一律再暫停；在路上或待確認靜音期間都算「可能出聲」。
+ * - 假設 SDK 可能先回報「載入中／已暫停」、短暫後才真的出聲（BRA-111；80ms 是模擬假設，非實測，真機見 BRA-114）：待確認靜音時，那一首的「已暫停」
+ *   要不是載入中、且穩定 SILENCE_SETTLE_MS 沒有再出聲才算安靜；stop 時已生效但還沒確認在播的那首也照此等待。
  * - 暫停超過約 10 分鐘視為需重連；只在頁面回到前景時讀狀態；不做靜音保活、wake lock 或背景計時器。
  */
 import type { SdkLoader, SdkPlaybackState, SdkPlayer } from '../spotify/sdk';
@@ -31,6 +33,8 @@ const READY_TIMEOUT_MS = 8000;
 const CONFIRM_TIMEOUT_MS = 10_000;
 /** 遲到的 play 被暫停後，等 SDK 回報已暫停的時間；逾時重讀一次狀態。 */
 const SILENCE_RECHECK_MS = 1500;
+/** 「已暫停」要穩定這麼久才算安靜（涵蓋「先報已暫停、短暫後才出聲」的假設；模擬用 80ms，真機待 BRA-114）。 */
+const SILENCE_SETTLE_MS = 500;
 
 export interface WebPlaybackDeps {
   readonly loadSdk: SdkLoader;
@@ -87,6 +91,10 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
   /** 待確認靜音的那一首；只有它回報 paused 才算安靜（play 生效前的舊 paused 不算）。 */
   private silenceUri: string | null = null;
   private silenceTimer: unknown = null;
+  /** 待確認靜音的那首開始回報「已暫停（非載入中）」的時間；之後再出聲就重來。 */
+  private quietSince: number | null = null;
+  /** 介紹播放期間的守候：SDK 在我方不要聲音時回報在播就通知（一次）。 */
+  private onLeak: (() => void) | null = null;
   /** 被切掉的曲目；它遲到的「播放中」狀態不能當成新一首的確認。 */
   private readonly staleUris = new Set<string>();
   private readyWaiters: ((ok: boolean) => void)[] = [];
@@ -169,9 +177,12 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
   /** 切段／回饋／換模式：一律請 SDK 暫停（即使 play 還在路上或尚未確認），世代換新。 */
   stop(): void {
     const active = this.current !== null || this.isAudible();
+    // play 已生效、但 SDK 還沒確認在播（可能正在載入）：它隨時會出聲，要等那一首穩定靜音。
+    const landed = this.current !== null && !this.current.confirmed && this.inflight === 0 ? this.current.uri : null;
     this.supersede();
     this.localPause = true;
-    if (active) this.silencePlayer();
+    if (landed) this.silenceLatePlay(landed);
+    else if (active) this.silencePlayer();
   }
 
   getState(): ProviderState | null {
@@ -203,6 +214,13 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
     });
   }
 
+  holdSilence(onLeak: () => void): () => void {
+    this.onLeak = onLeak;
+    return () => {
+      if (this.onLeak === onLeak) this.onLeak = null;
+    };
+  }
+
   async recheck(fromGesture: boolean): Promise<boolean> {
     if (fromGesture && !this.isOnline()) return this.connect();
     await this.refresh();
@@ -218,6 +236,7 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
     this.unwatch();
     this.supersede();
     this.clearSilenceTimer();
+    this.onLeak = null;
     this.player?.disconnect();
     this.player = null;
     this.listeners.clear();
@@ -319,11 +338,17 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
     }
     const uri = sdk.track_window.current_track?.uri ?? null;
     this.last = { paused: sdk.paused, position: sdk.position, duration: sdk.duration, at: this.deps.now(), uri };
-    if (sdk.paused) {
-      if (this.pendingSilence && uri === this.silenceUri) this.clearPendingSilence();
-    } else if (this.wantsSilence()) {
+    if (sdk.paused && sdk.loading !== true) {
+      if (this.pendingSilence && uri === this.silenceUri) this.settleSilence();
+    } else if (this.pendingSilence) {
+      // 載入中或又出聲：重新計算穩定時間，並在一段時間後重讀狀態。
+      this.quietSince = null;
+      this.armSilenceRecheck();
+    }
+    if (!sdk.paused && this.wantsSilence()) {
       // 遲到生效的 play 或我方已要求暫停：不論誰讓它出聲，一律再暫停（不疊音）。
       this.silencePlayer();
+      this.leak();
       return;
     }
     this.checkSilent();
@@ -399,18 +424,50 @@ export class SpotifyWebPlaybackAdapter implements SpotifyOutput {
   private clearPendingSilence(): void {
     this.pendingSilence = false;
     this.silenceUri = null;
+    this.quietSince = null;
     this.clearSilenceTimer();
   }
 
   private silenceLatePlay(uri: string): void {
     this.pendingSilence = true;
     this.silenceUri = uri;
+    this.quietSince = null;
     this.silencePlayer();
+    this.armSilenceRecheck();
+  }
+
+  /** 一直沒有新狀態時，過一段時間主動重讀一次。 */
+  private armSilenceRecheck(): void {
     this.clearSilenceTimer();
     this.silenceTimer = this.deps.timers.setTimeout(() => {
       this.silenceTimer = null;
       void this.refresh();
     }, SILENCE_RECHECK_MS);
+  }
+
+  /** 那一首回報已暫停（非載入中）：穩定 SILENCE_SETTLE_MS 都沒再出聲才算安靜（不靠下一個 SDK 事件）。 */
+  private settleSilence(): void {
+    const now = this.deps.now();
+    this.quietSince ??= now;
+    const waited = now - this.quietSince;
+    if (waited >= SILENCE_SETTLE_MS) {
+      this.clearPendingSilence();
+      return;
+    }
+    this.clearSilenceTimer();
+    this.silenceTimer = this.deps.timers.setTimeout(() => {
+      this.silenceTimer = null;
+      if (!this.pendingSilence || this.quietSince === null) return;
+      this.settleSilence();
+      this.checkSilent();
+    }, SILENCE_SETTLE_MS - waited);
+  }
+
+  /** 介紹守候中 SDK 出聲（已再暫停）：通知 router 停介紹（只一次）。 */
+  private leak(): void {
+    const onLeak = this.onLeak;
+    this.onLeak = null;
+    onLeak?.();
   }
 
   private silencePlayer(): void {

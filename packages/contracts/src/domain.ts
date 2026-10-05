@@ -134,6 +134,8 @@ export const ResolvedTrackSchema = z.strictObject({
   providerTrackId: z.string().max(200).nullable(),
   canonicalTitle: z.string().min(1).max(200),
   canonicalArtists: z.array(z.string().min(1).max(200)).min(1).max(10),
+  /** 串流服務的專輯名稱（Spotify 標示規範要求完整 metadata）；只顯示，不進 AI、不進帳本。舊資料沒有此欄。 */
+  canonicalAlbum: z.string().min(1).max(200).nullable().optional(),
   artworkUrl: z.string().max(2000).nullable(),
   durationMs: z.number().int().positive().nullable(),
   externalUrl: z.string().max(2000).nullable(),

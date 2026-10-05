@@ -1,4 +1,5 @@
-/* E 模式新增元件：只用既有 --q-* token 與既有元件風格（卡片、pill、分隔線），不引入新配色。 */
+/* E 模式新增元件：只用既有 --q-* token 與既有元件風格（卡片、pill、分隔線），不引入新配色。
+   例外：Spotify 官方圖示與封面圓角依 Spotify Design Guidelines（BRA-111 A2）。 */
 
 .pill {
   display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
@@ -26,12 +27,26 @@
   margin-top: 4px; padding: 14px; border: 1px solid var(--q-border); border-radius: var(--q-radius-card);
   background: var(--q-surface); box-shadow: var(--q-shadow-soft);
 }
-.cover { width: 96px; height: 96px; border-radius: 12px; object-fit: cover; background: var(--q-subtle); display: block; }
+/* 封面圓角：小／中尺寸 4px、大尺寸 8px（Spotify Design Guidelines）。 */
+.cover { width: 96px; height: 96px; border-radius: 4px; object-fit: cover; background: var(--q-subtle); display: block; }
 .trackBody { min-width: 0; display: grid; gap: 4px; }
 .trackBody h2 { font-size: 17px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trackBody p { font-size: 13px; color: var(--q-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trackText { min-width: 0; display: grid; gap: 4px; }
+.trackBody .album { font-size: 12px; }
+/* 展開：曲名／歌手／專輯換行顯示全文（Spotify：使用者一定能看到完整 metadata）。 */
+.trackText[data-expanded='true'] :is(h2, p) { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.metaToggle {
+  justify-self: start; min-height: 32px; padding: 0; border: 0; background: none;
+  font: inherit; font-size: 12px; color: var(--q-muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.metaToggle:hover { color: var(--q-ink); }
+.metaToggle:focus-visible { outline: 2px solid var(--q-focus); outline-offset: 2px; border-radius: 4px; }
 .trackMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
-.source { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--q-primary); background: var(--q-primary-wash); border-radius: 6px; padding: 1px 6px; }
+/* 完整官方 logo 顯示 80×22（數位最小寬 70px），四周留白＝圖示高度一半（11px）。左側以負邊距對齊文字欄：
+   左邊緊鄰的是封面與欄距（14px），仍大於 11px；上下右的留白不被其他元素佔用。 */
+.brand { display: inline-flex; padding: 11px; margin-left: -11px; }
+.brand img { display: block; }
 .confirmed { font-size: 12px; color: var(--q-primary); font-weight: 600; }
 .openLink {
   display: inline-flex; align-items: center; min-height: 32px; font-size: 13px; font-weight: 600;
@@ -63,3 +78,9 @@
 .result h2 { font-size: 20px; }
 .result p { font-size: 14px; line-height: 1.6; }
 .result ul { margin: 0; padding-left: 20px; font-size: 13px; color: var(--q-muted); display: grid; gap: 4px; }
+
+/* 大尺寸：寬螢幕放大封面，圓角改 8px。 */
+@media (min-width: 600px) {
+  .track { grid-template-columns: 128px minmax(0, 1fr); }
+  .cover { width: 128px; height: 128px; border-radius: 8px; }
+}

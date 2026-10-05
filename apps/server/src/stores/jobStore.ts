@@ -110,7 +110,7 @@ export class JobStore {
     return [...this.shows.values()].filter((entry) => entry.ownerId === ownerId).map((entry) => entry.plan);
   }
 
-  /** 中斷 Spotify 連結：把所有節目裡 Spotify 回傳的欄位換掉（ID、封面、正式名稱、外連、URI），段落與回饋保留。 */
+  /** 中斷 Spotify 連結：把所有節目裡 Spotify 回傳的欄位換掉（ID、封面、正式名稱、專輯、外連、URI），段落與回饋保留。 */
   scrubSpotify(): void {
     for (const [id, entry] of this.shows) {
       if (!entry.plan.segments.some((segment) => segment.track.provider === 'spotify')) continue;
@@ -121,6 +121,7 @@ export class JobStore {
           providerTrackId: null,
           canonicalTitle: segment.candidate.title,
           canonicalArtists: [segment.candidate.artist],
+          canonicalAlbum: null,
           artworkUrl: null,
           durationMs: null,
           externalUrl: null,
