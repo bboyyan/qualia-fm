@@ -46,10 +46,11 @@ export function GenerationView({ state, seedText, onCancel, onRetry, onEdit }: G
   }, [current, announce]);
 
   const failed = state.status === 'failed';
+  const quotaExceeded = failed && state.error?.code === 'QUOTA_EXCEEDED';
   return (
     <section className={styles.generation} aria-labelledby="gen-title" data-testid="generation-view">
-      <Eyebrow>{failed ? 'SIGNAL LOST' : 'FINDING YOUR FREQUENCY'}</Eyebrow>
-      <h1 id="gen-title">{failed ? '這次沒有順利開台。' : <>讓感覺，<br />慢慢成形。</>}</h1>
+      <Eyebrow>{quotaExceeded ? 'USAGE LIMIT' : failed ? 'SIGNAL LOST' : 'FINDING YOUR FREQUENCY'}</Eyebrow>
+      <h1 id="gen-title">{quotaExceeded ? '已達使用上限。' : failed ? '這次沒有順利開台。' : <>讓感覺，<br />慢慢成形。</>}</h1>
       <blockquote className={styles.seedQuote}>{seedText}</blockquote>
       {failed && state.error ? (
         <InlineRecovery
@@ -58,7 +59,7 @@ export function GenerationView({ state, seedText, onCancel, onRetry, onEdit }: G
           testId="generation-error"
           actions={
             <>
-              <Button block onClick={onRetry}>{state.error.code === 'SESSION_EXPIRED' ? '重新建立並再試一次' : '再試一次'}</Button>
+              {!quotaExceeded && <Button block onClick={onRetry}>{state.error.code === 'SESSION_EXPIRED' ? '重新建立並再試一次' : '再試一次'}</Button>}
               <Button block variant="text" onClick={onEdit}>修改感覺</Button>
             </>
           }

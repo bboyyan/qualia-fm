@@ -1,3 +1,4 @@
+import { ERROR_MESSAGES, type JobInfo } from '../packages/contracts/src/index';
 import { expect, test } from '@playwright/test';
 import { chooseScenario, expectNoHorizontalOverflow, fillSeed, generate, openApp } from './support';
 
@@ -54,6 +55,30 @@ test.describe('T03 開台與生成', () => {
     await expect(page.getByRole('button', { name: '再試一次' })).toBeVisible();
     await page.getByRole('button', { name: '修改感覺' }).click();
     await expect(page.getByTestId('seed-input')).toHaveValue('TEST fake seed');
+  });
+
+  test('quota failed job shows the usage limit without INTERNAL, SIGNAL LOST or a MOCK show', async ({ page }) => {
+    let showRequests = 0;
+    const failed: JobInfo = {
+      jobId: 'job-quota', generationId: 'generation-quota', status: 'failed', phase: 'understanding', showId: null,
+      error: { code: 'QUOTA_EXCEEDED', message: ERROR_MESSAGES.QUOTA_EXCEEDED, retryable: false, retryAfterMs: null, requestId: 'req-quota' },
+    };
+    await page.route('**/api/plan', (route) => route.fulfill({ status: 202, json: { ...failed, status: 'queued', phase: 'queued', error: null } }));
+    await page.route('**/api/jobs/job-quota', (route) => route.fulfill({ json: failed }));
+    await page.route('**/api/shows/*', (route) => { showRequests += 1; return route.abort(); });
+    // 一般使用者模式，經過正式 generation controller 與 show guard。
+    await page.goto('/');
+    await generate(page, '上限後保留這段感覺');
+    await expect(page.getByTestId('generation-error')).toContainText('已達這段時間的使用上限，可以先聽既有節目。');
+    await expect(page.getByRole('heading', { name: '已達使用上限。', exact: true })).toBeVisible();
+    await expect(page.getByText('SIGNAL LOST', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('服務暫時出了點問題', { exact: false })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '再試一次', exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('ready-view')).toHaveCount(0);
+    expect(showRequests).toBe(0);
+    await expectNoHorizontalOverflow(page);
+    await page.getByRole('button', { name: '修改感覺', exact: true }).click();
+    await expect(page.getByTestId('seed-input')).toHaveValue('上限後保留這段感覺');
   });
 
   test('song mode sends title and artist through the same pipeline (AC03)', async ({ page }) => {

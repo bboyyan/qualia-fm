@@ -22,6 +22,7 @@ import type { OpenAITtsProvider } from '../providers/openai/tts.js';
 import type { FeedbackLedger } from '../ledger/types.js';
 import type { ServerConfig } from '../config/env.js';
 import { AppError, errorEnvelope, newRequestId } from '../http/errors.js';
+import { logger } from '../http/log.js';
 import type { CatalogResolver, EditorialPlanner, PhaseClock } from '../providers/types.js';
 import { WindowLimiter } from '../security/rateLimit.js';
 import type { JobStore} from '../stores/jobStore.js';
@@ -37,7 +38,7 @@ const HOUR_MS = 60 * 60 * 1000;
 const MAX_ACTIVE_JOBS_PER_SESSION = 3;
 const GLOBAL_PLAN_CAP_PER_HOUR = 1_000;
 const TARGET_SEGMENTS = 5;
-/** TTS 階段結束後留給組裝節目的餘裕；開始下一段前剩餘時間須 ≥ TTS 單次逾時＋此餘裕。 */
+/** TTS 階段結束後留給組裝節目的餘裕；TTS timeout 是單次上限，不是開始合成的門檻。 */
 const SPEECH_DEADLINE_MARGIN_MS = 250;
 const monotonicNow = (): number => performance.now();
 const SPOTIFY_RESOLVE_WARNING = 'Spotify 對應暫時失敗，部分曲目改列待確認。';
@@ -271,6 +272,8 @@ export class PlanService {
       try { await this.deps.runtime.claimPlan(signal); }
       catch (error) {
         if (signal.aborted) throw signal.reason;
+        // 配額是明確拒絕開台，不能降級成 MOCK 成功後讓 UI 誤判 INTERNAL。
+        if (error instanceof AppError && error.code === 'QUOTA_EXCEEDED') throw error;
         realReason = safeReason(error, '真實供應商無法使用。');
       }
     }
@@ -323,32 +326,47 @@ export class PlanService {
   /**
    * 逐段合成 seed 台詞；成功的段落退回 seed Bridge。第一次失敗後本輪不再嘗試（避免逾時連鎖或重複扣預扣），
    * 失敗與未嘗試的段落保留文字介紹＋提示音（mock_chime，UI 如實標示非 AI 語音）。
-   * 整輪 deadline：剩餘時間不足一次完整 TTS 逾時就不再開始下一段（不預扣、不發請求），節目照常完成；
+   * 整輪 deadline：扣除收尾餘裕後仍有時間就嘗試下一段，不要求留足完整 TTS timeout；
    * 已開始的段落另以剩餘時間為上限，排隊或請求超時只降級該段，不讓整輪 PLAN_TIMEOUT。
    */
   private async withAiSpeech(plan: ShowPlan, signal: AbortSignal, notices: string[], deadlineAt: number): Promise<ShowPlan['segments']> {
     const segments: ShowPlan['segments'] = [];
     const stageEnd = deadlineAt - SPEECH_DEADLINE_MARGIN_MS;
     let stopped = false;
+    // remainingMs 是扣除收尾餘裕後可供 TTS 使用的時間；deadlineMs 是設定的整輪時限。
+    const remainingMs = () => Math.max(0, Math.floor(stageEnd - monotonicNow()));
+    const degrade = (reason: string, message: string) => {
+      stopped = true;
+      notices.push(`${PROVIDER_NOTICES.tts}：${message}`);
+      logger.info('tts_degraded', {
+        showId: plan.showId,
+        remainingMs: remainingMs(),
+        deadlineMs: this.deps.config.limits.planDeadlineMs,
+        ttsTimeoutMs: this.deps.config.openai.ttsTimeoutMs,
+        reason,
+        synthesizedSegments: segments.length,
+        degradedSegments: plan.segments.length - segments.length,
+      });
+    };
     for (const segment of plan.segments) {
       if (stopped || !this.deps.tts) { segments.push(segment); continue; }
-      const remaining = stageEnd - monotonicNow();
-      if (remaining < this.deps.config.openai.ttsTimeoutMs) {
-        stopped = true;
-        notices.push(`${PROVIDER_NOTICES.tts}：節目準備時間不足，其餘 ${plan.segments.length - segments.length} 段改為文字介紹。`);
+      if (signal.aborted) throw signal.reason;
+      const remaining = remainingMs();
+      if (remaining === 0) {
+        degrade('TTS_DEADLINE_EXHAUSTED', `節目準備時間不足，其餘 ${plan.segments.length - segments.length} 段改為文字介紹。`);
         segments.push(segment);
         continue;
       }
-      const stageSignal = AbortSignal.any([signal, AbortSignal.timeout(Math.floor(remaining))]);
+      const stageSignal = AbortSignal.any([signal, AbortSignal.timeout(remaining)]);
       try {
         const speech = await this.deps.tts.synthesize(segment.candidate.djLine, stageSignal);
         const key = speech.url.split('/').at(-1)!;
         segments.push({ ...segment, candidate: { ...segment.candidate, transitionBridge: null }, speech: { ...speech, url: `/api/media/tts/${plan.showId}/${segment.segmentId}/${key}` } });
       } catch (error) {
         if (signal.aborted) throw signal.reason;
-        stopped = true;
-        const reason = stageSignal.aborted ? '節目準備時間不足，其餘段落改為文字介紹。' : safeReason(error, 'AI 語音合成失敗。');
-        notices.push(`${PROVIDER_NOTICES.tts}：${reason}`);
+        const reason = stageSignal.aborted ? 'TTS_DEADLINE_TIMEOUT' : error instanceof AppError && error.code === 'PLAN_TIMEOUT' ? 'TTS_PROVIDER_TIMEOUT' : 'TTS_PROVIDER_FAILED';
+        const message = stageSignal.aborted ? '節目準備時間不足，其餘段落改為文字介紹。' : safeReason(error, 'AI 語音合成失敗。');
+        degrade(reason, message);
         segments.push(segment);
       }
     }
