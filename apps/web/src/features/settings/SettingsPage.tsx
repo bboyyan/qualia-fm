@@ -31,7 +31,7 @@ function DjSettings() {
       <div className={styles.rowStack}>
         <div>
           <h3>串詞長度</h3>
-          <p>{settings.djLength === 'short' ? '短版：少說一點，留更多空間。' : '標準：多一點關聯說明，不超過 80 字。'}套用到下一次開台。</p>
+          <p>{settings.djLength === 'short' ? '短版：一句接住感覺，留更多空間。' : '標準：曲名、藝人、為什麼接這首、聽的時候可以注意什麼（約 90–150 字）。'}套用到下一次開台。</p>
         </div>
         <SegmentedControl
           size="sm"

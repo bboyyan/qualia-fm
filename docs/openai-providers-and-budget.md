@@ -10,7 +10,7 @@ LLM 與 TTS 建構子都必須收到 fetchImpl；只有正式 app 組裝會傳�
 
 `OpenAIEditorialPlanner` 使用 Responses 的 `text.format` JSON Schema／strict Structured Outputs，永遠提供 max_output_tokens 且 store=false。system prompt 與 schema 複製為 `resources.ts`，測試逐字比對 prompt 與 handoff 原檔（`handoff/prompts/sonic-qualia-system.md`），修改時兩處必須同步。使用者資料只放 user 角色的 JSON，system 角色固定；來源仍是既有 EditorialInput allowlist，不傳 Spotify 回應、解析結果或憑證。回應 JSON 仍是不受信任資料，PlanService 的 PlanDraftSchema、ID 驗證及最多 MAX_LLM_CALLS_PER_PLAN 次呼叫保留；無效 JSON 視為無效草稿，消耗同一個修復額度。
 
-`OpenAITtsProvider` 預設送出 B2 繁中詳細聲線指示（見下節「TTS 聲線：B2 組合」），可用 `OPENAI_TTS_INSTRUCTIONS` 覆寫。模型必須由管理者確認支援 instructions；不支援時保留文字、提示語音無法使用。送出前以 Intl.Segmenter 檢查 1–80 grapheme clusters。每個節目最多合成五段 seed 台詞；成功的 AI 段落退回 seed Bridge（移除可選 transitionBridge），避免相鄰順序變化時播放錯誤台詞，也避免另花五段 transition 費用。mock 的 transition 行為保留。
+`OpenAITtsProvider` 預設送出 B2 繁中詳細聲線指示（見下節「TTS 聲線：B2 組合」），可用 `OPENAI_TTS_INSTRUCTIONS` 覆寫。模型必須由管理者確認支援 instructions；不支援時保留文字、提示語音無法使用。送出前以 Intl.Segmenter 檢查 1–180 grapheme clusters（BRA-117 加厚引言；短版仍由提示詞限 80）。每個節目最多合成五段 seed 台詞；成功的 AI 段落退回 seed Bridge（移除可選 transitionBridge），避免相鄰順序變化時播放錯誤台詞，也避免另花五段 transition 費用。mock 的 transition 行為保留。
 
 API 的 `speech.kind=ai_audio` 必須含 `aiVoice: true`，DJ 區塊顯示「AI 合成語音」。語音檔由既有單一 audio adapter 讀取同源 `/api/media/tts/:showId/:segmentId/:hash`，route 驗 session、節目與 segment 所有權，再比對 locator；其他 session 取不到。`POST /api/tts` 可重建已擁有 AI segment 的 seed 台詞，使用伺服器 voice，忽略用戶 voiceId；不能提交任意台詞或 transition。MOCK 仍拒絕此 API。
 
@@ -35,7 +35,7 @@ iPhone 實測原本的聲線「不像台灣腔」。用同一段文稿比較 voi
 - **`OPENAI_TTS_INSTRUCTIONS`（選填）**：不改程式就能調整聲線。空值或只有空白都當成未設，改用上面的預設。上限 1500 個 Unicode code points，超過會讓 env 驗證失敗、服務拒絕啟動，錯誤只列欄位名稱。快取 key 用的是實際送出的 instructions，所以改指示後同一句台詞會重新合成（並重新計費），不會播到舊聲線的檔案。
 - **口語台灣用語文稿**：選歌 system prompt 的「語言與 DJ」一節加了一條規則：使用台灣用語，不寫「視頻」「質量」「信息」「質感」等大陸用語；DJ 台詞用口語短句；數字寫中文念法，但曲名原文中的數字照原樣保留；英文歌名前可以用「英文名字是」之類的說法帶出。既有硬規則（30–55 grapheme 目標、上限 80、不得引用歌詞、不模仿特定真人、djLine 可單獨依 Seed 成立）全部保留。AI 語音標示（`aiVoice: true`、「AI 合成語音」）由程式與 UI 保證，與 prompt 無關。
 
-**時長與逾時**：instructions 要求「偏慢」，試聽時 60–70 字約 12–15 秒（舊聲線約 6–8 秒）；30–55 字的台詞預計約 7–11 秒，達到 80 grapheme 上限時約 20 秒以上。speech 請求是非串流的，要等整段音訊產生完畢，因此 `TTS_TIMEOUT_MS` 預設從 15000 放寬到 30000（範圍仍是 1–60000）。整輪的 `PLAN_DEADLINE_MS`（預設 60000）包含 LLM 加上最多五段依序合成的時間；剩餘時間不足一次完整 TTS 逾時時，其餘段落改為文字介紹（見上方降級規則），節目仍完成。以預設值估算（LLM 約 20 秒＋階段約 3 秒），通常只來得及合成 1 段 AI 語音；把 `TTS_TIMEOUT_MS` 調到 20000 約可合成 2 段。前端輪詢上限 65 秒，`PLAN_DEADLINE_MS` 不宜再調高。
+**時長與逾時**：instructions 要求「偏慢」，試聽時 60–70 字約 12–15 秒（舊聲線約 6–8 秒）；30–55 字的台詞預計約 7–11 秒，達到 80 grapheme 上限時約 20 秒以上；BRA-117 起預設的標準（加厚）版 90–150 字約 20–35 秒，上限 180。speech 請求是非串流的，要等整段音訊產生完畢，因此 `TTS_TIMEOUT_MS` 預設從 15000 放寬到 30000（範圍仍是 1–60000）。整輪的 `PLAN_DEADLINE_MS`（預設 60000）包含 LLM 加上最多五段依序合成的時間；剩餘時間不足一次完整 TTS 逾時時，其餘段落改為文字介紹（見上方降級規則），節目仍完成。以預設值估算（LLM 約 20 秒＋階段約 3 秒），通常只來得及合成 1 段 AI 語音；把 `TTS_TIMEOUT_MS` 調到 20000 約可合成 2 段。前端輪詢上限 65 秒，`PLAN_DEADLINE_MS` 不宜再調高。
 
 **費用**：預算估算沒有改。TTS 仍以台詞 Unicode code points × `OPENAI_PRICE_TTS_PER_1M_CHARS`（簽收的保守全費用上界）預扣與結算，instructions 長度不算進預扣。試聽時以每百萬字元 US$60 的保守算法，每段約 US$0.0038；依官方公開價估算的實際費用約 US$0.0031–0.0040，大致都在保守值附近。若要把 instructions 調得比預設長很多，或台詞明顯變短，需重新確認字元單價仍能涵蓋 instructions 的輸入 token 與音訊輸出費用。
 

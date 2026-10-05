@@ -206,6 +206,7 @@ it('mock natural completion and next-skip wait for feedback, including the final
   engine.next();
   expect(engine.getState().currentIndex).toBe(0);
   engine.completeFeedback();
+  adapter.confirm();
   engine.next();
   expect([engine.getState().phase, engine.getState().currentIndex]).toEqual(['feedback', 1]);
   engine.completeFeedback();
@@ -217,6 +218,9 @@ it('feedback cannot be bypassed by replaying an intro or changing playback mode'
   const engine = new PlaybackEngine(adapter, { djEnabled: true, canSeek: true, feedbackEnabled: true });
   engine.loadShow(makeShow());
   engine.play();
+  adapter.confirm();
+  adapter.end(engine.getState().attemptId, 'speech');
+  adapter.confirm();
   engine.next();
   expect(engine.replayIntro().rejected).toBe('not_allowed');
   expect(engine.setPlaybackMode('manual').rejected).toBe('not_allowed');
@@ -249,6 +253,7 @@ it('回饋期間拒絕移除接下來，結束回饋後保持正確下一首且�
   const engine = new PlaybackEngine(adapter, { djEnabled: false, canSeek: true, feedbackEnabled: true });
   engine.loadShow(makeShow());
   engine.play();
+  adapter.confirm();
   engine.next();
   const before = engine.getState();
   expect(engine.removeUpcoming('showA_2').rejected).toBe('not_allowed');

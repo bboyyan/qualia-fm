@@ -13,6 +13,7 @@ import {
   PAUSE_RECONNECT_MS,
   deviceUnavailable,
   gestureNeeded,
+  reachedEnd,
   notSupported,
   remoteReason,
   type DeviceReason,
@@ -405,6 +406,8 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
   }
 
   private onPlayback(current: Attempt, playback: SpotifyPlayback): void {
+    const before = this.last;
+    const nearEnd = before !== null && reachedEnd(before.progressMs + (before.isPlaying ? this.deps.now() - before.at : 0), before.durationMs);
     this.last = { ...playback, at: this.deps.now() };
     if (!current.confirmed) {
       if (playback.isPlaying && playback.uri === current.uri && playback.deviceId === this.deps.deviceId) {
@@ -425,7 +428,8 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
       this.emit({ type: 'device_lost' });
       return;
     }
-    if (playback.uri !== current.uri || (!playback.isPlaying && playback.progressMs === 0)) {
+    // 停在 0 只有播到尾端附近才算播完；剛開始就停在 0 當作暫停（BRA-117）。
+    if (playback.uri !== current.uri || (!playback.isPlaying && playback.progressMs === 0 && nearEnd)) {
       this.current = null;
       this.emit({ type: 'ended', attemptId: current.attemptId, owner: 'track' });
       return;

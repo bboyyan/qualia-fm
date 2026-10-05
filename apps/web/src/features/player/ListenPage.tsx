@@ -10,19 +10,19 @@ import { useEngineState } from '../../audio/useEngine';
 import { Button } from '../../ui/Button';
 import { VibeList } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
-import { SoundscapeArt } from '../../ui/SoundscapeArt';
 import { FeedbackStep } from './FeedbackStep';
 import { ManualControls } from './ManualControls';
 import { LedgerWarnings } from './LedgerWarnings';
 import { PlaybackBanner } from './PlaybackBanner';
 import { ProviderNotices, SpeechFallbackNotice } from './ProviderNotices';
-import { DjStrip, SeekBar, Transport, isSpeechPhase } from './PlayerControls';
+import { DjStrip, SeekBar, Transport } from './PlayerControls';
+import { isSpeechPhase } from './phase';
 import styles from './player.module.css';
 import { DeviceStatusPill } from '../spotify/DeviceStatusView';
 import { useDeviceStatus } from '../spotify/deviceStatus';
 import { ModeStrip } from '../spotify/ModeStrip';
 import { DevicePanel } from '../spotify/SpotifyPanels';
-import { SpotifyTrackCard } from '../spotify/SpotifyTrackCard';
+import { ListenArtwork } from './ListenArtwork';
 import { modeStrip } from '../spotify/spotifyMode';
 
 /** Empty state with a next step — never a disabled dead end (docs/02 導覽規則). */
@@ -152,7 +152,6 @@ export function ListenPage() {
   const manualTrack = state.phase === 'manual_ready' || state.phase === 'manual_playing';
   const feedback = state.phase === 'feedback';
   const engine = getEngine();
-  const palette = track.audioLocator.kind === 'mock_tone' ? track.audioLocator.palette : state.currentIndex;
   const eMode = state.playbackMode === 'spotify';
   // Spotify 對應到的曲目：顯示封面＋正式 metadata＋Spotify 標示與外連（Policy II.4／II.5）。
   const spotifyTrack = track.provider === 'spotify' && track.availability === 'resolved';
@@ -166,10 +165,10 @@ export function ListenPage() {
       )}
       {eMode && <SpotifyStatusBar state={state} />}
       <ListenHeader state={state} />
-      {!feedback && (spotifyTrack
-        ? <SpotifyTrackCard track={track} confirmed={eMode && state.phase === 'track_playing'} />
-        : <SoundscapeArt palette={palette} spinning={state.phase === 'track_playing'} kicker="THE TEXTURE OF TONIGHT" />)}
+      {/* 回饋時也保留曲目視覺與曲名：回饋卡要讓人知道是在回饋哪一首（BRA-117）。 */}
+      <ListenArtwork state={state} segment={item.segment} />
       <div className={styles.songHeading}>
+        {feedback && <p className={styles.kicker} data-testid="feedback-for">剛剛聽的這一首</p>}
         <h1 data-testid="track-title">{candidate.title}</h1>
         <p>
           {candidate.artist} {track.provider === 'mock' && <span className={styles.mockTag}>MOCK 虛構曲目</span>}

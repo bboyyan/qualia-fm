@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalOverflow, expectNotCoveredByBottomBar, fillSeed, openApp } from './support';
+import { chooseFeeling, expectNoHorizontalOverflow, expectNotCoveredByBottomBar, fillSeed, openApp } from './support';
 
 test.describe('T02 shell and design foundation', () => {
   test('opens in mock mode with three labelled tabs and no horizontal overflow', async ({ page }) => {
@@ -60,6 +60,7 @@ test.describe('T02 shell and design foundation', () => {
 
   test('CTA is disabled when empty; >500 graphemes shows an error and keeps the text (AC02)', async ({ page }) => {
     await openApp(page);
+    await chooseFeeling(page);
     await expect(page.getByTestId('generate')).toBeDisabled();
     const long = '夜'.repeat(501);
     await fillSeed(page, long);

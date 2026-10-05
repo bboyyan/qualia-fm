@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  CandidateSchema,
   CapabilitiesSchema,
+  DJ_LINE_MAX_GRAPHEMES,
+  DJ_SHORT_MAX_GRAPHEMES,
   ErrorEnvelopeSchema,
   PlanRequestSchema,
   SeedSchema,
@@ -36,6 +39,22 @@ describe('SeedSchema', () => {
   it('measures 500 emoji by graphemes, not UTF-16 length', () => {
     const text = '🌙'.repeat(500);
     expect(SeedSchema.safeParse({ kind: 'sound', text, artist: null }).success).toBe(true);
+  });
+});
+
+describe('DJ 台詞長度（BRA-117 加厚引言）', () => {
+  const candidate = (djLine: string) => ({
+    candidateId: 'c1', title: 'TEST', artist: 'TEST', versionHint: null, seedBridge: 'TEST', transitionBridge: null,
+    vibe: ['一', '二', '三'], djLine, evidenceLevel: 'unknown', evidenceRefs: [], uncertainty: null,
+  });
+
+  it('標準版上限 180、短版 80', () => {
+    expect([DJ_LINE_MAX_GRAPHEMES, DJ_SHORT_MAX_GRAPHEMES]).toEqual([180, 80]);
+  });
+
+  it('接受剛好 180 grapheme 的引言，拒絕 181', () => {
+    expect(CandidateSchema.safeParse(candidate('夜'.repeat(180))).success).toBe(true);
+    expect(CandidateSchema.safeParse(candidate('夜'.repeat(181))).success).toBe(false);
   });
 });
 

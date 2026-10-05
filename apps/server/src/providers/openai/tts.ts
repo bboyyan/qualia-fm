@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { countGraphemes } from '@qualia/contracts';
+import { DJ_LINE_MAX_GRAPHEMES, countGraphemes } from '@qualia/contracts';
 import type { OpenAIConfig, RealProviderRuntime } from '../../budget/runtime.js';
 import { AppError } from '../../http/errors.js';
 import { openAIRequest } from './http.js';
@@ -14,7 +14,7 @@ export class OpenAITtsProvider {
   constructor(private readonly config: OpenAIConfig, private readonly runtime: RealProviderRuntime, private readonly fetchImpl: typeof fetch, private readonly now = Date.now) {}
   async synthesize(text: string, signal: AbortSignal): Promise<AiSpeech> {
     const graphemes = countGraphemes(text);
-    if (graphemes < 1 || graphemes > 80) throw new AppError('INVALID_INPUT', { message: 'DJ 台詞須為 1–80 grapheme clusters。' });
+    if (graphemes < 1 || graphemes > DJ_LINE_MAX_GRAPHEMES) throw new AppError('INVALID_INPUT', { message: `DJ 台詞須為 1–${DJ_LINE_MAX_GRAPHEMES} grapheme clusters。` });
     if (this.config.tts !== 'openai' || !this.config.ttsModel || !this.config.voice || !this.config.apiKey || !this.config.ttsPrice) throw new AppError('FEATURE_RESTRICTED');
     const instructions = this.config.ttsInstructions ?? DEFAULT_INSTRUCTIONS;
     return this.runtime.serial(signal, async () => {

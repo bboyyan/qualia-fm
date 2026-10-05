@@ -1,20 +1,25 @@
 /**
  * S03 準備好／尚未播放. Ready is not playing: nothing moves until the user taps. Shows the real
  * playable count; 0 tracks keeps the analysis and the unconfirmed list with "修改感覺".
+ * BRA-117：曲目用與種子清單同一個勾選清單，預設全選；主按鈕一鍵「全選・開始收聽」，只播勾選的。
  */
+import { useState } from 'react';
 import { useAppStore } from '../../app/appStore';
 import type { ShowPlan } from '@qualia/contracts';
 import { LedgerWarnings } from '../player/LedgerWarnings';
 import { ProviderNotices } from '../player/ProviderNotices';
 import { Button } from '../../ui/Button';
 import { Eyebrow, InlineRecovery } from '../../ui/Feedback';
+import { SelectableList } from './SelectableList';
+import { startLabel, toggleAll, toggleId } from './selection';
 import { SonicDnaCard } from './SonicDna';
 import styles from './seed.module.css';
 
 interface ReadyViewProps {
   show: ShowPlan;
   hasActiveShow: boolean;
-  onStart: () => void;
+  /** 使用者勾選要聽的曲目（依節目順序）。 */
+  onStart: (segmentIds: readonly string[]) => void;
   onBackToListen: () => void;
   onEdit: () => void;
   onRegenerate: () => void;
@@ -67,6 +72,9 @@ function ZeroNotice({ show, onEdit }: { show: ShowPlan; onEdit: () => void }) {
 export function ReadyView({ show, hasActiveShow, onStart, onBackToListen, onEdit, onRegenerate }: ReadyViewProps) {
   const playbackMode = useAppStore((s) => s.settings.playbackMode);
   const count = show.segments.length;
+  const ids = show.segments.map((segment) => segment.segmentId);
+  const [selected, setSelected] = useState<readonly string[]>(ids);
+  const chosen = ids.filter((id) => selected.includes(id));
   return (
     <section className={styles.ready} aria-labelledby="ready-title" data-testid="ready-view">
       <LedgerWarnings warnings={show.warnings} />
@@ -79,13 +87,27 @@ export function ReadyView({ show, hasActiveShow, onStart, onBackToListen, onEdit
       {count === 0 && <ZeroNotice show={show} onEdit={onEdit} />}
       {count > 0 && (
         <>
+          <SelectableList
+            label={`今晚的 ${count} 首`}
+            items={show.segments.map((segment) => ({
+              id: segment.segmentId,
+              title: segment.candidate.title,
+              meta: segment.candidate.artist,
+              note: segment.candidate.seedBridge,
+            }))}
+            selected={selected}
+            onToggle={(id) => setSelected((current) => toggleId(current, id))}
+            onToggleAll={() => setSelected((current) => toggleAll(ids, current))}
+            testId="ready-tracks"
+          />
           <div className={styles.stats}>
-            <span data-testid="ready-count">已準備 {count} 首 · MOCK 虛構曲目</span>
+            <span data-testid="ready-count">已準備 {count} 首 · {show.segments.some((s) => s.track.provider === 'spotify') ? 'AI 提名' : 'MOCK 虛構曲目'}</span>
             <span>尚未開始播放</span>
           </div>
-          <Button block icon="play" onClick={onStart} data-testid="start-listening">
-            {hasActiveShow ? '現在切換至新節目' : '開始收聽'}
+          <Button block icon="play" disabled={chosen.length === 0} onClick={() => onStart(chosen)} data-testid="start-listening">
+            {startLabel(hasActiveShow ? '現在切換至新節目' : '開始收聽', chosen.length, count)}
           </Button>
+          {chosen.length === 0 && <p className={styles.error} role="status">至少勾選一首才能開始。</p>}
           {hasActiveShow && (
             <Button block variant="outline" className={styles.secondary} onClick={onBackToListen}>
               先回到正在收聽

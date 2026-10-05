@@ -23,12 +23,25 @@ describe('POST /api/plan job lifecycle', () => {
     expect(show.segments.every((s) => s.track.provider === 'mock' && s.track.audioLocator.kind === 'mock_tone')).toBe(true);
   });
 
-  it('keeps every DJ line within 80 grapheme clusters for both lengths', async () => {
+  it('short DJ lines stay within 80 grapheme clusters; standard ones within 180 (BRA-117)', async () => {
     const client = await bootstrap(testApp().app);
-    const standard = planRequest({ dj: { enabled: true, length: 'standard' } });
-    const job = await waitForJob(client, (await postPlan(client, standard)).body.jobId);
-    const show = await showOf(client, job.showId);
-    expect(show.segments.every((s) => countGraphemes(s.candidate.djLine) <= 80)).toBe(true);
+    const lengths = async (length: 'short' | 'standard') => {
+      const job = await waitForJob(client, (await postPlan(client, planRequest({ dj: { enabled: true, length } }))).body.jobId);
+      return (await showOf(client, job.showId)).segments;
+    };
+    expect((await lengths('short')).every((s) => countGraphemes(s.candidate.djLine) <= 80)).toBe(true);
+    expect((await lengths('standard')).every((s) => countGraphemes(s.candidate.djLine) <= 180)).toBe(true);
+  });
+
+  it('standard (thick) mock intro names the title and artist, says why, and what to listen for (BRA-117)', async () => {
+    const client = await bootstrap(testApp().app);
+    const job = await waitForJob(client, (await postPlan(client, planRequest({ dj: { enabled: true, length: 'standard' } }))).body.jobId);
+    const [first] = (await showOf(client, job.showId)).segments;
+    expect(first?.candidate.djLine).toContain(first?.candidate.title);
+    expect(first?.candidate.djLine).toContain(first?.candidate.artist);
+    expect(first?.candidate.djLine).toContain('為什麼');
+    expect(first?.candidate.djLine).toContain('聽的時候');
+    expect(countGraphemes(first?.candidate.djLine ?? '')).toBeGreaterThan(80);
   });
 
   it('uses no speech locator when DJ is disabled', async () => {

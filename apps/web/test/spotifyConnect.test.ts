@@ -95,6 +95,27 @@ describe('SpotifyConnectAdapter（路徑 C：遙控 Spotify app）', () => {
     expect(ctx.adapter.getState()).toBeNull();
   });
 
+  it('剛開始播就回報「停在 0、沒在播」→ 當作暫停，不當播完（BRA-117）', async () => {
+    const ctx = setup();
+    await startTrack(ctx, 2);
+    ctx.remote.playbackState = playing(TEST_URI, 1000);
+    await ctx.clock.advance(2000);
+    ctx.remote.playbackState = playing(TEST_URI, 0, false);
+    await ctx.clock.advance(2000);
+    expect(ctx.events.filter((e) => e.type === 'ended')).toEqual([]);
+    expect(ctx.events.at(-1)).toMatchObject({ type: 'paused', attemptId: 2 });
+  });
+
+  it('播到接近尾端後停在 0 → 播完', async () => {
+    const ctx = setup();
+    await startTrack(ctx, 2);
+    ctx.remote.playbackState = playing(TEST_URI, 197_000);
+    await ctx.clock.advance(2000);
+    ctx.remote.playbackState = playing(TEST_URI, 0, false);
+    await ctx.clock.advance(2000);
+    expect(ctx.events.filter((e) => e.type === 'ended')).toEqual([{ type: 'ended', attemptId: 2, owner: 'track' }]);
+  });
+
   it('暫停時停止輪詢；暫停超過 10 分鐘 → 需重連，不直接送 play', async () => {
     const ctx = setup();
     await startTrack(ctx, 2);

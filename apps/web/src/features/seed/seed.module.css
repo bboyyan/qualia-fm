@@ -94,3 +94,41 @@
 .facetChips li { font-size: 13px; line-height: 1.5; padding: 5px 10px; border-radius: 999px; background: var(--q-bg); border: 1px solid var(--q-border); }
 .facetChips li span { color: var(--q-muted); margin-right: 6px; font-size: 12px; }
 .facetChips li.facetUnknown { color: var(--q-muted); font-style: italic; }
+
+/* ---------- 勾選清單（BRA-117：種子清單與 Ready 共用） ---------- */
+.pickList { margin: 0 0 4px; }
+.pickHead { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.pickHead h2 { font-size: 14px; font-weight: 650; letter-spacing: 0.02em; }
+.pickCount { margin-left: auto; font-size: 12px; color: var(--q-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pickAll {
+  min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--q-border-strong);
+  background: var(--q-surface); color: var(--q-ink); font-size: 13px; font-weight: 650; white-space: nowrap;
+  transition: background var(--q-press-motion) ease, transform var(--q-press-motion) ease;
+}
+.pickAll:hover { background: var(--q-subtle); }
+.pickAll:active { transform: scale(0.97); }
+.pickAll[aria-pressed='true'] { background: var(--q-primary-wash); border-color: var(--q-primary); color: var(--q-primary); }
+.pickList ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.pickRow {
+  position: relative; display: flex; align-items: flex-start; gap: 8px; padding: 12px 12px 12px 14px;
+  border: 1px solid var(--q-border); border-radius: 14px; background: var(--q-surface);
+  transition: border-color var(--q-press-motion) ease, background var(--q-press-motion) ease;
+}
+.pickRowOn { border-color: var(--q-primary); background: var(--q-primary-wash); }
+.pickRow label { flex: 1; min-width: 0; display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
+.pickRow input[type='checkbox'] { flex-shrink: 0; width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--q-primary); }
+.pickRow:focus-within { outline: 2px solid var(--q-focus); outline-offset: 2px; }
+.pickText { display: grid; gap: 2px; min-width: 0; }
+.pickText strong { font-family: var(--q-font-display); font-size: 17px; line-height: 1.35; font-weight: 600; overflow-wrap: anywhere; }
+.pickTag { justify-self: start; margin-bottom: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 650; letter-spacing: 0.04em; color: var(--q-accent); background: var(--q-accent-wash); border: 1px solid var(--q-accent-line); }
+.pickMeta { font-size: 13px; color: var(--q-ink); }
+.pickNote { font-size: 12px; line-height: 1.55; color: var(--q-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pickRemove { flex-shrink: 0; min-height: 36px; padding: 0 10px; border: 0; border-radius: 10px; background: none; color: var(--q-muted); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+.pickRemove:hover { color: var(--q-danger); }
+.seedHint { margin: 6px 2px 14px; font-size: 12px; line-height: 1.6; color: var(--q-muted); }
+.card > button { margin-top: 10px; }
+.ready > [role='group'] { margin-top: 16px; }
+@media (prefers-reduced-motion: reduce) {
+  .pickAll, .pickRow { transition: none; }
+  .pickAll:active { transform: none; }
+}

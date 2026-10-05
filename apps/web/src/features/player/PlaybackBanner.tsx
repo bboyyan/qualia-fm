@@ -11,6 +11,22 @@ import { SpotifyRecovery } from '../spotify/SpotifyPanels';
 export function PlaybackBanner({ state }: { state: EngineState }) {
   const engine = getEngine();
   const spotify = state.playbackMode === 'spotify';
+  if (state.phase === 'awaiting_gesture' && spotify && state.error?.code === 'AUDIO_SOURCE_FAILED') {
+    return (
+      <InlineRecovery
+        tone="warning"
+        title="Spotify 還沒開始播這首"
+        testId="autoplay-blocked"
+        actions={
+          <Button block onClick={() => engine.play()} data-testid="tap-to-resume">
+            點一下繼續
+          </Button>
+        }
+      >
+        介紹已經念完。點一下再請 Spotify 播一次；不會重念介紹，也不會自己跳到下一首。
+      </InlineRecovery>
+    );
+  }
   if (state.phase === 'awaiting_gesture' && spotify) {
     return (
       <InlineRecovery
@@ -68,7 +84,11 @@ export function PlaybackBanner({ state }: { state: EngineState }) {
         </Button>
       }
     >
-      {deviceLost ? '音樂連線中斷，不是你按了暫停。節目單與最後確認的進度都還在。' : '已自動略過無法播放的曲目，仍失敗所以先停下來，不會無限重試。'}
+      {deviceLost
+        ? '音樂連線中斷，不是你按了暫停。節目單與最後確認的進度都還在。'
+        : spotify
+          ? 'Spotify 試了兩次仍沒開始播這首，所以先停在這裡，不會無限重試。可以再試一次，或按下一首。'
+          : '已自動略過無法播放的曲目，仍失敗所以先停下來，不會無限重試。'}
     </InlineRecovery>
   );
 }

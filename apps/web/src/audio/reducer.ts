@@ -32,6 +32,7 @@ export const initialEngineState = (djEnabled = true, canSeek = true): EngineStat
   removed: null,
   previousPlayedId: null,
   speechFallbackId: null,
+  trackHeard: false,
 });
 
 const ACTIVE: ReadonlySet<Phase> = new Set(['loading_speech', 'speaking', 'loading_track', 'track_playing']);
@@ -71,6 +72,7 @@ function startSegment(state: EngineState, index: number): Reduction {
     trackResumeMs: 0,
     error: null,
     speechFallbackId: null,
+    trackHeard: false,
     statuses: withStatus({ ...state, currentIndex: index }, index, 'playing'),
   };
   if (owner === 'track' && state.playbackMode === 'manual') return startTrack(next, 0);
@@ -155,7 +157,7 @@ function pause(state: EngineState, positionMs: number | undefined): Reduction {
 function next(state: EngineState): Reduction {
   if (state.queue.length === 0) return ok(state);
   if (state.phase === 'feedback') return ok(state);
-  if (state.feedbackEnabled && state.phase !== 'ready' && state.phase !== 'completed') return awaitFeedback(leaveCurrent(state), state.currentIndex + 1);
+  if (asksFeedback(state)) return awaitFeedback(leaveCurrent(state), state.currentIndex + 1);
   const left = leaveCurrent(state);
   if (state.currentIndex >= state.queue.length - 1) return complete(left);
   return startSegment({ ...left, previousPlayedId: null, consecutiveFailures: 0 }, state.currentIndex + 1);
@@ -166,7 +168,7 @@ function jump(state: EngineState, segmentId: string): Reduction {
   if (index < 0) return reject(state, 'not_allowed');
   if (index === state.currentIndex && state.phase !== 'ready' && state.phase !== 'completed') return ok(state);
   if (state.phase === 'feedback') return reject(state, 'not_allowed');
-  if (state.feedbackEnabled && state.phase !== 'ready' && state.phase !== 'completed') return awaitFeedback(leaveCurrent(state), index);
+  if (asksFeedback(state)) return awaitFeedback(leaveCurrent(state), index);
   return startSegment({ ...leaveCurrent(state), previousPlayedId: null, consecutiveFailures: 0 }, index);
 }
 
@@ -257,7 +259,8 @@ function reconcileResult(state: EngineState, provider: Extract<Action, { type: '
 
 function ownerStarted(state: EngineState, owner: OwnerKind): Reduction {
   if (state.phase !== LOADING[owner]) return ok(state);
-  return ok({ ...state, phase: PLAYING[owner], activeOwner: owner, consecutiveFailures: owner === 'track' ? 0 : state.consecutiveFailures });
+  const track = owner === 'track';
+  return ok({ ...state, phase: PLAYING[owner], activeOwner: owner, consecutiveFailures: track ? 0 : state.consecutiveFailures, trackHeard: state.trackHeard || track });
 }
 
 function ownerPaused(state: EngineState, owner: OwnerKind, positionMs: number): Reduction {
@@ -299,6 +302,7 @@ function ownerFailed(state: EngineState, owner: OwnerKind, code: 'AUTOPLAY_BLOCK
       effects: [...fallback.effects, announce(aiFailed ? 'AI 語音暫時無法播放，已顯示文字介紹並直接進歌' : '介紹暫時無法播放，直接進歌')],
     };
   }
+  if (state.playbackMode === 'spotify') return spotifyTrackFailed(state);
   const failures = state.consecutiveFailures + 1;
   const failed: EngineState = { ...state, consecutiveFailures: failures, statuses: withStatus(state, state.currentIndex, 'failed'), previousPlayedId: null };
   if (failures <= MAX_AUTO_SKIPS && state.currentIndex < state.queue.length - 1) return startSegment(failed, state.currentIndex + 1);
@@ -322,6 +326,30 @@ function adapterEvent(state: EngineState, action: Extract<Action, { type: 'OWNER
   }
 }
 
+/**
+ * E 模式：介紹後自動起播失敗不跳歌（使用者還沒聽到這首）。第一次停在「點一下繼續」，
+ * 點了只重試這首曲目；仍失敗就停在可恢復錯誤，不無限重試。
+ */
+function spotifyTrackFailed(state: EngineState): Reduction {
+  const failures = state.consecutiveFailures + 1;
+  const attemptId = state.attemptId + 1;
+  if (failures === 1) {
+    return ok(
+      { ...state, consecutiveFailures: failures, phase: 'awaiting_gesture', activeOwner: 'none', pendingOwner: 'track', attemptId, error: { code: 'AUDIO_SOURCE_FAILED', message: ERROR_MESSAGES.AUDIO_SOURCE_FAILED } },
+      [{ type: 'stop' }, announce('Spotify 沒有開始播放，點一下再試')],
+    );
+  }
+  return ok(
+    { ...state, consecutiveFailures: failures, phase: 'recoverable_error', activeOwner: 'none', pendingOwner: 'track', attemptId, error: { code: 'AUDIO_SOURCE_FAILED', message: ERROR_MESSAGES.AUDIO_SOURCE_FAILED } },
+    [{ type: 'stop' }, announce('曲目暫時無法播放')],
+  );
+}
+
+/** 回饋只問「真的聽過」的這首：介紹中、曲目還沒確認在播、B 手動還沒開始播，都直接往下（BRA-117）。 */
+function asksFeedback(state: EngineState): boolean {
+  return state.feedbackEnabled && state.trackHeard && state.phase !== 'ready' && state.phase !== 'completed';
+}
+
 function awaitFeedback(state: EngineState, nextIndex: number): Reduction {
   return ok({ ...state, phase: 'feedback', feedbackNextIndex: nextIndex, activeOwner: 'none', pendingOwner: null, resumePhase: null, attemptId: state.attemptId + 1 }, [{ type: 'stop' }, announce('這首聽完了，留下回饋或略過')]);
 }
@@ -333,7 +361,7 @@ export function reduce(state: EngineState, action: Action): Reduction {
       if (state.playbackMode === action.mode) return ok(state);
       return ok({ ...state, playbackMode: action.mode, phase: state.queue.length ? 'ready' : 'empty', activeOwner: 'none', resumePhase: null, pendingOwner: null, feedbackNextIndex: null, attemptId: state.attemptId + 1 }, [{ type: 'stop' }]);
     case 'MANUAL_STARTED':
-      return state.phase === 'manual_ready' ? ok({ ...state, phase: 'manual_playing' }) : reject(state, 'not_allowed');
+      return state.phase === 'manual_ready' ? ok({ ...state, phase: 'manual_playing', trackHeard: true }) : reject(state, 'not_allowed');
     case 'MANUAL_FINISHED':
       return state.phase === 'manual_playing' ? awaitFeedback({ ...state, statuses: withStatus(state, state.currentIndex, 'played'), previousPlayedId: state.queue[state.currentIndex]?.segment.segmentId ?? null }, state.currentIndex + 1) : reject(state, 'not_allowed');
     case 'COMPLETE_FEEDBACK': {

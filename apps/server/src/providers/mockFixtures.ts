@@ -14,7 +14,8 @@ function testEntry(title: string, index: number, transitions: boolean): MockEntr
     seedBridge: 'TEST 假推薦：僅示範起點連結，不推測你的偏好或曲目質地。',
     vibe: ['TEST 示意一', 'TEST 示意二', 'TEST 示意三'],
     djShort: 'TEST 下一首是虛構示範曲目，不代表真實音樂推薦。',
-    djStandard: 'TEST 這是下一首虛構示範曲目；尚無音樂分析，不推測你的偏好。',
+    // 加厚版（BRA-117）：曲名、藝人、為什麼接這首、聽的時候注意什麼；全是 TEST 示意，不是真實推薦。
+    djStandard: `TEST 接下來這首是〈${title}〉，藝人是${MOCK_ARTIST}。為什麼接這首：這只是示範用的虛構理由，沒有分析任何音樂，也不推測你的偏好。聽的時候可以留意：這是合成測試音，不是真的歌。`,
     transition: transitions && index >= 1 && index <= 3 ? {
       text: 'TEST 相鄰曲目接續示意，不推測音色或偏好。',
       djLine: 'TEST 接續下一首虛構示範曲目。',

@@ -2,7 +2,7 @@
  * Mock EditorialPlanner. Deterministic, no network, no model. It only sees EditorialInput and
  * says plainly that it has not analysed any music (AC09: no invented BPM/timbre facts).
  */
-import { countGraphemes, type Candidate, type SonicDNA } from '@qualia/contracts';
+import { DJ_LINE_MAX_GRAPHEMES, DJ_SHORT_MAX_GRAPHEMES, countGraphemes, type Candidate, type SonicDNA } from '@qualia/contracts';
 import type { EditorialInput } from '../services/editorialInput.js';
 import type { EditorialPlanner, PlannerContext } from './types.js';
 import { BASE_POOL, MOCK_ARTIST, TUNE_POOL, type MockEntry } from './mockFixtures.js';
@@ -71,8 +71,9 @@ export class MockEditorialPlanner implements EditorialPlanner {
       return { schemaVersion: 1, analysis: analysisFor(input), candidates: [], warnings: [] };
     }
     const candidates = candidatesFor(input);
+    const max = input.djLength === 'standard' ? DJ_LINE_MAX_GRAPHEMES : DJ_SHORT_MAX_GRAPHEMES;
     for (const c of candidates) {
-      if (countGraphemes(c.djLine) > 80) throw new Error('mock fixture DJ line exceeds 80 graphemes');
+      if (countGraphemes(c.djLine) > max) throw new Error(`mock fixture DJ line exceeds ${max} graphemes`);
     }
     return {
       schemaVersion: 1,

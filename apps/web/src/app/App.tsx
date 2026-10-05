@@ -18,6 +18,7 @@ import { useBoot, useEffectivePlaybackMode, usePopStateNavigation } from './hook
 import { generation, getEngine, tuneGeneration } from './services';
 import { connectPlayer, syncSpotifyOutput } from './spotify';
 import { effectivePlaybackMode } from '../features/spotify/spotifyMode';
+import { pickSegments } from '../features/seed/selection';
 
 function BootError() {
   return (
@@ -99,9 +100,12 @@ function useTuneCommit(): void {
  * Starts the ready show from the user's tap: load + play run synchronously in the click handler
  * so the single audio element is unlocked by this gesture. Switching shows is always explicit.
  */
-function startReadyShow(): void {
-  const show = generation.getState().show;
-  if (!show || show.segments.length === 0) return;
+function startReadyShow(segmentIds: readonly string[]): void {
+  const ready = generation.getState().show;
+  if (!ready) return;
+  // Ready 的勾選清單：只播勾選的曲目（預設全選）。
+  const show = pickSegments(ready, segmentIds);
+  if (show.segments.length === 0) return;
   const engine = getEngine();
   const store = useAppStore.getState();
   // E 模式：同一次點擊內接上 Qualia 播放器（載入 SDK＋activateElement），介紹播放期間完成連線。

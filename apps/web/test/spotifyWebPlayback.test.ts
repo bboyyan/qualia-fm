@@ -111,6 +111,28 @@ describe('SpotifyWebPlaybackAdapter（路徑 P：網頁當 Connect 裝置）', (
     expect(ctx.events.filter((e) => e.type === 'ended')).toEqual([{ type: 'ended', attemptId: 2, owner: 'track' }]);
   });
 
+  it('剛開始播就回報「暫停在 0」（還沒播到尾端）→ 當作暫停，不當播完（BRA-117：不提早進回饋）', async () => {
+    const ctx = setup();
+    await online(ctx);
+    await startTrack(ctx, 2);
+    ctx.sdk.player.state(TEST_URI, false, 10);
+    await ctx.clock.advance(1_500);
+    ctx.sdk.player.state(TEST_URI, true, 0);
+    expect(ctx.events.filter((e) => e.type === 'ended')).toEqual([]);
+    expect(ctx.events.at(-1)).toEqual({ type: 'paused', attemptId: 2, owner: 'track', positionMs: 0 });
+  });
+
+  it('播到接近尾端後停在 0 → 播完（只回報一次 ended）', async () => {
+    const ctx = setup();
+    await online(ctx);
+    await startTrack(ctx, 2);
+    ctx.sdk.player.state(TEST_URI, false, 190_000);
+    await ctx.clock.advance(9_000);
+    ctx.sdk.player.state(TEST_URI, true, 0);
+    ctx.sdk.player.state(TEST_URI, true, 0);
+    expect(ctx.events.filter((e) => e.type === 'ended')).toEqual([{ type: 'ended', attemptId: 2, owner: 'track' }]);
+  });
+
   it('播放中 not_ready → device_lost，getState 回 null', async () => {
     const ctx = setup();
     await online(ctx);

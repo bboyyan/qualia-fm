@@ -4,22 +4,20 @@
  * previous tab (docs/02 導覽規則).
  */
 import { create } from 'zustand';
-import type { Capabilities, MockScenario, SeedKind } from '@qualia/contracts';
-import { DEFAULT_SETTINGS, parseSettings, type Settings } from '../features/settings/settings';
+import type { Capabilities, MockScenario } from '@qualia/contracts';
+import { DEFAULT_SETTINGS, migrateLegacySettings, parseSettings, type Settings } from '../features/settings/settings';
 export type { Settings } from '../features/settings/settings';
 import type { ToastData } from '../ui/Toast';
 import type { EModePreference } from '../features/spotify/spotifyMode';
+import { DEFAULT_DRAFT, type Draft } from '../features/seed/seedList';
+export type { Draft } from '../features/seed/seedList';
 
 export type Tab = 'home' | 'listen' | 'settings';
 export type SheetKind = 'bridge' | 'queue' | 'tune' | 'environment';
 
-export interface Draft {
-  kind: SeedKind;
-  text: string;
-  artist: string;
-}
-
-const SETTINGS_KEY = 'qfm.settings.v1';
+const SETTINGS_KEY = 'qfm.settings.v2';
+/** v1 的串詞長度預設是短版；讀到時升級為加厚版（BRA-117）。 */
+const LEGACY_SETTINGS_KEY = 'qfm.settings.v1';
 /** E 模式偏好另存：既有設定的 parseSettings 永遠不接受 E（伺服器才是權威）。 */
 const EMODE_KEY = 'qfm.emode.v1';
 
@@ -43,8 +41,9 @@ function saveEMode(value: EModePreference | null): void {
 function loadSettings(): Settings {
   try {
     const raw = window.localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    return parseSettings(JSON.parse(raw));
+    if (raw) return parseSettings(JSON.parse(raw));
+    const legacy = window.localStorage.getItem(LEGACY_SETTINGS_KEY);
+    return legacy ? migrateLegacySettings(JSON.parse(legacy)) : DEFAULT_SETTINGS;
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -54,6 +53,7 @@ function saveSettings(settings: Settings | null): void {
   try {
     if (settings) window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     else window.localStorage.removeItem(SETTINGS_KEY);
+    window.localStorage.removeItem(LEGACY_SETTINGS_KEY);
   } catch {
     // Storage can be unavailable (private mode); settings then last for this page only.
   }
@@ -96,7 +96,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   sheet: null,
   toast: null,
   live: '',
-  draft: { kind: 'feeling', text: '', artist: '' },
+  draft: DEFAULT_DRAFT,
   settings: loadSettings(),
   eMode: loadEMode(),
   mockScenario: 'five',
