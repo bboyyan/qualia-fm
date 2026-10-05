@@ -19,11 +19,29 @@ API 的 `speech.kind=ai_audio` 必須含 `aiVoice: true`，DJ 區塊顯示「AI 
 降級規則（不靜默）：
 
 - 供應商提示以 contracts 的 `PROVIDER_NOTICES` 固定開頭寫入 ShowPlan.warnings，**一律排在最前面**（模型自己的 warnings 再多也擠不掉），web 的 `ProviderNotices` 在「準備好了」與收聽頁顯示。
-- LLM：gate／預算拒絕、HTTP 失敗、逾時、拒答、或初次＋修復兩次輸出都未通過 PlanDraftSchema，皆改用 MOCK 選歌完成本輪並顯示「AI 選歌本輪改用 MOCK 示範：原因」。不增加真實呼叫次數；僅 mock 模式維持原本「兩次無效即 PLAN_INVALID」。
+- LLM：gate 拒絕、LLM 呼叫階段的預算拒絕、HTTP 失敗、逾時、拒答、或初次＋修復兩次輸出都未通過 PlanDraftSchema，皆改用 MOCK 選歌完成本輪並顯示「AI 選歌本輪改用 MOCK 示範：原因」。**選歌前 `claimPlan` 的 `QUOTA_EXCEEDED` 是例外，直接讓 job 失敗，不進 MOCK 降級**（見下節）。不增加真實呼叫次數；僅 mock 模式維持原本「兩次無效即 PLAN_INVALID」。
 - TTS（伺服器合成）：失敗時該段保留文字介紹＋提示音（mock_chime，介紹區如實標示「MOCK 提示音，非 AI 語音」並可「跳過介紹」），顯示「AI 語音本輪改為文字介紹＋提示音：原因」；本輪第一次失敗後不再嘗試其餘段落，避免逾時連鎖與重複預扣。
 - TTS 與整輪 deadline：每段開始前檢查距 `PLAN_DEADLINE_MS` 的剩餘時間，**不足一次完整 `TTS_TIMEOUT_MS`（另留 250 ms 組裝餘裕）就不再開始下一段**——不預扣、不發請求，其餘段落沿用上面的文字介紹＋提示音並顯示「AI 語音本輪改為文字介紹＋提示音：節目準備時間不足，其餘 N 段改為文字介紹。」。已合成的段落照用，節目照常完成（不再整輪 PLAN_TIMEOUT 而白花已付的 LLM／TTS 費用與當日 plan 額度）。已開始的段落另以剩餘時間為上限（含排隊等待），超過只降級該段。deadline 若在 LLM 階段就到，仍照舊整輪 PLAN_TIMEOUT；LLM 自身逾時（`PROVIDER_TIMEOUT_MS`）照舊視為 LLM 失敗（保留預扣、改用 MOCK 選歌並明示）。
 - TTS（手機播放）：AI 音檔播放失敗（如快取過期 404、斷網）時不擋音樂（AC17），直接進曲目，同時在收聽頁顯示文字介紹全文與「重試語音」（在使用者點擊內重播介紹）。自動播放被擋則照舊顯示「點一下繼續」，介紹文字仍在。
 - iPhone 手勢：「開始收聽」的點擊同步執行 loadShow＋play，第一段 AI 介紹的 `audio.play()` 在同一個點擊內發出；之後同一個 audio 元素連續切換來源。媒體路由用 `sendFile` 回應 Range（206），iOS Safari 播放 `<audio>` 需要此行為。
+
+### 開台配額拒絕與供應商降級（BRA-149）
+
+以下記錄 BRA-146／PR #13 已有行為。`PlanService.pipeline` 在選歌前呼叫 `runtime.claimPlan(signal)`，先取得當日一輪 plan 額度；只要啟用真實 LLM 或 TTS 就會走此路徑，包含 `LLM_PROVIDER=mock`、`TTS_PROVIDER=openai`。全 mock 未建立此開台配額檢查。
+
+| 路徑 | job／節目結果 | 使用者可見訊息 |
+|---|---|---|
+| `claimPlan` 拋出 `AppError('QUOTA_EXCEEDED')`（例如 `BUDGET_MAX_PLANS_PER_DAY` 已滿） | 例外向外傳至 `run` → `fail`；`status='failed'`、`showId=null`、`error.code='QUOTA_EXCEEDED'`、`retryable=false`。不呼叫 MOCK fallback、不產生新節目，也不發出本輪 LLM／TTS 請求 | 「已達這段時間的使用上限，可以先聽既有節目。」；既有節目仍可讀取 |
+| 未被處理、也不是 `AppError` 的例外傳至 `fail`（且非取消／deadline 逾時） | `status='failed'`、`error.code='INTERNAL'`、`retryable=true` | 「服務暫時出了點問題，請稍後再試。」；這是未分類的服務錯誤，不代表配額已滿 |
+| gate 拒絕／供應商不可用（有 fallback），或 LLM 呼叫階段失敗／預算拒絕／兩次無效輸出 | 改用 MOCK 選歌，依可播首數交付 `completed`／`partial` 節目，降級原因放在 `ShowPlan.warnings` 最前面 | 「AI 選歌本輪改用 MOCK 示範：原因」；TTS 合成失敗則保留文字＋提示音並明示 |
+
+判斷重點是**發生階段**：`claimPlan` 的配額拒絕是整輪拒絕開台；其後 LLM／TTS 的預算拒絕仍沿用各自的降級規則，不能把所有 `QUOTA_EXCEEDED` 都解讀成 failed job。`fail` 保留 `AppError.code`，配額拒絕不應被收成 `INTERNAL`，也不應以 MOCK 成功掩蓋。
+
+這是非同步 job 結果：`POST /api/plan` 回 HTTP 202 建立 job 後，以 `GET /api/jobs/:jobId` 讀取上述失敗資訊；不同於建立 job 前的全域限流直接回 HTTP 429。同一 session 以相同 `Idempotency-Key` 與相同內容重送，會拿回原本的 failed job，不重複取得額度；每日 plan 上限在 Asia/Taipei 換日後，新請求可重新取得額度，總預算限制仍然有效。
+
+現有證據：[openaiIntegration.test.ts](../apps/server/test/openaiIntegration.test.ts) 的「每日 plan 上限拒絕 %s 選歌的整輪開台，回 QUOTA 而非 MOCK 成功；台北換日恢復」涵蓋真實 LLM 與僅真實 TTS，驗證 failed／固定訊息、無新增供應商呼叫、冪等重送、既有節目可讀與換日恢復。
+
+BRA-149 為 L1，僅補本文件與 [decision-log D-36](implementation/decision-log.md)，無程式、設定或行為變更；回滾方式為 revert 本票的文件 commit。
 
 ### TTS 聲線：B2 組合（2026-10-05 曄試聽選定）
 
@@ -90,7 +108,7 @@ iPhone 實測原本的聲線「不像台灣腔」。用同一段文稿比較 voi
 
 ## 預算與持久化
 
-1. 整輪真實 plan 開始前先持久化扣一個 plan 額度，LLM 與「僅 TTS」都適用。修復不再扣第二個 plan，既有 idempotency 不重複計數。被 gate 拒絕的 mock 降級不消耗真實 plan 額度；已取得額度但取消／失敗的嘗試保留計數。
+1. 整輪真實 plan 開始前先持久化扣一個 plan 額度，LLM 與「僅 TTS」都適用。`claimPlan` 配額拒絕直接產生 failed job（`QUOTA_EXCEEDED`），不降級 MOCK，詳見上方例外路徑。修復不再扣第二個 plan，既有 idempotency 不重複計數。被 gate 拒絕的 mock 降級不消耗真實 plan 額度；已取得額度但取消／失敗的嘗試保留計數。
 2. LLM 每次發出前，以完整請求 JSON 的 UTF-8 位元組數加 2048 tokens 框架餘裕（`REQUEST_OVERHEAD_TOKENS`），乘輸入單價，加 max_output_tokens 乘輸出單價預扣。依據：BPE token 至少對應 1 個位元組，位元組數本身已是內容 token 上界（中文約 3 位元組／字、約 1 token／字，已高估約 3 倍）；餘裕只需涵蓋訊息框架與 schema 轉換差額。原本的 8192 讓輸入預扣再翻倍（實測 20 筆歷史的請求約 8.6 KB），改 2048 仍保守。單次預扣若超過每日額度的 10%（`MAX_CALL_SHARE_OF_DAILY`）直接拒絕、不發請求，並在設定頁顯示原因——避免選到貴模型或把 OPENAI_MAX_OUTPUT_TOKENS 調太大時一次吃光日額。參考：以 US$0.40／1.60 每百萬 token 的單價，一次呼叫預扣約 US$0.011；US$2／8 約 US$0.05（皆 ≤ 日額 10%）。成功取得可信的 usage 數值後，按 input_tokens／output_tokens 結算並釋放金額差額；被截斷（status=incomplete）的輸出視為無效草稿，仍按 usage 結算；輸出 schema 驗證仍獨立執行。
 3. TTS 先以 Unicode code points 乘單價預扣金額，另以 grapheme clusters 扣每日字數；code points 可大於 graphemes，避免組合 emoji 低估費用。成功依送出字元數結算。hash 包含文字＋voice＋model＋實際送出的 instructions（預設或 env 覆寫）；相同內容命中磁碟快取不呼叫也不重複扣費／字數，跨重啟有效。命中仍先檢查停止 gate。過期先刪除，超額用 atime 淘汰，保護剛回傳的音檔；快取可被淘汰，不能承諾永久播放。
 4. 日界線固定為 UTC+8（Asia/Taipei），與伺服器時區無關。跨午夜完成的 commit 仍結算在原 reserve 日期。總額不因換日清零。
