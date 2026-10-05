@@ -73,6 +73,7 @@ export function SpotifySettingsSection() {
   return (
     <SpotifyLinkView
       linked={caps.spotify.linked}
+      linkedElsewhere={caps.spotify.linkedElsewhere ?? false}
       djApproved={caps.spotifyDjApproved}
       clientId={caps.spotify.clientId}
       redirectUri={caps.spotify.redirectUri}

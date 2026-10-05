@@ -23,9 +23,12 @@ export const CapabilitiesSchema = z.strictObject({
   canOverlap: z.literal(false),
   supportsBackground: z.enum(['unknown', 'tested-limited', 'unsupported']),
   providers: z.strictObject({ llm: z.enum(['mock', 'openai']), tts: z.enum(['mock', 'openai']), reason: z.string().max(300).nullable() }).optional(),
-  /** 只在 SPOTIFY_ENABLED=true 時出現；連結狀態由伺服器的 token 檔決定。 */
+  /** 只在 SPOTIFY_ENABLED=true 時出現；連結狀態由伺服器的 token 檔與擁有者憑證決定。 */
   spotify: z.strictObject({
+    /** 只有擁有者（完成連結的那個瀏覽器）為 true。 */
     linked: z.boolean(),
+    /** 已由別的裝置連結（BRA-111 A1）；舊伺服器不送時視為 false。 */
+    linkedElsewhere: z.boolean().optional(),
     clientId: z.string().max(100),
     redirectUri: z.string().max(500),
     lovedPlaylistId: z.string().regex(/^[A-Za-z0-9]{22}$/),

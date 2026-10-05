@@ -5,6 +5,8 @@
  * - 放歌前先停掉 <audio> 並確認已停；
  * - 介紹前若 Spotify 正在出聲，先暫停並等確認靜音，確認不了就不播介紹（引擎改顯示文字）。
  * - 介紹播放中若 Spotify 輸出遲到回報 started，立刻停掉 Spotify、不把事件交給引擎。
+ * - 介紹播放中持續守住靜音（BRA-111）：Spotify 晚出聲（例如路徑 C 裝置在 play 回應 2 秒後才出聲）就停介紹，
+ *   並把介紹回報為失敗（引擎改顯示文字、直接進歌）；使用者已暫停介紹時只再暫停 Spotify。
  * 不做 ducking、crossfade 或音量調整。
  */
 import { notSupported, type SpotifyOutput, type Timers } from '../spotify/types';
@@ -29,6 +31,8 @@ export class PlaybackRouter implements MediaAdapter {
   private detachOutput: (() => void) | null = null;
   /** 每次 start／stop 加一；等待 <audio> 停止期間若被切段，就不再送 Spotify。 */
   private sequence = 0;
+  /** 介紹播放期間的靜音守候；換段、停止或換輸出時解除。 */
+  private releaseHold: (() => void) | null = null;
 
   constructor(
     readonly base: MediaAdapter,
@@ -44,6 +48,7 @@ export class PlaybackRouter implements MediaAdapter {
   /** 切換 Spotify 輸出（P／C／無）。輸出的生命週期由呼叫端管理，這裡只接上或拔掉事件。 */
   setSpotifyOutput(output: SpotifyOutput | null): void {
     if (this.output === output) return;
+    this.endHold();
     if (this.output && this.active === 'spotify') this.output.stop();
     this.detachOutput?.();
     this.detachOutput = null;
@@ -54,6 +59,7 @@ export class PlaybackRouter implements MediaAdapter {
 
   start(request: StartRequest): Promise<void> {
     this.sequence += 1;
+    this.endHold();
     if (request.owner === 'track' && request.segment.track.audioLocator.kind === 'spotify_uri') return this.startSpotify(request);
     const output = this.output;
     const wasSpotify = this.active === 'spotify';
@@ -62,13 +68,14 @@ export class PlaybackRouter implements MediaAdapter {
     // 不只看 active：上一次切段留下、還在路上的 play 也算「可能出聲」（連按兩次下一首，B1'）。
     // 可能出聲或剛才由 Spotify 播放時，取消它進行中／在路上的請求（換世代），並等確認靜音。
     const audible = output.isAudible();
-    if (!audible && !wasSpotify) return this.base.start(request);
+    if (!audible && !wasSpotify) return this.startBase(output, request);
     output.stop();
-    if (!audible) return this.base.start(request);
+    // stop 本身可能發現「可能出聲」（例如 play 已生效但還沒確認在播），所以停完再問一次。
+    if (!output.isAudible()) return this.startBase(output, request);
     const sequence = this.sequence;
     return output.whenSilent(SILENCE_TIMEOUT_MS).then((silent) => {
       if (sequence !== this.sequence) return Promise.reject(new DOMException('已切到別的段落。', 'AbortError'));
-      return silent ? this.base.start(request) : Promise.reject(notSupported('Spotify 尚未確認靜音，不開始介紹。'));
+      return silent ? this.startBase(output, request) : Promise.reject(notSupported('Spotify 尚未確認靜音，不開始介紹。'));
     });
   }
 
@@ -86,6 +93,7 @@ export class PlaybackRouter implements MediaAdapter {
 
   stop(): void {
     this.sequence += 1;
+    this.endHold();
     this.base.stop();
     this.output?.stop();
   }
@@ -100,11 +108,33 @@ export class PlaybackRouter implements MediaAdapter {
   }
 
   destroy(): void {
+    this.endHold();
     this.detachBase();
     this.detachOutput?.();
     this.base.destroy();
     this.output?.destroy();
     this.listeners.clear();
+  }
+
+  /** 介紹交給 <audio>，同時請 Spotify 輸出守住靜音；MOCK 測試音（曲目）不需要。 */
+  private startBase(output: SpotifyOutput, request: StartRequest): Promise<void> {
+    const started = this.base.start(request);
+    // 換段、停止、換輸出都會解除守候（endHold），所以 onLeak 只會在這段介紹期間被呼叫。
+    if (request.owner === 'speech') this.releaseHold = output.holdSilence(() => this.onLeak(request));
+    return started;
+  }
+
+  /** Spotify 在介紹期間出聲（輸出已自行再暫停）：介紹還在出聲就停掉，回報失敗讓引擎改顯示文字並進歌。 */
+  private onLeak(request: StartRequest): void {
+    this.releaseHold = null;
+    if (this.active !== 'base' || this.baseSilent()) return;
+    this.base.stop();
+    this.emit({ type: 'failed', attemptId: request.attemptId, owner: request.owner, code: 'AUDIO_SOURCE_FAILED' });
+  }
+
+  private endHold(): void {
+    this.releaseHold?.();
+    this.releaseHold = null;
   }
 
   private startSpotify(request: StartRequest): Promise<void> {

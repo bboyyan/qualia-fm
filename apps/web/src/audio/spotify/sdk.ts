@@ -11,6 +11,8 @@ export interface SdkTrack {
 
 export interface SdkPlaybackState {
   readonly paused: boolean;
+  /** SDK 實際會帶（官方文件未列）：已收到 play、還在載入；此時的 paused 不代表之後不會出聲。 */
+  readonly loading?: boolean;
   readonly position: number;
   readonly duration: number;
   readonly track_window: {

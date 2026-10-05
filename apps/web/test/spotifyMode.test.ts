@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Capabilities } from '@qualia/contracts';
-import { effectivePlaybackMode, eModeAvailable, lovedAvailable, modeStrip, readLinkOutcome, urlWithoutLinkOutcome } from '../src/features/spotify/spotifyMode';
+import { LINK_MESSAGES, effectivePlaybackMode, eModeAvailable, lovedAvailable, modeStrip, readLinkOutcome, urlWithoutLinkOutcome } from '../src/features/spotify/spotifyMode';
 import { segment } from './fixtures';
 import { spotifySegment } from './spotifyFakes';
 
@@ -49,9 +49,12 @@ describe('「愛」→ Loved 是否提供', () => {
 });
 
 describe('登入回呼結果與模式列', () => {
-  it('只認得四種結果，其他一律忽略', () => {
+  it('只認得五種結果，其他一律忽略', () => {
     expect(readLinkOutcome('?spotify=linked')).toBe('linked');
     expect(readLinkOutcome('?spotify=denied')).toBe('denied');
+    // BRA-111 A1：已由別的裝置連結時，登入被導回 ?spotify=owner。
+    expect(readLinkOutcome('?spotify=owner')).toBe('owner');
+    expect(LINK_MESSAGES.owner).toContain('另一台裝置');
     expect(readLinkOutcome('?spotify=<script>')).toBeNull();
     expect(readLinkOutcome('')).toBeNull();
   });

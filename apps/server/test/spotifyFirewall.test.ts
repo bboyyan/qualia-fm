@@ -17,7 +17,7 @@ function catalog(): FakeSpotify {
 
 /** Spotify 端任何可辨識的痕跡：URI、ID、封面、正式名稱、外連、Spotify 字樣。 */
 function spotifyTraces(n: number): string[] {
-  return ['spotify', trackId(n), artworkUrl(trackId(n)), 'SpotifyRemaster', 'TEST Featured', 'open.spotify.com', 'i.scdn.co'];
+  return ['spotify', trackId(n), artworkUrl(trackId(n)), 'SpotifyRemaster', 'TEST Featured', 'TEST album', 'open.spotify.com', 'i.scdn.co'];
 }
 
 describe('資料防火牆：Spotify 資料只用於播放與 Loved，不進 LLM、不進帳本', () => {
@@ -32,6 +32,7 @@ describe('資料防火牆：Spotify 資料只用於播放與 Loved，不進 LLM�
       providerTrackId: trackId(1),
       canonicalTitle: CANONICAL(1),
       canonicalArtists: ['TEST Artist 1', 'TEST Featured'],
+      canonicalAlbum: 'TEST album',
       artworkUrl: `${artworkUrl(trackId(1))}-300`,
       externalUrl: `https://open.spotify.com/track/${trackId(1)}`,
       audioLocator: { kind: 'spotify_uri', uri: `spotify:track:${trackId(1)}` },
@@ -102,3 +103,29 @@ describe('資料防火牆：Spotify 資料只用於播放與 Loved，不進 LLM�
     expect(empty.warnings.join('\n')).toContain('Spotify 對應暫時失敗');
   });
 });
+
+describe('中斷連結：節目裡的 Spotify 欄位全部清掉（BRA-111 補測）', () => {
+  it('ID、封面、正式名稱、專輯、外連、URI 都換回 LLM 提名；段落與提名保留', async () => {
+    const dj = await linkedApp(DJ_TEST_ENV, { planner: nominatingPlanner(NAMES) }, catalog());
+    const job = await waitForJob(dj.client, (await postPlan(dj.client, planRequest())).body.jobId);
+    await post(dj.client, '/api/auth/spotify/logout').expect(204);
+    const show = (await dj.client.agent.get(`/api/shows/${job.showId}`).expect(200)).body;
+    expect(show.segments[0].candidate).toMatchObject({ title: 'TEST Nominated 1', artist: 'TEST Artist 1' });
+    expect(show.segments[0].track).toEqual({
+      provider: 'spotify',
+      providerTrackId: null,
+      canonicalTitle: 'TEST Nominated 1',
+      canonicalArtists: ['TEST Artist 1'],
+      canonicalAlbum: null,
+      artworkUrl: null,
+      durationMs: null,
+      externalUrl: null,
+      availability: 'unavailable',
+      canAttemptPlayback: false,
+      audioLocator: { kind: 'none' },
+    });
+    const text = JSON.stringify(show.segments.map((segment: { track: unknown }) => segment.track));
+    for (const trace of spotifyTraces(1).filter((t) => t !== 'spotify')) expect(text).not.toContain(trace);
+  });
+});
+

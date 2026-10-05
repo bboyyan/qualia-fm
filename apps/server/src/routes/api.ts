@@ -25,7 +25,7 @@ import {
 } from '../security/sessions.js';
 import { assertFeatureAllowed, buildCapabilities } from '../services/capabilities.js';
 import type { PlanService } from '../services/planService.js';
-import { spotifyPublicRoutes, spotifySessionRoutes, type SpotifyServices } from './spotify.js';
+import { ownerSecretOf, spotifyPublicRoutes, spotifySessionRoutes, type SpotifyServices } from './spotify.js';
 
 export interface ApiDeps {
   readonly runtime: RealProviderRuntime;
@@ -92,6 +92,7 @@ function planRoutes(router: Router, deps: ApiDeps): void {
       request: parsed.data,
       idempotencyKey: key,
       scenario: scenarioOf(req, deps.config),
+      spotifyOwner: deps.spotify?.auth.ownerStatus(ownerSecretOf(req)) === 'self',
     });
     res.status(202).json(job);
   });
@@ -107,8 +108,10 @@ function planRoutes(router: Router, deps: ApiDeps): void {
 }
 
 function sessionRoutes(router: Router, deps: ApiDeps): void {
-  router.get('/capabilities', (_req, res) => {
-    res.json(buildCapabilities(deps.config, deps.runtime.statusReason(), { linked: deps.spotify?.auth.isLinked() ?? false }));
+  router.get('/capabilities', (req, res) => {
+    // linked 只對擁有者為 true；其他 session 只知道「已由別的裝置連結」，不能把 E 模式打開。
+    const owner = deps.spotify?.auth.ownerStatus(ownerSecretOf(req)) ?? 'none';
+    res.json(buildCapabilities(deps.config, deps.runtime.statusReason(), { linked: owner === 'self', linkedElsewhere: owner === 'other' }));
   });
   router.post('/tts', async (req, res) => {
     if (deps.config.openai.tts !== 'openai') assertFeatureAllowed(deps.config, 'tts');

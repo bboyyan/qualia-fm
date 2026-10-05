@@ -19,3 +19,7 @@
 | D-13 | 網頁引擎的唯一 adapter 改為 `PlaybackRouter`：沒有 Spotify 輸出時原樣交給單一 `<audio>`；E 模式時 Spotify 曲目交給路徑 P／C，介紹確認已停才放歌 | 不疊音（Policy III.7）需要跨兩個音訊來源協調；預設路徑行為不變 | `PlaybackMode` 新增 `spotify`；reducer 對非 manual 一律自動接續 |
 | D-14 | 帳本只寫 LLM 提名的原始曲名／藝人；Spotify Search 結果只放在 `segment.track`，MOCK 提名不送 Search | Policy III.13／III.14：Spotify 資料不得輸入 AI 或建立畫像 | 防火牆測試 `spotifyFirewall.test.ts` |
 | D-15 | E 模式 UI 沿用既有 `--q-*` 配色與元件，design-v1 只採旅程／文案／狀態 | 曄 10/05 04:47：design-v1 視覺不採用 | 未做全站夜間主題 |
+| D-16 | （BRA-111 A1）Spotify 連結綁「裝置憑證」而非登入帳號：完成連結的瀏覽器拿到 HttpOnly cookie，token 檔只存其 SHA-256；先連結者為擁有者，非擁有者不能使用、中斷或覆蓋 | 本站沒有使用者帳號（匿名 session、重啟即失效）；裝置憑證最小、可跨重啟，且不需新增登入系統 | 擁有者 cookie 遺失時以刪除 token 檔復原（已寫入 spotify-e-mode.md）；BRA-111 前的 token 檔沒有擁有者雜湊，會被視為未連結 |
+| D-17 | （BRA-111）介紹播放中 Spotify 晚出聲 → 停介紹並回報介紹失敗（引擎顯示文字、直接進歌），不嘗試暫停後續播介紹 | 「出聲就停介紹」最直接保證不疊；續播介紹需要新的引擎狀態與再次確認靜音，風險較高 | 使用者此時會看到文字介紹而非語音；路徑 C 最壞約 2 秒＋一次請求的疊音 |
+| D-18 | （BRA-111）路徑 P 的「已暫停」須穩定 500ms 且非載入中才算安靜 | SDK 先報載入中／已暫停、約 80ms 後才出聲；500ms 遠大於觀察值且只延後被切段時的介紹開始 | 只在被切段（play 在路上或剛生效未確認）時多等最多 0.5 秒；已確認在播的歌正常暫停不受影響 |
+| D-19 | （BRA-111 A2）Spotify 官方圖示與封面圓角是 `--q-*` 色票的唯一例外 | Spotify Design Guidelines 要求官方配色與圓角 | 圖示 path 需在啟用前與官方下載素材比對 |

@@ -72,6 +72,7 @@ class FakeOutput implements SpotifyOutput {
     return Promise.resolve(this.silentResult);
   }
   recheck(): Promise<boolean> { return Promise.resolve(true); }
+  holdSilence(): () => void { return () => undefined; }
   emit(event: AdapterEvent): void { this.listener?.(event); }
 }
 

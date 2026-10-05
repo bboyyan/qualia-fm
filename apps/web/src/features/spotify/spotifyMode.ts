@@ -7,15 +7,16 @@ import type { PlaybackMode } from '../../audio/types';
 
 /** 使用者在伺服器允許時的選擇；預設 on＝連結 Spotify 本身就是明確同意。改選 B／MOCK 即為 off。 */
 export type EModePreference = 'on' | 'off';
-export type LinkOutcome = 'linked' | 'denied' | 'error' | 'session';
+export type LinkOutcome = 'linked' | 'denied' | 'error' | 'session' | 'owner';
 
-const LINK_OUTCOMES: readonly LinkOutcome[] = ['linked', 'denied', 'error', 'session'];
+const LINK_OUTCOMES: readonly LinkOutcome[] = ['linked', 'denied', 'error', 'session', 'owner'];
 
 export const LINK_MESSAGES: Record<LinkOutcome, string> = {
   linked: '已連結 Spotify。E 模式開啟：每首前先播完 AI 介紹，再由這個網頁播放。',
   denied: '你在 Spotify 取消了授權，E 模式維持關閉。',
   error: 'Spotify 連結沒有完成，E 模式維持關閉，可以再試一次。',
   session: '工作階段已過期，請重新整理後再連結 Spotify。',
+  owner: 'Spotify 已由另一台裝置連結；只有完成連結的那台裝置能使用或中斷，E 模式在這裡維持關閉。',
 };
 
 export function eModeAvailable(caps: Capabilities | null): boolean {

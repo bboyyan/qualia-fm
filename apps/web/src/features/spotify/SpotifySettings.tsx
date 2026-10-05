@@ -10,6 +10,8 @@ import styles from './spotify.module.css';
 
 export interface SpotifyLinkViewProps {
   linked: boolean;
+  /** 已由另一台裝置（擁有者）連結；這裡不能使用、連結或中斷（BRA-111 A1）。 */
+  linkedElsewhere?: boolean;
   djApproved: boolean;
   clientId: string;
   redirectUri: string;
@@ -45,7 +47,7 @@ function ConsentSheet({ open, onClose, onLink }: { open: boolean; onClose: () =>
   );
 }
 
-export function SpotifyLinkView({ linked, djApproved, clientId, redirectUri, scopes, disconnecting, onLink, onDisconnect }: SpotifyLinkViewProps) {
+export function SpotifyLinkView({ linked, linkedElsewhere = false, djApproved, clientId, redirectUri, scopes, disconnecting, onLink, onDisconnect }: SpotifyLinkViewProps) {
   const [consentOpen, setConsentOpen] = useState(false);
   const eOn = linked && djApproved;
   return (
@@ -75,7 +77,7 @@ export function SpotifyLinkView({ linked, djApproved, clientId, redirectUri, sco
             <li>把任何 Spotify 資料交給 AI</li>
           </ul>
           <p>需要 Spotify Premium。可隨時在下方中斷連結。</p>
-          {!linked && (
+          {!linked && !linkedElsewhere && (
             <Button block onClick={() => setConsentOpen(true)} data-testid="open-consent">連結 Spotify</Button>
           )}
         </div>
@@ -85,7 +87,7 @@ export function SpotifyLinkView({ linked, djApproved, clientId, redirectUri, sco
       <section className={settings.group} aria-label="Spotify 連結" data-testid="spotify-link">
         <div className={settings.rowStack}>
           <dl className={styles.facts}>
-            <div><dt>狀態</dt><dd data-testid="spotify-link-state">{linked ? '已連結' : '未連結'}</dd></div>
+            <div><dt>狀態</dt><dd data-testid="spotify-link-state">{linked ? '已連結' : linkedElsewhere ? '已由另一台裝置連結' : '未連結'}</dd></div>
             <div><dt>Client ID</dt><dd>{clientId}</dd></div>
             <div><dt>Redirect</dt><dd>{redirectUri}</dd></div>
             <div><dt>權限</dt><dd>{scopes.join(' ')}</dd></div>
@@ -96,6 +98,7 @@ export function SpotifyLinkView({ linked, djApproved, clientId, redirectUri, sco
             中斷 Spotify 連結
           </Button>
           <p>中斷後會刪除 Mac mini 上的 Spotify 授權檔、關閉 E 模式並回到手動播放；也可以到 Spotify 帳戶的「應用程式」頁撤銷。</p>
+          {linkedElsewhere && <p>這份連結只有完成連結的那台裝置（瀏覽器）能使用或中斷；這裡維持手動播放。</p>}
         </div>
       </section>
 

@@ -1,14 +1,16 @@
 /**
  * Spotify Authorization Code + PKCE（無 client secret）。state 與 code_verifier 綁定 session、一次性、10 分鐘失效。
  * refresh token 只存在加密小檔；access token 只在記憶體並在過期前換新。token 與 code 一律不寫日誌。
+ * 擁有者（BRA-111 A1）：完成登入時發一組擁有者憑證（只給那個瀏覽器的 HttpOnly cookie），token 檔只存它的雜湊；
+ * 之後只有出示同一憑證的請求能用這份連結。已由別人連結時不能開始登入；登入途中若擁有者變了，回呼一律拒絕。
  */
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { SPOTIFY_SCOPES } from '@qualia/contracts';
 import type { SpotifyConfig } from '../config/env.js';
 import { AppError } from '../http/errors.js';
 import { logger } from '../http/log.js';
-import type { SpotifyTokenStore } from './tokenStore.js';
+import type { SpotifyTokenStore, StoredSpotifyToken } from './tokenStore.js';
 
 export const SPOTIFY_ACCOUNTS = 'https://accounts.spotify.com';
 const PENDING_TTL_MS = 10 * 60 * 1000;
@@ -21,6 +23,20 @@ interface PendingLogin {
   readonly sessionId: string;
   readonly verifier: string;
   readonly expiresAt: number;
+  /** 開始登入時的擁有者雜湊（未連結為 null）；回呼時不同＝期間有別人連結，拒絕覆蓋。 */
+  readonly ownerHash: string | null;
+}
+
+/** none＝未連結；self＝出示的憑證是擁有者；other＝已由別人連結。 */
+export type OwnerStatus = 'none' | 'self' | 'other';
+
+const OWNER_SECRET = /^[A-Za-z0-9_-]{43}$/;
+const hashOwner = (secret: string): string => createHash('sha256').update(secret).digest('base64url');
+
+function sameHash(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 export interface AccessToken {
@@ -38,6 +54,9 @@ const TokenResponseSchema = z.object({
 type TokenResponse = z.infer<typeof TokenResponseSchema>;
 
 export const relinkRequired = (): AppError => new AppError('FEATURE_RESTRICTED', { message: 'Spotify 授權已失效或尚未連結，請到設定重新連結。' });
+export const notOwner = (): AppError => new AppError('FEATURE_RESTRICTED', { message: '這個 Spotify 連結只有完成連結的擁有者（那台裝置的瀏覽器）能使用。' });
+/** 登入途中擁有者變了（別人先完成連結）。 */
+export class OwnerChangedError extends Error {}
 
 export class SpotifyAuth {
   private readonly pending = new Map<string, PendingLogin>();
@@ -56,12 +75,20 @@ export class SpotifyAuth {
     return this.store.load() !== null;
   }
 
-  /** 產生 state＋code_verifier 綁定 session，回傳 Spotify authorize URL。 */
+  /** 出示的擁有者憑證（cookie 值，可能缺）與 token 檔裡的雜湊比對；以常數時間比較。 */
+  ownerStatus(secret: string | undefined): OwnerStatus {
+    const stored = this.store.load();
+    if (!stored) return 'none';
+    return secret !== undefined && OWNER_SECRET.test(secret) && sameHash(hashOwner(secret), stored.ownerHash) ? 'self' : 'other';
+  }
+
+  /** 產生 state＋code_verifier 綁定 session（與當下的擁有者），回傳 Spotify authorize URL。呼叫端須先確認不是 other。 */
   beginLogin(sessionId: string): string {
     this.prune();
     const state = randomBytes(32).toString('base64url');
     const verifier = randomBytes(64).toString('base64url');
-    this.pending.set(state, { sessionId, verifier, expiresAt: this.now() + PENDING_TTL_MS });
+    const ownerHash = this.store.load()?.ownerHash ?? null;
+    this.pending.set(state, { sessionId, verifier, expiresAt: this.now() + PENDING_TTL_MS, ownerHash });
     const url = new URL('/authorize', SPOTIFY_ACCOUNTS);
     url.search = new URLSearchParams({
       client_id: this.config.clientId ?? '',
@@ -83,9 +110,11 @@ export class SpotifyAuth {
     return entry.sessionId === sessionId && entry.expiresAt > this.now() ? entry : null;
   }
 
-  async completeLogin(sessionId: string, state: string, code: string): Promise<void> {
+  /** 完成登入並回傳新的擁有者憑證（只交給這個瀏覽器的 cookie；伺服器只存雜湊）。 */
+  async completeLogin(sessionId: string, state: string, code: string): Promise<string> {
     const entry = this.consumeState(sessionId, state);
     if (!entry) throw new AppError('INVALID_INPUT', { message: 'Spotify 授權已逾時或不屬於這個工作階段。' });
+    if ((this.store.load()?.ownerHash ?? null) !== entry.ownerHash) throw new OwnerChangedError();
     const token = await this.requestToken({
       grant_type: 'authorization_code',
       code,
@@ -94,8 +123,10 @@ export class SpotifyAuth {
       code_verifier: entry.verifier,
     });
     if (!token.refresh_token) throw new AppError('INTERNAL', { message: 'Spotify 沒有回傳授權，請再試一次。' });
-    this.store.save({ refreshToken: token.refresh_token, scope: token.scope ?? '' });
+    const secret = randomBytes(32).toString('base64url');
+    this.store.save({ refreshToken: token.refresh_token, scope: token.scope ?? '', ownerHash: hashOwner(secret) });
     this.access = { token: token.access_token, expiresAt: this.now() + token.expires_in * 1000 };
+    return secret;
   }
 
   /** 給 SDK／Web API 用的短期 access token；必要時以 refresh token 換新（單一進行中的換新）。 */
@@ -106,7 +137,7 @@ export class SpotifyAuth {
       throw relinkRequired();
     }
     if (this.access && this.access.expiresAt - REFRESH_MARGIN_MS > this.now()) return this.access;
-    this.refreshing ??= this.refresh(stored.refreshToken, stored.scope).finally(() => {
+    this.refreshing ??= this.refresh(stored).finally(() => {
       this.refreshing = null;
     });
     return this.refreshing;
@@ -124,10 +155,10 @@ export class SpotifyAuth {
     this.pending.clear();
   }
 
-  private async refresh(refreshToken: string, scope: string): Promise<AccessToken> {
+  private async refresh(stored: StoredSpotifyToken): Promise<AccessToken> {
     let token: TokenResponse;
     try {
-      token = await this.requestToken({ grant_type: 'refresh_token', refresh_token: refreshToken, client_id: this.config.clientId ?? '' });
+      token = await this.requestToken({ grant_type: 'refresh_token', refresh_token: stored.refreshToken, client_id: this.config.clientId ?? '' });
     } catch (error: unknown) {
       // invalid_grant＝使用者已在 Spotify 撤銷：fail closed，刪檔要求重新連結。
       if (error instanceof AppError && error.code === 'FEATURE_RESTRICTED') {
@@ -136,7 +167,7 @@ export class SpotifyAuth {
       }
       throw error;
     }
-    if (token.refresh_token) this.store.save({ refreshToken: token.refresh_token, scope: token.scope ?? scope });
+    if (token.refresh_token) this.store.save({ refreshToken: token.refresh_token, scope: token.scope ?? stored.scope, ownerHash: stored.ownerHash });
     this.access = { token: token.access_token, expiresAt: this.now() + token.expires_in * 1000 };
     return this.access;
   }

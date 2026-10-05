@@ -97,6 +97,14 @@ describe('設定：E 模式、L2 說明、中斷連結', () => {
     expect(html).toContain('刪除 Mac mini 上的 Spotify 授權檔');
   });
 
+  it('BRA-111 A1：已由另一台裝置連結：顯示狀態、不能在這裡連結或中斷，並說明只有擁有者能用', () => {
+    const html = render(createElement(SpotifyLinkView, { ...props, linked: false, linkedElsewhere: true }));
+    expect(html).toContain('已由另一台裝置連結');
+    expect(html).toContain('只有完成連結的那台裝置');
+    expect(html).not.toContain('data-testid="open-consent"');
+    expect(html).toMatch(/<button(?=[^>]*disabled="")[^>]*><span[^>]*>中斷 Spotify 連結/);
+  });
+
   it('伺服器未核可 E 模式時說明只能手動', () => {
     expect(render(createElement(SpotifyLinkView, { ...props, linked: true, djApproved: false }))).toContain('只能連結 Spotify、在 Spotify 開啟連結並自己播放');
   });
