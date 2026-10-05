@@ -65,6 +65,17 @@ describe('Spotify 對歌：曲名與藝人都要對上（正規化後）', () =>
     expect((await resolver.resolve(candidate('Time Flows Ever Onward', 'Evan Call'), context)).providerTrackId).toBe('TESTtrack0000000000002');
   });
 
+  it('N13：LLM 提名那一側的版本註記也要去掉（後綴與括號，含全形）', () => {
+    expect(titlesMatch('Time Flows Ever Onward - Live', 'Time Flows Ever Onward')).toBe(true);
+    expect(titlesMatch('Time Flows Ever Onward（Frieren OST）', 'Time Flows Ever Onward')).toBe(true);
+    expect(titlesMatch('Time Flows Ever Onward [2023]', 'Time Flows Ever Onward - Remastered')).toBe(true);
+  });
+
+  it('N13：整個曲名都在括號裡時退回不去註記的比對，不會變成空字串而全部拒絕', () => {
+    expect(titlesMatch('(Untitled)', '(Untitled)')).toBe(true);
+    expect(titlesMatch('(Untitled)', '(Something Else)')).toBe(false);
+  });
+
   it('titlesMatch 不接受只是部分重疊的曲名', () => {
     expect(titlesMatch('Time', 'Time Flows Ever Onward')).toBe(false);
     expect(titlesMatch('Time Flows Ever Onward', 'Time Flows')).toBe(false);

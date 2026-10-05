@@ -25,6 +25,10 @@ import type { AdapterEvent, ProviderState, StartRequest } from '../types';
 
 const POLL_MS = 2000;
 const SILENCE_POLL_MS = 500;
+/** 連續這麼久查到「沒在播」才算安靜（裝置可能在 pause 之後才開始播）。 */
+const SILENCE_SETTLE_MS = 1500;
+/** 確認靜音的輪詢上限；逾時仍沒確認就停止輪詢、維持「可能出聲」（介紹不會開始）。 */
+const SILENCE_WATCH_MAX_MS = 30_000;
 const CONFIRM_TIMEOUT_MS = 12_000;
 
 export interface ConnectDeps {
@@ -62,13 +66,20 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
   private generation = 0;
   /** 已送出、伺服器還沒回應的 play 數。 */
   private inflight = 0;
-  /** 遲到的 play 已送 pause，但還沒查到 Spotify 停了。 */
+  /** 已送 pause（切段或遲到的 play），但還沒以查詢確認 Spotify 穩定停下。 */
   private pendingSilence = false;
+  private silenceTimer: unknown = null;
+  private quietSince: number | null = null;
+  private watchStartedAt = 0;
+  private silentWaiters: (() => void)[] = [];
   private readonly unwatch: () => void;
 
   constructor(private readonly deps: ConnectDeps) {
     this.unwatch = deps.visibility.onChange((visible) => {
-      if (!visible) this.clearPoll();
+      if (!visible) {
+        this.clearPoll();
+        this.clearSilenceTimer();
+      } else if (this.pendingSilence) void this.checkSilence();
       else if (this.current && !this.localPause) void this.poll();
     });
   }
@@ -78,7 +89,7 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     if (request.owner !== 'track' || locator.kind !== 'spotify_uri') return Promise.reject(notSupported('Spotify app 只播放 Spotify 曲目。'));
     const gesture = this.deps.hasUserGesture();
     this.supersede();
-    this.pendingSilence = false;
+    this.endSilenceWatch();
     const generation = this.generation;
     return this.ensureDevice(gesture).then(() => {
       if (generation !== this.generation) return;
@@ -105,7 +116,7 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     const position = this.last?.progressMs ?? 0;
     this.localPause = false;
     this.pausedAt = null;
-    this.pendingSilence = false;
+    this.endSilenceWatch();
     const generation = this.generation;
     return this.ensureDevice(gesture).then(() => {
       if (generation !== this.generation || this.localPause) return;
@@ -124,7 +135,9 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     const active = this.current !== null || this.isAudible();
     this.supersede();
     this.localPause = true;
-    if (active) this.sendPause();
+    if (!active) return;
+    this.sendPause();
+    this.beginSilenceWatch();
   }
 
   getState(): ProviderState | null {
@@ -140,20 +153,21 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     return this.inflight > 0 || this.pendingSilence || (this.state === 'online' && this.last !== null && this.last.isPlaying && this.last.deviceId === this.deps.deviceId);
   }
 
-  /** 以狀態查詢確認靜音（在路上的 play 也要等它生效並被暫停）；逾時回 false，交由呼叫端不疊音。 */
-  async whenSilent(timeoutMs: number): Promise<boolean> {
-    const deadline = this.deps.now() + timeoutMs;
-    while (this.isAudible()) {
-      if (this.deps.now() >= deadline) return false;
-      await new Promise<void>((resolve) => this.deps.timers.setTimeout(resolve, SILENCE_POLL_MS));
-      if (this.inflight > 0) continue;
-      const playback = await this.deps.remote.playback().catch(() => null);
-      if (!playback) continue;
-      this.last = { ...playback, at: this.deps.now() };
-      if (!playback.isPlaying || playback.deviceId !== this.deps.deviceId) this.pendingSilence = false;
-      else if (this.current === null || this.localPause) this.sendPause();
-    }
-    return true;
+  /** 等主動輪詢確認靜音（在路上的 play 也要等它生效、被暫停且穩定停下）；逾時回 false，交由呼叫端不疊音。 */
+  whenSilent(timeoutMs: number): Promise<boolean> {
+    if (!this.isAudible()) return Promise.resolve(true);
+    if (!this.pendingSilence) this.beginSilenceWatch();
+    return new Promise((resolve) => {
+      const done = (): void => {
+        this.deps.timers.clearTimeout(timer);
+        resolve(true);
+      };
+      const timer = this.deps.timers.setTimeout(() => {
+        this.silentWaiters = this.silentWaiters.filter((waiter) => waiter !== done);
+        resolve(!this.isAudible());
+      }, timeoutMs);
+      this.silentWaiters.push(done);
+    });
   }
 
   async recheck(): Promise<boolean> {
@@ -171,6 +185,7 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
   destroy(): void {
     this.unwatch();
     this.supersede();
+    this.endSilenceWatch();
     this.listeners.clear();
   }
 
@@ -203,19 +218,87 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
     } catch (error: unknown) {
       this.inflight -= 1;
       if (this.current === attempt) this.current = null;
+      this.checkSilent();
       const reason = remoteReason(error);
       if (reason === 'other') throw error;
       this.report('offline', reason);
       throw deviceUnavailable();
     }
     this.inflight -= 1;
-    if (generation !== this.generation || this.current !== attempt || this.localPause) {
-      // 在路上時被切段或按了暫停：play 剛生效，再送一次 pause，待查詢確認停止才算安靜。
-      this.pendingSilence = true;
+    // 以請求代號（世代）判斷是否被切段；不能比對 current 物件——輪詢先確認在播時會換掉它（B2）。
+    if (generation !== this.generation || this.localPause) {
+      // 在路上時被切段或按了暫停：play 剛生效，再送一次 pause，並主動輪詢確認穩定停下。
       this.sendPause();
+      this.beginSilenceWatch();
       return;
     }
     this.schedulePoll();
+  }
+
+  /** 我方此刻不要聲音：沒有進行中的一首，或使用者按了暫停。 */
+  private wantsSilence(): boolean {
+    return this.current === null || this.localPause;
+  }
+
+  private beginSilenceWatch(): void {
+    this.pendingSilence = true;
+    this.quietSince = null;
+    this.watchStartedAt = this.deps.now();
+    if (this.silenceTimer === null) this.scheduleSilenceCheck();
+  }
+
+  private endSilenceWatch(): void {
+    this.pendingSilence = false;
+    this.quietSince = null;
+    this.clearSilenceTimer();
+  }
+
+  private scheduleSilenceCheck(): void {
+    this.clearSilenceTimer();
+    if (!this.deps.visibility.isVisible()) return;
+    this.silenceTimer = this.deps.timers.setTimeout(() => {
+      this.silenceTimer = null;
+      void this.checkSilence();
+    }, SILENCE_POLL_MS);
+  }
+
+  private clearSilenceTimer(): void {
+    if (this.silenceTimer === null) return;
+    this.deps.timers.clearTimeout(this.silenceTimer);
+    this.silenceTimer = null;
+  }
+
+  /** 主動確認靜音：這台還在播就再送 pause；連續 SILENCE_SETTLE_MS 都沒在播才算安靜。只在頁面可見時輪詢。 */
+  private async checkSilence(): Promise<void> {
+    this.clearSilenceTimer();
+    if (!this.pendingSilence) return this.checkSilent();
+    if (this.inflight > 0) return this.scheduleSilenceCheck();
+    const playback = await this.deps.remote.playback().catch(() => null);
+    if (!this.pendingSilence) return this.checkSilent();
+    const now = this.deps.now();
+    if (playback) {
+      this.last = { ...playback, at: now };
+      if (playback.isPlaying && playback.deviceId === this.deps.deviceId) {
+        if (this.wantsSilence()) this.sendPause();
+        this.quietSince = null;
+      } else {
+        this.quietSince ??= now;
+        if (now - this.quietSince >= SILENCE_SETTLE_MS) {
+          this.endSilenceWatch();
+          this.checkSilent();
+          return;
+        }
+      }
+    }
+    if (now - this.watchStartedAt > SILENCE_WATCH_MAX_MS) return;
+    this.scheduleSilenceCheck();
+  }
+
+  private checkSilent(): void {
+    if (this.isAudible()) return;
+    const waiters = this.silentWaiters;
+    this.silentWaiters = [];
+    for (const waiter of waiters) waiter();
   }
 
   private sendPause(): void {
@@ -254,8 +337,10 @@ export class SpotifyConnectAdapter implements SpotifyOutput {
         this.emit({ type: 'started', attemptId: current.attemptId, owner: 'track' });
       } else if (this.deps.now() >= current.deadline) {
         this.current = null;
+        // 這一首作廢：若它的 play 之後才回應，視同被切段而暫停。
+        this.generation += 1;
         this.emit({ type: 'failed', attemptId: current.attemptId, owner: 'track', code: 'AUTOPLAY_BLOCKED' });
-        void this.deps.remote.pause(this.deps.deviceId).catch(() => undefined);
+        this.sendPause();
       }
       return;
     }

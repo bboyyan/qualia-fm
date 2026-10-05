@@ -10,7 +10,8 @@
 import { notSupported, type SpotifyOutput, type Timers } from '../spotify/types';
 import type { AdapterEvent, MediaAdapter, ProviderState, StartRequest } from '../types';
 
-const SILENCE_TIMEOUT_MS = 2500;
+/** 介紹前等 Spotify 確認靜音的上限（路徑 C 需要輪詢確認並等狀態穩定）；逾時就不播介紹、不疊音。 */
+const SILENCE_TIMEOUT_MS = 6000;
 /** <audio> 停止若不是立即生效，最多等這麼久；確認不了就不放歌。 */
 const BASE_STOP_TIMEOUT_MS = 1000;
 const BASE_STOP_POLL_MS = 50;
@@ -54,10 +55,14 @@ export class PlaybackRouter implements MediaAdapter {
   start(request: StartRequest): Promise<void> {
     this.sequence += 1;
     if (request.owner === 'track' && request.segment.track.audioLocator.kind === 'spotify_uri') return this.startSpotify(request);
-    const output = this.active === 'spotify' ? this.output : null;
+    const output = this.output;
+    const wasSpotify = this.active === 'spotify';
     this.active = 'base';
     if (!output) return this.base.start(request);
+    // 不只看 active：上一次切段留下、還在路上的 play 也算「可能出聲」（連按兩次下一首，B1'）。
+    // 可能出聲或剛才由 Spotify 播放時，取消它進行中／在路上的請求（換世代），並等確認靜音。
     const audible = output.isAudible();
+    if (!audible && !wasSpotify) return this.base.start(request);
     output.stop();
     if (!audible) return this.base.start(request);
     const sequence = this.sequence;

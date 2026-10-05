@@ -15,7 +15,7 @@
 | Qualia Loved | `apps/server/src/spotify/loved.ts`、`POST /api/spotify/loved` | 只需 `SPOTIFY_ENABLED`＋已連結。URI 由伺服器依節目查（用戶端只送 showId／segmentId）。先讀 `GET /playlists/{id}/items` 去重，不在才 `POST /playlists/{id}/items`；同一首並行只寫一次；**沒有任何刪除**。 |
 | 資料防火牆 | `PlanService.feedback`、`editorialInput.ts` | 帳本只寫日期／種子／LLM 提名的曲名・藝人／評價／原因；LLM 只吃種子、調整文字與帳本列。測試：`apps/server/test/spotifyFirewall.test.ts`。 |
 | 網頁播放 | `apps/web/src/audio/adapters/` | `PlaybackRouter`（預設原樣交給單一 `<audio>`）＋`SpotifyWebPlaybackAdapter`（路徑 P）＋`SpotifyConnectAdapter`（路徑 C）。介紹（`<audio>`）停了並確認已停才送 play（`<audio>` 停止若非立即，最多等 1 秒，確認不了就不放歌）；Spotify 出聲時要播介紹，先暫停並等確認靜音，確認不了就不播介紹。 |
-| 切段競態（B1） | 同上 | 每次切段換「世代」。play 還在路上時被下一首／JUMP／暫停：P 在生效後立刻 `player.pause()`，且我方不要聲音時 SDK 若回報在播一律再暫停；C 的 stop 只要有進行中的一首就送 pause，生效後再送一次並輪詢確認停止。「play 在路上」與「遲到的 play 待確認靜音」都算可能出聲，介紹會等到確認靜音才開始；等待期間若又被切段，那段介紹就不再開始。介紹播放中若 Spotify 遲到回報 started，router 停掉 Spotify、不轉給引擎。測試：`apps/web/test/spotifyRace.test.ts`。 |
+| 切段競態（B1） | 同上 | 每次切段換「世代」。play 還在路上時被下一首／JUMP／暫停：P 在生效後立刻 `player.pause()`，且我方不要聲音時 SDK 若回報在播一律再暫停；C 的 stop 只要有進行中的一首就送 pause，生效後再送一次並輪詢確認停止。「play 在路上」與「遲到的 play 待確認靜音」都算可能出聲，介紹會等到確認靜音才開始；等待期間若又被切段，那段介紹就不再開始。介紹播放中若 Spotify 遲到回報 started，router 停掉 Spotify、不轉給引擎。介紹前一律檢查 Spotify 輸出是否可能出聲（不只看上一段是否由 Spotify 播放），連按多次下一首也會等。是否被切段一律以請求世代判斷（不比對 current 物件，避免 SDK／輪詢先確認在播時誤把剛開始的歌暫停）。P 的待確認靜音只接受遲到那一首回報的 paused（舊曲目或 null 不算）；C 送出 pause 後主動輪詢（只在頁面可見時），這台還在播就再暫停，連續 1.5 秒沒在播才算安靜（最多輪詢 30 秒）；介紹最多等 6 秒，確認不了就不播介紹。測試：`apps/web/test/spotifyRace.test.ts`。 |
 | 網頁 UI | `apps/web/src/features/spotify/`、`features/player/LoveStep.tsx` | 沿用既有 `--q-*` 配色與 Button／InlineRecovery／BottomSheet／設定頁 group 元件；design-v1 只採旅程、文案與狀態。 |
 
 ## 2. 新增 env
