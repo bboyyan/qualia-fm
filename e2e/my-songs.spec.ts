@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { expectNoHorizontalOverflow } from './support';
+import { expectNoHorizontalOverflow, neutralizeLedger } from './support';
 
 /**
  * BRA-135「我的歌」：預設網址（無 ?developer=1）走真的品味帳本 API（BRA-134）。
@@ -50,20 +50,6 @@ async function seedLedger(request: APIRequestContext): Promise<Seeded> {
     expect(res.status()).toBe(201);
   }
   return { titles: show.segments.slice(0, 4).map((segment) => segment.candidate.title), artist: show.segments[0]!.candidate.artist };
-}
-
-/**
- * 測完把帳本恢復中性：清掉所有釘選／封鎖、評價全改「還行」（選歌規則不加權）。
- * 其他 spec 共用同一台伺服器與帳本，留下的釘選／封鎖／愛／不對會改變它們的 MOCK 節目順序。
- */
-async function neutralizeLedger(request: APIRequestContext): Promise<void> {
-  const headers = { 'X-CSRF-Token': await csrfOf(request) };
-  const { marks } = (await (await request.get('/api/taste/marks')).json()) as { marks: { trackKey: string; mark: string | null; rating: string | null }[] };
-  for (const mark of marks) {
-    const edit = { ...(mark.mark !== null ? { mark: null } : {}), ...(mark.rating !== null && mark.rating !== '還行' ? { rating: '還行' } : {}) };
-    if (Object.keys(edit).length === 0) continue;
-    expect((await request.post('/api/taste/marks', { headers, data: { target: { trackKey: mark.trackKey }, ...edit } })).ok()).toBe(true);
-  }
 }
 
 test.afterEach(async ({ page }) => {
@@ -294,12 +280,23 @@ test('BRA-156：開台同步釘選／收藏、去重與封鎖，取消後重開�
   const library = page.getByTestId('ledger-seeds');
   await expect(library.locator('summary')).toContainText('我的歌（2）');
   await expect(library).not.toHaveAttribute('open', '');
+  await expect(page.getByTestId('generate')).toHaveText('全選・快速開台');
   await page.screenshot({ path: testInfo.outputPath('bra156-home-collapsed.png') });
   await library.locator('summary').click();
   const list = page.getByTestId('ledger-seed-list');
   const check = (title: string) => list.getByRole('checkbox', { name: new RegExp(title) });
   await expect(check(pinned)).not.toBeChecked();
   await expect(check(loved)).not.toBeChecked();
+  await expect(page.getByTestId('generate')).toHaveText('快速開台（已選 1／3）');
+  await page.getByTestId('ledger-seed-list-all').click();
+  await expect(check(pinned)).toBeChecked();
+  await expect(check(loved)).toBeChecked();
+  await expect(page.getByTestId('generate')).toHaveText('全選・快速開台');
+  await page.getByTestId('ledger-seed-list-all').click();
+  await expect(page.getByTestId('generate')).toHaveText('快速開台（已選 1／3）');
+  await library.locator('summary').click();
+  await expect(page.getByTestId('generate')).toHaveText('全選・快速開台');
+  await library.locator('summary').click();
   await expect(page.getByRole('checkbox', { name: new RegExp(blocked) })).toHaveCount(0);
   await expect(list.getByRole('button', { name: /從清單移除/ })).toHaveCount(0);
   await check(loved).check();

@@ -9,8 +9,8 @@ import { useAppStore } from '../../app/appStore';
 import { Button } from '../../ui/Button';
 import { Chip, SegmentedControl, type SegmentOption } from '../../ui/controls';
 import { SelectableList } from './SelectableList';
-import { draftProblem, mergeLedgerSeeds, removeSongSeed, textProblem, toggleSongSeed, withPendingSong, type Draft } from './seedList';
-import { startLabel, toggleAll } from './selection';
+import { draftProblem, mergeLedgerSeeds, removeSongSeed, songStartLabel, textProblem, toggleSongSeed, withPendingSong, type Draft } from './seedList';
+import { toggleAll } from './selection';
 import styles from './seed.module.css';
 
 const MODES: readonly SegmentOption<SeedKind>[] = [
@@ -42,7 +42,9 @@ interface SeedComposerProps {
 /** 舊名稱保留給文字模式（感覺／聲音）。 */
 export const seedProblem = textProblem;
 
-function SongSeeds({ draft, fieldId }: { draft: Draft; fieldId: string }) {
+function SongSeeds({ draft, fieldId, ledgerExpanded, onLedgerExpanded }: {
+  draft: Draft; fieldId: string; ledgerExpanded: boolean; onLedgerExpanded: (expanded: boolean) => void;
+}) {
   const setDraft = useAppStore((s) => s.setDraft);
   const announce = useAppStore((s) => s.announce);
   const add = () => {
@@ -81,7 +83,7 @@ function SongSeeds({ draft, fieldId }: { draft: Draft; fieldId: string }) {
     <>
       {list(baseSeeds, '種子清單', 'seed-list')}
       {ledgerSeeds.length > 0 && (
-        <details className={styles.ledgerSeeds} data-testid="ledger-seeds">
+        <details className={styles.ledgerSeeds} data-testid="ledger-seeds" open={ledgerExpanded} onToggle={(event) => onLedgerExpanded(event.currentTarget.open)}>
           <summary>我的歌（{ledgerSeeds.length}）・已選 {ledgerSeeds.filter((seed) => draft.selectedSeedIds.includes(seed.id)).length}</summary>
           <p className={styles.seedHint}>收藏與釘選可當種子；取消勾選只影響本輪。移除請到「我的歌」取消收藏／釘選。</p>
           {list(ledgerSeeds, '收藏／釘選', 'ledger-seed-list')}
@@ -121,6 +123,7 @@ function SongSeeds({ draft, fieldId }: { draft: Draft; fieldId: string }) {
 export function SeedComposer({ continuing, onSubmit, busy = false, loadLedger }: SeedComposerProps) {
   const draft = useAppStore((s) => s.draft);
   const setDraft = useAppStore((s) => s.setDraft);
+  const [ledgerExpanded, setLedgerExpanded] = useState(false);
   const [ledgerLoading, setLedgerLoading] = useState(Boolean(loadLedger));
   const [ledgerError, setLedgerError] = useState(false);
   const [ledgerAttempt, setLedgerAttempt] = useState(0);
@@ -149,7 +152,7 @@ export function SeedComposer({ continuing, onSubmit, busy = false, loadLedger }:
   const showError = song ? problem !== null : touched && problem !== null && (draft.text.length > 0 || count > SEED_MAX_GRAPHEMES);
   const pending = withPendingSong(draft);
   const label = song
-    ? startLabel(continuing ? '建立下一段' : '快速開台', pending.selectedSeedIds.length, pending.seeds.length)
+    ? songStartLabel(continuing ? '建立下一段' : '快速開台', draft, ledgerExpanded)
     : continuing ? '建立下一段' : '為我開台';
 
   const submit = () => {
@@ -171,7 +174,7 @@ export function SeedComposer({ continuing, onSubmit, busy = false, loadLedger }:
       <section className={styles.card} aria-label="電台起點">
         <SegmentedControl label="輸入方式" options={MODES} value={draft.kind} onChange={(kind) => setDraft({ kind })} />
         {song ? (
-          <SongSeeds draft={draft} fieldId={fieldId} />
+          <SongSeeds draft={draft} fieldId={fieldId} ledgerExpanded={ledgerExpanded} onLedgerExpanded={setLedgerExpanded} />
         ) : (
           <>
             <label className={styles.fieldLabel} htmlFor={`${fieldId}-seed`}>

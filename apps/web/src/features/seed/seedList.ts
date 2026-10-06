@@ -5,7 +5,7 @@
  */
 import { ARTIST_MAX_GRAPHEMES, SEED_MAX_GRAPHEMES, countGraphemes, type PlanRequest, type SeedKind, type TrackMark, trackKeyOf } from '@qualia/contracts';
 import type { Settings } from '../settings/settings';
-import { pickSelected, toggleId } from './selection';
+import { pickSelected, startLabel, toggleId } from './selection';
 
 export interface SongSeed {
   readonly id: string;
@@ -104,6 +104,13 @@ export function removeSongSeed(draft: Draft, id: string): Draft {
 
 export function toggleSongSeed(draft: Draft, id: string): Draft {
   return { ...draft, selectedSeedIds: toggleId(draft.selectedSeedIds, id) };
+}
+
+/** D-41：開台鈕只統計可見列；收合的帳本列不改變選取或送出的種子。 */
+export function songStartLabel(verb: string, draft: Draft, ledgerExpanded: boolean): string {
+  const visible = draft.seeds.filter((seed) => !seed.ledgerOnly || ledgerExpanded);
+  const selected = visible.filter((seed) => draft.selectedSeedIds.includes(seed.id));
+  return startLabel(verb, selected.length, visible.length);
 }
 
 const pendingSongBlocked = (draft: Draft): boolean => Boolean(draft.blockedSeedKeys?.includes(seedKey(draft.text, draft.artist)));

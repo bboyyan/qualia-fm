@@ -17,6 +17,7 @@ import {
   toggleSongSeed,
   draftProblem,
   removeSongSeed,
+  songStartLabel,
   toPlanRequest,
   withPendingSong,
 } from '../src/features/seed/seedList';
@@ -266,4 +267,20 @@ it('BRA-156：同步後手動輸入已封鎖同曲也不能重新放進選單，
   expect(draftProblem(pending)).toContain('已封鎖');
   const unblocked = mergeLedgerSeeds(draft, [ledgerSong('Blocked')]);
   expect(addSongSeed(unblocked, 'Blocked', 'Artist').seeds.map((seed) => seed.title)).toEqual(['Time Flows Ever Onward', 'Blocked']);
+});
+
+it('D-41：開台鈕依可見項目顯示全選／部分；收合帳本不計 X、N，全選後恢復', () => {
+  const base = addSongSeed(DEFAULT_DRAFT, 'Manual', 'Artist');
+  const draft = mergeLedgerSeeds(base, [ledgerSong('Loved', { rating: '愛' })]);
+  expect(songStartLabel('快速開台', draft, false)).toBe('全選・快速開台');
+  expect(songStartLabel('快速開台', draft, true)).toBe('快速開台（已選 2／3）');
+  const partial = toggleSongSeed(draft, DEFAULT_SEED.id);
+  expect(songStartLabel('快速開台', partial, false)).toBe('快速開台（已選 1／2）');
+  expect(songStartLabel('快速開台', partial, true)).toBe('快速開台（已選 1／3）');
+  const all = { ...partial, selectedSeedIds: toggleAll(partial.seeds.map((seed) => seed.id), partial.selectedSeedIds) };
+  expect(songStartLabel('快速開台', all, true)).toBe('全選・快速開台');
+  const hiddenSelected = toggleSongSeed(all, DEFAULT_SEED.id);
+  expect(songStartLabel('快速開台', hiddenSelected, false)).toBe('快速開台（已選 1／2）');
+  expect(songStartLabel('快速開台', hiddenSelected, true)).toBe('快速開台（已選 2／3）');
+  expect(draft.selectedSeedIds).toEqual(base.selectedSeedIds);
 });
