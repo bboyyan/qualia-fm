@@ -55,7 +55,8 @@ test.describe('T02 shell and design foundation', () => {
     await openApp(page);
     await page.getByRole('button', { name: '夜裡慢慢放鬆' }).click();
     await expect(page.getByTestId('seed-input')).toHaveValue('夜裡慢慢放鬆');
-    await expect(page.getByRole('heading', { name: /不是同類型/ })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: /開始探索你的人生終極曲目/ })).toBeVisible();
+    await expect(page.getByTestId('generation-view')).toHaveCount(0);
   });
 
   test('CTA is disabled when empty; >500 graphemes shows an error and keeps the text (AC02)', async ({ page }) => {
@@ -87,10 +88,10 @@ test.describe('T02 shell and design foundation', () => {
 
   test('segmented control is keyboard operable with arrow keys', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('radio', { name: '感覺' }).focus();
-    await page.keyboard.press('ArrowRight');
-    await expect(page.getByRole('radio', { name: '歌曲' })).toBeFocused();
-    await expect(page.getByRole('radio', { name: '歌曲' })).toHaveAttribute('aria-checked', 'true');
+    await page.getByRole('radio', { name: '從一種感覺' }).focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('radio', { name: '從一首歌' })).toBeFocused();
+    await expect(page.getByRole('radio', { name: '從一首歌' })).toHaveAttribute('aria-checked', 'true');
     await expect(page.getByLabel('藝人（選填）')).toBeVisible();
   });
 

@@ -83,7 +83,7 @@ test.describe('T03 開台與生成', () => {
 
   test('song mode sends title and artist through the same pipeline (AC03)', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('radio', { name: '歌曲' }).click();
+    await page.getByRole('radio', { name: '從一首歌' }).click();
     await fillSeed(page, '某首歌');
     await page.getByLabel('藝人（選填）').fill('某位藝人');
     await page.getByTestId('generate').click();

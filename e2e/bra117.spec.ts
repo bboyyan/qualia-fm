@@ -14,12 +14,13 @@ test.describe('BRA-117', () => {
 
   test('開台預設歌曲模式＋預設種子卡；全選一鍵開台；Ready 同一套勾選清單，只播勾選的', async ({ page }) => {
     await openApp(page, 'mock');
-    await expect(page.getByRole('radio', { name: '歌曲', exact: true })).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByRole('radio', { name: '從一首歌', exact: true })).toHaveAttribute('aria-checked', 'true');
     const seeds = page.getByTestId('seed-list');
     await expect(seeds).toContainText('預設種子・可更換');
     await expect(seeds).toContainText('Time Flows Ever Onward');
     await expect(seeds).toContainText('Evan Call');
-    await expect(page.getByTestId('generate')).toHaveText(/全選・快速開台/);
+    // BRA-170 順便修 A：清單只有 1 首（已選 1／1）不寫「全選・」。
+    await expect(page.getByTestId('generate')).toHaveText('快速開台');
     await expectNoHorizontalOverflow(page);
     await page.getByTestId('generate').click();
     const ready = page.getByTestId('ready-tracks');

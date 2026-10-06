@@ -19,10 +19,28 @@ export interface SongSeed {
   readonly ledgerOnly?: boolean;
 }
 
+/** BRA-170：「從一種感覺」的 8 個情境標籤。label 給人看，prompt 是實際送去選歌的文字（照設計稿 README，不可改寫）。 */
+export const MOOD_PRESETS = [
+  { id: 'calm', label: '平靜', prompt: '平靜下來的心情：放慢呼吸，柔和、多一點留白' },
+  { id: 'uplift', label: '振奮', prompt: '想被振奮：明亮、有推進感，讓人想動起來' },
+  { id: 'workout', label: '健身', prompt: '運動時穩定推進的節奏與能量' },
+  { id: 'heartbreak', label: '失戀', prompt: '失戀後的心情：有點空、溫柔，慢慢走出來' },
+  { id: 'late-night', label: '深夜', prompt: '深夜獨處：安靜、貼近耳邊，不吵醒誰' },
+  { id: 'commute', label: '通勤', prompt: '通勤路上：順順地往前走，不打擾思緒' },
+  { id: 'focus', label: '專注', prompt: '需要專注：穩定、少人聲，不搶注意力' },
+  { id: 'rainy', label: '雨天', prompt: '雨天的氣氛：潮濕、慵懶，帶一點溫度' },
+] as const satisfies readonly { id: string; label: string; prompt: string }[];
+
+export type MoodId = (typeof MOOD_PRESETS)[number]['id'];
+
 export interface Draft {
   readonly kind: SeedKind;
-  /** 感覺／聲音模式的輸入；歌曲模式是「加入一首」的歌名欄。 */
+  /** 歌曲模式「加入一首」的歌名欄（舊的聲音模式也用這欄）。 */
   readonly text: string;
+  /** 從一種感覺：選中的情境標籤（單選）。選填欄位，舊草稿沒有時視為 null。 */
+  readonly mood?: MoodId | null;
+  /** 從一種感覺：「再補一句」。和歌名欄分開，切模式時互不覆蓋；舊草稿沒有時視為空字串。 */
+  readonly feelingText?: string;
   readonly artist: string;
   readonly seeds: readonly SongSeed[];
   readonly selectedSeedIds: readonly string[];
@@ -48,6 +66,8 @@ export const DEFAULT_SEED_SPOTIFY_URI = 'spotify:track:5filwtvsV0xyRFqja0Whtr';
 export const DEFAULT_DRAFT: Draft = {
   kind: 'song',
   text: '',
+  mood: null,
+  feelingText: '',
   artist: '',
   seeds: [DEFAULT_SEED],
   selectedSeedIds: [DEFAULT_SEED.id],
@@ -137,8 +157,40 @@ export function textProblem(text: string): string | null {
   return null;
 }
 
+const moodOf = (id: MoodId | null | undefined) => MOOD_PRESETS.find((mood) => mood.id === id) ?? null;
+
+/** 組 seed.text：只有標籤＝prompt；標籤＋句＝「prompt。句」；只有句＝句。全空回空字串。 */
+export function composeFeelingText(mood: MoodId | null | undefined, text: string | undefined): string {
+  const own = (text ?? '').trim();
+  const preset = moodOf(mood);
+  if (!preset) return own;
+  return own ? `${preset.prompt}。${own}` : preset.prompt;
+}
+
+/** 單選：點同一個取消，點別的換掉。 */
+export function toggleMood(draft: Draft, id: MoodId): Draft {
+  return { ...draft, mood: draft.mood === id ? null : id };
+}
+
+/** 範例 chip：取代「再補一句」（不附加）；在從一首歌點會切到從一種感覺，不選標籤、不動歌曲勾選。再點同一句清空。 */
+export function applyExample(draft: Draft, example: string): Draft {
+  if (draft.kind === 'feeling' && draft.feelingText === example) return { ...draft, feelingText: '' };
+  return { ...draft, kind: 'feeling', feelingText: example };
+}
+
+/** 從一種感覺的主按鈕：有標籤寫「從「X」…」，否則沿用現行「為我開台」／「建立下一段」。 */
+export function feelingStartLabel(draft: Draft, continuing: boolean): string {
+  const preset = moodOf(draft.mood);
+  if (preset) return `從「${preset.label}」${continuing ? '建立下一段' : '開台'}`;
+  return continuing ? '建立下一段' : '為我開台';
+}
+
 /** 送出前的檢查；回傳給人看的下一步，沒問題回 null。 */
 export function draftProblem(draft: Draft): string | null {
+  if (draft.kind === 'feeling') {
+    const text = composeFeelingText(draft.mood, draft.feelingText);
+    return text ? textProblem(text) : '先選一個感覺，或寫一句。';
+  }
   if (draft.kind !== 'song') return textProblem(draft.text);
   if (draft.text.trim() && pendingSongBlocked(draft)) return '這首歌已封鎖，請到「我的歌」解除封鎖後再加入。';
   const seeds = selectedSeeds(withPendingSong(draft));
@@ -164,5 +216,12 @@ export function toPlanRequest(draft: Draft, settings: Settings, tuning: string |
     const { text, artist } = combineSeeds(selectedSeeds(withPendingSong(draft)));
     return { seed: { kind: 'song', text, artist }, requestedCount: 5, dj, tuning };
   }
-  return { seed: { kind: draft.kind, text: draft.text.trim(), artist: null }, requestedCount: 5, dj, tuning };
+  return { seed: { kind: draft.kind, text: draftSeedText(draft), artist: null }, requestedCount: 5, dj, tuning };
+}
+
+/** 這份草稿實際會送出的 seed.text（生成畫面在請求還沒建立前也用它）。 */
+export function draftSeedText(draft: Draft): string {
+  if (draft.kind === 'song') return combineSeeds(selectedSeeds(withPendingSong(draft))).text;
+  if (draft.kind === 'feeling') return composeFeelingText(draft.mood, draft.feelingText);
+  return draft.text.trim();
 }

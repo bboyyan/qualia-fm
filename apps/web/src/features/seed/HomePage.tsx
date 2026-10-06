@@ -1,12 +1,11 @@
 import { useAppStore } from '../../app/appStore';
 import { api, gemWall, generation } from '../../app/services';
 import { GemWallEntry } from '../gems/GemWallEntry';
-import { Eyebrow } from '../../ui/Feedback';
 import { Icon } from '../../ui/Icon';
 import { GenerationView } from './GenerationView';
 import { ReadyView } from './ReadyView';
 import { SeedComposer } from './SeedComposer';
-import { toPlanRequest } from './seedList';
+import { draftSeedText, toPlanRequest } from './seedList';
 import { useGeneration } from './useGeneration';
 import styles from './seed.module.css';
 
@@ -18,17 +17,11 @@ interface HomePageProps {
 function Hero() {
   return (
     <section className={styles.hero} aria-labelledby="home-title">
-      <Eyebrow>YOUR FEELING, ON AIR.</Eyebrow>
       <h1 id="home-title">
-        不是同類型。
+        從<em>一首歌</em>，或<em>一種感覺</em>，
         <br />
-        是<em>同一種感覺。</em>
+        開始探索你的人生終極曲目。
       </h1>
-      <p>
-        給我一首歌，或此刻的心情。
-        <br />
-        讓下一首，接住你想留下的感覺。
-      </p>
     </section>
   );
 }
@@ -45,7 +38,7 @@ export function HomePage({ hasActiveShow, onStartShow }: HomePageProps) {
     return (
       <GenerationView
         state={state}
-        seedText={state.request?.seed.text ?? draft.text}
+        seedText={state.request?.seed.text ?? draftSeedText(draft)}
         onCancel={() => {
           generation.cancel();
           announce('已取消，輸入保留');

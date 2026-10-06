@@ -2,34 +2,32 @@
  * S01 composer. Enter inserts a newline (only the button submits); IME composition never
  * submits; the draft survives tab switches and cancelled generations (FR01, AC02).
  * BRA-117：預設「歌曲」模式＝種子清單（預設種子＋自己加入的歌），可多選；主按鈕一鍵「全選・快速開台」。
+ * BRA-170：入口只剩「從一首歌／從一種感覺」（預設從一首歌、沒有徽章）；從一種感覺＝情境標籤（單選）＋再補一句，
+ * 主按鈕上方完整顯示這次真正送出的 seed.text。
  */
 import { useEffect, useId, useRef, useState } from 'react';
 import { SEED_MAX_GRAPHEMES, countGraphemes, type SeedKind, type TrackMark } from '@qualia/contracts';
 import { useAppStore } from '../../app/appStore';
 import { Button } from '../../ui/Button';
 import { Chip, SegmentedControl, type SegmentOption } from '../../ui/controls';
+import { Icon } from '../../ui/Icon';
 import { SelectableList } from './SelectableList';
-import { draftProblem, mergeLedgerSeeds, removeSongSeed, songStartLabel, textProblem, toggleSongSeed, withPendingSong, type Draft } from './seedList';
+import {
+  MOOD_PRESETS, applyExample, draftProblem, draftSeedText, feelingStartLabel, mergeLedgerSeeds, removeSongSeed,
+  songStartLabel, textProblem, toggleMood, toggleSongSeed, withPendingSong, type Draft,
+} from './seedList';
 import { toggleAll } from './selection';
 import styles from './seed.module.css';
 
+/** 契約的 'sound' 保留（舊歷史可能有），入口不再提供。 */
 const MODES: readonly SegmentOption<SeedKind>[] = [
-  { value: 'feeling', label: '感覺', icon: 'spark' },
-  { value: 'song', label: '歌曲', icon: 'song' },
-  { value: 'sound', label: '聲音', icon: 'sound' },
+  { value: 'song', label: '從一首歌', icon: 'song' },
+  { value: 'feeling', label: '從一種感覺', icon: 'spark' },
 ];
 
-const LABEL: Record<Exclude<SeedKind, 'song'>, string> = {
-  feeling: '此刻，你想聽見什麼？',
-  sound: '描述你想要的聲音質地',
-};
-
-const PLACEHOLDER: Record<Exclude<SeedKind, 'song'>, string> = {
-  feeling: '例如：想在夜裡慢慢放鬆。',
-  sound: '例如：溫暖的吉他，留一點空間感。',
-};
-
 export const EXAMPLES = ['夜裡慢慢放鬆', '想找回一點精神', '陪我安靜走一段'] as const;
+
+const PREVIEW_EMPTY = '先選一個感覺，或寫一句。這裡會顯示這次開台用的完整句子。';
 
 interface SeedComposerProps {
   /** 已有節目在播：按鈕改成「建立下一段」。 */
@@ -95,7 +93,7 @@ function SongSeeds({ draft, fieldId, ledgerExpanded, onLedgerExpanded }: {
       </label>
       <textarea
         id={`${fieldId}-seed`}
-        className={styles.seedField}
+        className={`${styles.artistField} ${styles.songField}`}
         rows={1}
         value={draft.text}
         placeholder="輸入歌名"
@@ -116,6 +114,65 @@ function SongSeeds({ draft, fieldId, ledgerExpanded, onLedgerExpanded }: {
       <Button variant="outline" icon="song" disabled={!draft.text.trim()} onClick={add} data-testid="add-seed">
         加入清單並勾選
       </Button>
+    </>
+  );
+}
+
+interface FeelingFieldsProps {
+  draft: Draft;
+  fieldId: string;
+  count: number;
+  showError: boolean;
+  onComposing: (composing: boolean) => void;
+  onBlur: () => void;
+}
+
+function FeelingFields({ draft, fieldId, count, showError, onComposing, onBlur }: FeelingFieldsProps) {
+  const setDraft = useAppStore((s) => s.setDraft);
+  return (
+    <>
+      <div className={styles.moodHead}>
+        <span className={styles.fieldLabel} id={`${fieldId}-mood`}>此刻是哪一種？</span>
+        <span className={styles.moodHint}>選一個，再點一次取消</span>
+      </div>
+      <ul className={styles.moods} role="group" aria-labelledby={`${fieldId}-mood`} data-testid="mood-presets">
+        {MOOD_PRESETS.map((mood) => {
+          const selected = draft.mood === mood.id;
+          return (
+            <li key={mood.id}>
+              <Chip selected={selected} onClick={() => setDraft(toggleMood(draft, mood.id))}>
+                {selected && <Icon name="check" size={16} />}
+                {mood.label}
+              </Chip>
+            </li>
+          );
+        })}
+      </ul>
+      <div className={styles.custom}>
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-seed`}>
+          再補一句 <small className={styles.optional}>（選填，也可以只寫這句）</small>
+        </label>
+        <textarea
+          id={`${fieldId}-seed`}
+          className={styles.seedField}
+          rows={1}
+          value={draft.feelingText ?? ''}
+          placeholder="例如：下班一個人走回家。"
+          aria-describedby={`${fieldId}-help ${fieldId}-error`}
+          aria-invalid={showError || undefined}
+          onChange={(e) => setDraft({ feelingText: e.target.value })}
+          onCompositionStart={() => onComposing(true)}
+          onCompositionEnd={() => onComposing(false)}
+          onBlur={onBlur}
+          data-testid="seed-input"
+        />
+        <div className={styles.counter}>
+          <span id={`${fieldId}-help`}>不需要懂樂理，照你的感覺說。</span>
+          <span className={count > SEED_MAX_GRAPHEMES ? styles.over : undefined} aria-live="polite" data-testid="seed-count">
+            {count} / {SEED_MAX_GRAPHEMES}
+          </span>
+        </div>
+      </div>
     </>
   );
 }
@@ -147,13 +204,12 @@ export function SeedComposer({ continuing, onSubmit, busy = false, loadLedger }:
   const composing = useRef(false);
   const fieldId = useId();
   const song = draft.kind === 'song';
-  const count = countGraphemes(draft.text);
+  const seedText = song ? '' : draftSeedText(draft);
+  const count = countGraphemes(seedText);
   const problem = draftProblem(draft);
-  const showError = song ? problem !== null : touched && problem !== null && (draft.text.length > 0 || count > SEED_MAX_GRAPHEMES);
+  const showError = song ? problem !== null : touched && problem !== null && ((draft.feelingText ?? '').length > 0 || count > SEED_MAX_GRAPHEMES);
   const pending = withPendingSong(draft);
-  const label = song
-    ? songStartLabel(continuing ? '建立下一段' : '快速開台', draft, ledgerExpanded)
-    : continuing ? '建立下一段' : '為我開台';
+  const label = song ? songStartLabel(continuing ? '建立下一段' : '快速開台', draft, ledgerExpanded) : feelingStartLabel(draft, continuing);
 
   const submit = () => {
     setTouched(true);
@@ -176,31 +232,14 @@ export function SeedComposer({ continuing, onSubmit, busy = false, loadLedger }:
         {song ? (
           <SongSeeds draft={draft} fieldId={fieldId} ledgerExpanded={ledgerExpanded} onLedgerExpanded={setLedgerExpanded} />
         ) : (
-          <>
-            <label className={styles.fieldLabel} htmlFor={`${fieldId}-seed`}>
-              {LABEL[draft.kind]}
-            </label>
-            <textarea
-              id={`${fieldId}-seed`}
-              className={styles.seedField}
-              rows={3}
-              value={draft.text}
-              placeholder={PLACEHOLDER[draft.kind]}
-              aria-describedby={`${fieldId}-help ${fieldId}-error`}
-              aria-invalid={showError || undefined}
-              onChange={(e) => setDraft({ text: e.target.value })}
-              onCompositionStart={() => (composing.current = true)}
-              onCompositionEnd={() => (composing.current = false)}
-              onBlur={() => setTouched(true)}
-              data-testid="seed-input"
-            />
-            <div className={styles.counter}>
-              <span id={`${fieldId}-help`}>不需要懂樂理，照你的感覺說。</span>
-              <span className={count > SEED_MAX_GRAPHEMES ? styles.over : undefined} aria-live="polite">
-                {count} / {SEED_MAX_GRAPHEMES}
-              </span>
-            </div>
-          </>
+          <FeelingFields
+            draft={draft}
+            fieldId={fieldId}
+            count={count}
+            showError={showError}
+            onComposing={(value) => (composing.current = value)}
+            onBlur={() => setTouched(true)}
+          />
         )}
         <p id={`${fieldId}-error`} className={styles.error} role={showError ? 'alert' : undefined}>
           {showError ? problem : ''}
@@ -215,15 +254,35 @@ export function SeedComposer({ continuing, onSubmit, busy = false, loadLedger }:
           }} disabled={ledgerLoading}>重新讀取</Button>
         </p>
       )}
-      <div className={styles.chips} role="group" aria-label="範例感覺（只會填入，不會開始）">
-        {EXAMPLES.map((example) => (
-          <Chip key={example} selected={draft.kind === 'feeling' && draft.text === example} onClick={() => setDraft({ kind: 'feeling', text: example })}>
-            {example}
-          </Chip>
-        ))}
+      <div className={styles.examples} role="group" aria-labelledby={`${fieldId}-examples`}>
+        <span className={styles.examplesHead} id={`${fieldId}-examples`}>
+          <strong>常用的一句感受</strong>
+          {song ? '・點了會切到「從一種感覺」' : '・點了填入「再補一句」'}
+        </span>
+        <div className={styles.chips}>
+          {EXAMPLES.map((example) => (
+            <Chip key={example} selected={!song && draft.feelingText === example} onClick={() => setDraft(applyExample(draft, example))}>
+              {example}
+            </Chip>
+          ))}
+        </div>
       </div>
+      {!song && (
+        <div className={`${styles.preview} ${seedText ? '' : styles.previewEmpty}`} id={`${fieldId}-preview`} aria-live="polite" data-testid="seed-preview">
+          <p className={styles.previewLabel}>這次開台會用</p>
+          <p className={styles.previewQuote}>{seedText || PREVIEW_EMPTY}</p>
+        </div>
+      )}
       <div className={styles.cta}>
-        <Button type="submit" block trailingIcon="arrow" loading={busy} disabled={problem !== null || ledgerLoading} data-testid="generate">
+        <Button
+          type="submit"
+          block
+          trailingIcon="arrow"
+          loading={busy}
+          disabled={problem !== null || ledgerLoading}
+          aria-describedby={song ? undefined : `${fieldId}-preview`}
+          data-testid="generate"
+        >
           {label}
         </Button>
         <p className={styles.ctaNote}>5 首歌，一段有理由的相遇。</p>
