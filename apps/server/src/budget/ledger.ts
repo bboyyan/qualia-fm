@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute } from 'node:path';
 import { z } from 'zod';
+import { BudgetQuotaError } from './quota.js';
 
 const amount = z.number().finite().nonnegative();
 const daySchema = z.strictObject({ usd: amount, plans: z.number().int().nonnegative(), graphemes: z.number().int().nonnegative() });
@@ -50,7 +51,12 @@ export class BudgetLedger {
     const day = taipeiDay(this.now());
     const old = this.data.days[day] ?? { usd: 0, plans: 0, graphemes: 0 };
     const next = { usd: round(old.usd + usd), plans: old.plans + plans, graphemes: old.graphemes + graphemes };
-    if (next.usd > this.limits.dailyUsd || round(this.data.totalUsd + usd) > this.limits.totalUsd || next.plans > this.limits.plansPerDay || next.graphemes > this.limits.graphemesPerDay) throw new Error('今日或總預算已達上限，請使用示範模式或稍後再試。');
+    // 多個上限同時超出時優先總額，避免前端誤承諾換日恢復。
+    const quotaLimit = round(this.data.totalUsd + usd) > this.limits.totalUsd ? 'totalUsd'
+      : next.usd > this.limits.dailyUsd ? 'dailyUsd'
+        : next.plans > this.limits.plansPerDay ? 'plans'
+          : next.graphemes > this.limits.graphemesPerDay ? 'graphemes' : null;
+    if (quotaLimit) throw new BudgetQuotaError({ quotaLimit, graphemesUsed: old.graphemes, graphemesLimit: this.limits.graphemesPerDay, segmentGraphemes: graphemes });
     this.data.days[day] = next;
     this.data.totalUsd = round(this.data.totalUsd + usd);
     this.save();

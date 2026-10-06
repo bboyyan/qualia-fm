@@ -23,7 +23,8 @@ export class ShowHistory {
   record(plan: ShowPlan, djEnabled: boolean): void {
     const shows = this.list();
     if (shows.some((show) => show.showId === plan.showId)) return;
-    const ttsDegraded = djEnabled && plan.warnings.some((warning) => warning.startsWith(PROVIDER_NOTICES.tts));
+    const ttsDegraded = djEnabled && plan.warnings.some((warning) =>
+      [PROVIDER_NOTICES.tts, PROVIDER_NOTICES.ttsQuotaDaily, PROVIDER_NOTICES.ttsQuotaTotal].some((prefix) => warning.startsWith(prefix)));
     const summary = ShowSummarySchema.parse({
       showId: plan.showId, createdAt: plan.createdAt, seed: plan.seed,
       trackCount: plan.segments.length,

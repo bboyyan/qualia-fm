@@ -125,6 +125,8 @@ export type SpeechLocator = z.infer<typeof SpeechLocatorSchema>;
 export const PROVIDER_NOTICES = {
   llm: 'AI 選歌本輪改用 MOCK 示範',
   tts: 'AI 語音本輪改為文字介紹＋提示音',
+  ttsQuotaDaily: 'AI 語音每日額度已用完',
+  ttsQuotaTotal: 'AI 語音額度已用完',
 } as const;
 export const isProviderNotice = (warning: string): boolean =>
   Object.values(PROVIDER_NOTICES).some((prefix) => warning.startsWith(prefix));

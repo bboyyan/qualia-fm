@@ -42,7 +42,8 @@ API 的 `speech.kind=ai_audio` 必須含 `aiVoice: true`，DJ 區塊顯示「AI 
 | `TTS_DEADLINE_EXHAUSTED` | 開始下一段前 `remainingMs === 0`；該段未呼叫 synthesize，其餘段落一併降級 |
 | `TTS_DEADLINE_TIMEOUT` | 已開始合成後，段落的 deadline signal 已中止；包括排隊等待或請求逾時 |
 | `TTS_PROVIDER_TIMEOUT` | 整輪 signal 未中止、段落 deadline signal 未中止，但 provider 拋出 `AppError` 且 code 為 `PLAN_TIMEOUT`（自身 HTTP／本文 timeout） |
-| `TTS_PROVIDER_FAILED` | 整輪與段落 deadline signal 未中止時的其他合成失敗，例如 HTTP 失敗或預算拒絕 |
+| `TTS_QUOTA_EXCEEDED` | deadline／provider timeout 均未發生，合成拋出 `AppError` code `QUOTA_EXCEEDED`；帳本額度拒絕使用此分類 |
+| `TTS_PROVIDER_FAILED` | 整輪與段落 deadline signal 未中止時的其他合成失敗，例如 OpenAI HTTP 401／503（仍附 providerCode） |
 
 整輪 signal 已中止（整輪 deadline／使用者取消）時直接沿用原有 job 失敗／取消流程，不記為上述 TTS 降級；段落 deadline 已中止時優先分類為 `TTS_DEADLINE_TIMEOUT`。
 
@@ -52,9 +53,20 @@ API 的 `speech.kind=ai_audio` 必須含 `aiVoice: true`，DJ 區塊顯示「AI 
 | `remainingMs` | 記錄當下扣除 250 ms 收尾後的可用時間，向下取整且至少 0；不是段落開始時的原始餘額 |
 | `deadlineMs` | 設定的整輪 `PLAN_DEADLINE_MS`，不是絕對時間戳 |
 | `ttsTimeoutMs` | 設定的 `TTS_TIMEOUT_MS` |
-| `reason` | 上述四種分類之一 |
+| `reason` | 上述五種分類之一 |
 | `synthesizedSegments` | 降級前已成功取得 AI 語音的段數（含快取命中） |
 | `degradedSegments` | 總段數減成功段數，包含當段及後續未嘗試段落 |
+
+帳本額度拒絕由 `BudgetQuotaError`（`AppError` code `QUOTA_EXCEEDED`）攜帶以下結構化欄位；runtime 保留分類，不比對中文訊息。拒絕發生於預扣寫入之前，被拒段落不扣帳、不發 HTTP；保留成功前綴，當段與後續段落降級。
+
+| 額度事件欄位 | 意義 |
+|---|---|
+| `graphemesUsed` | 拒絕當下台北日帳本已用 grapheme 數（含先前失敗保留的預扣） |
+| `graphemesLimit` | 設定的每日 TTS grapheme 上限 |
+| `segmentGraphemes` | 被拒當段台詞的 grapheme 數，不記原文 |
+| `quotaLimit` | TTS 為 `graphemes`／`dailyUsd`／`totalUsd`；共用帳本另支援 `plans`，只用於開台計數。多項超限時優先總額，再每日美元、plan、字數，避免誤承諾換日恢復 |
+
+`PROVIDER_NOTICES.ttsQuotaDaily`（「AI 語音每日額度已用完」）只用於 `graphemes`／`dailyUsd`，一般模式顯示「今日 AI 語音額度已用完，00:00 恢復。」（台北換日）。`ttsQuotaTotal`（「AI 語音額度已用完」）用於 `totalUsd`，顯示「AI 語音額度已用完，改為文字介紹。」；沒有結構化分類的 `QUOTA_EXCEEDED` 也使用不承諾恢復時間的提示。前綴與既有 `tts` 互不重疊；供應商失敗仍顯示「語音暫時無法使用，改為文字介紹。」；developer mode 保留原始安全 warning，收聽歷史同樣記為降級。
 
 供應商請求錯誤另外附以下安全欄位；開始前已耗盡 deadline 或本地 gate 拒絕時不附供應商欄位。
 
@@ -150,7 +162,7 @@ iPhone 實測原本的聲線「不像台灣腔」。用同一段文稿比較 voi
 | BUDGET_DAILY_USD | 1，>0 且 ≤1 | 每個台北日最多 US$ 1 |
 | BUDGET_TOTAL_USD | 10，>0 且 ≤10 | 所有日期累計最多 US$ 10 |
 | BUDGET_MAX_PLANS_PER_DAY | 20，1–20 | 每個台北日最多 20 輪真實供應商 plan 嘗試 |
-| TTS_GRAPHEME_BUDGET_PER_DAY | 4000，1–4000 | 每個台北日新合成文字額度，快取命中不扣字數 |
+| TTS_GRAPHEME_BUDGET_PER_DAY | 8000，1–8000 | 每個台北日新合成文字額度，快取命中不扣字數 |
 | BUDGET_LEDGER_PATH | ./data/budget-ledger.json（僅 mock 用）| 與 Notion 回饋帳本完全獨立。**真實呼叫啟用時必須是絕對路徑**，否則降級 mock 並在 capabilities 顯示「BUDGET_LEDGER_PATH 必須是絕對路徑」；同目錄另有 sentinel `<路徑>.initialized` |
 | REAL_PROVIDERS_KILL_SWITCH | false | 每次排隊後、發請求前重新讀環境物件 |
 | KILL_SWITCH_FILE | ./data/KILL_SWITCH | 存在立即停止新真實呼叫，不需重啟 |
@@ -226,7 +238,7 @@ node --env-file-if-exists=.env --env-file=$HOME/.config/qualia/openai.env apps/s
 
 - 兌換額度並確認帳號／模型可用性與當期費率，填入上述單價；沒有可確認的上界就維持 mock。
 - 放金鑰到本機、忽略於版本庫且 mode 600 的設定檔，不能進 Vite 或前端儲存。
-- 簽收每日 US$ 1、總額 US$ 10、每日 20 plan、每日 4000 grapheme 與失敗保留預扣規則；上限只可調低。
+- 簽收每日 US$ 1、總額 US$ 10、每日 20 plan、每日 8000 grapheme 與失敗保留預扣規則；上限只可調低。
 - 檢查帳本及快取目錄權限、單一程序限制、停止檔操作與 /api/capabilities 降級資訊。
 - 完成簽收後由曄設 OPENAI_REAL_CALLS_APPROVED=true，再明確設需要的 LLM_PROVIDER／TTS_PROVIDER=openai；Spotify 仍 false，E 仍停用。
 - 首次真實測試、iPhone 主畫面播放與背景行為由曄另行授權並在沙箱外記錄，本次沒有做。
@@ -254,11 +266,13 @@ node --env-file-if-exists=.env --env-file=$HOME/.config/qualia/openai.env apps/s
 | 檢查 | 修正 | 測試 |
 |---|---|---|
 | 閘門 | `tts-1`／`tts-1-hd` 設定即降級；gate 擋住時 capabilities 不再誤刪「不是 AI 語音」限制 | `openaiGates.test.ts`：16 種原因（未簽收、缺金鑰／模型／voice／單價、單價 0 或非數字、tts-1、帳本損毀／結構不符、環境停止、啟動前／執行中停止檔）皆 0 次 HTTP、capabilities 有原因、節目 warnings 前兩則為 LLM／TTS 降級提示；預設 env 無原因 |
-| 預算 | 輸入餘裕 8192→2048；單次預扣 >10% 日額拒絕並顯示原因 | `budgetLimits.test.ts`：預設與上限值、20 plan／日與台北換日、US$1／日與 US$10 總額跨日、4000 grapheme／日與快取不扣、HTTP 前帳本已含完整預扣、估算上界與合理性、單次上限、LLM＋TTS 併發 1 |
+| 預算 | 輸入餘裕 8192→2048；單次預扣 >10% 日額拒絕並顯示原因 | `budgetLimits.test.ts`：預設與上限值（8001 拒絕）、20 plan／日與台北換日、US$1／日與 US$10 總額跨日、8000 grapheme／日與快取不扣、HTTP 前帳本已含完整預扣、估算上界與合理性、單次上限、LLM＋TTS 併發 1 |
 | 端到端 | 媒體路由改 `sendFile`（Range／206）；LLM 失敗、拒答、兩次無效改用 MOCK 並明示；提示排最前；TTS 首次失敗即停止並保留文字＋提示音 | `openaiEndToEnd.test.ts`；web `aiVoicePlayback.test.ts`（手勢同步 start、同源 URL 限制、AI 語音播放失敗顯示文字介紹＋重試、供應商提示元件） |
 | 金鑰 | 無需修改程式；以測試鎖定 | `openaiSecrets.test.ts`：假金鑰經 throw／401／500／成功四種情境，掃描 API 回應與標頭、job、show、capabilities、/api/tts、日誌、帳本、快取檔名、直接例外與啟動日誌 |
 | API 形狀 | 送出的 schema 移除 `minLength`／`maxLength` | `openaiApiShape.test.ts`：欄位集合完全相等、strict schema 規則、reasoning item 與 incomplete 處理 |
 | .env.example | 還原原範例值，新增變數以空值／安全預設列出 | `env.test.ts`：直接載入 `.env.example` 得到 mock、未簽收、預算上限、金鑰空白 |
+
+BRA-211 額度分類由 `speechDeadline.test.ts` 驗證 grapheme／每日美元／總額拒絕、成功前綴、拒絕不扣帳與安全欄位；契約與 `aiVoicePlayback.test.ts` 驗證固定前綴及一般／developer 文案。`spotify-e-mode.spec.ts` 以 mock 伺服器與假 E 模式回應驗證手機 ready／收聽頁的每日與總額提示，不觸發真實 API。
 
 ## PR #5 審查修正（2026-10-05，Sylphy；歷史紀錄）
 
