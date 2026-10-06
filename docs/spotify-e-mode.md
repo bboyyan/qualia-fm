@@ -101,3 +101,13 @@ BRA-111 已處理（L1，程式與單元測試；報告見 [implementation/repor
 - Notion 帳本仍未接線（`app.ts` 預設 `InMemoryLedger`）；UI 模式列如實顯示「TEST 假帳本」。
 - 「改用手動播放」後回到該首開頭會重播介紹。
 - 封面來自 `i.scdn.co`，只顯示、不快取、不進 AI；E2E 以 data URI 假封面驗證。
+
+## BRA-173：我的歌按需展示 API（D-55、D-56）
+
+`POST /api/spotify/song-display` 受既有 session、同源、CSRF 與 Spotify 路由限流保護。body 為 `{ "trackKeys": ["帳本中的 key"] }`，1–10 筆、不可重複、不接受額外欄位。回應 `{ items: [...] }`；每筆為 `{ trackKey, status: "available", metadata: { artworkUrl, canonicalTitle, canonicalArtists, canonicalAlbum, externalUrl } }` 或 `{ trackKey, status: "unavailable" }`。metadata 重用 domain 的 ResolvedTrack 欄位定義，不包含播放 URI／provider ID；回應標記 `Cache-Control: no-store`。
+
+只有 Spotify 啟用且憑證為目前 owner 才取得展示資料；未連結／非 owner／未啟用均回 unavailable，不查 Spotify、不顯示其標誌與外連。先查帳本提名，再重用 `jobStore.ownedShows(session.id)` 中相同 candidate key 的已解析 Spotify 曲目；缺少時使用既有 resolver，依序解析。429 沿用 Web API 的 Retry-After，服務在冷卻期間不再查 Search；前端不自動重試。
+
+前端以 IntersectionObserver 只請求目前清單中的可見列，每批至多 10 首、同時一批、合併同 key 在途請求；切換清單或卸載時取消並清空展示資料。解除連結同時取消伺服器在途展示、清掉前端展示並沿用既有節目 scrub。結果不得進帳本、AI 或持久層；只將封面網址交由 img 載入，不由伺服器抓圖片。
+
+A 案標誌白框源自稿件 `.spotify { background: var(--q-surface) }`。repo 官方 PNG 原檔具有 alpha 透明背景（3432×940，四角 alpha=0），沿用 `SpotifyTrackCard.tsx` 的 `SPOTIFY_LOGO`，不去背、不修改素材；標誌與容器背景透明，80px 寬、四周 11px 留白。封面 64×64、4px 圓角、object-fit: contain、不疊狀態或操作；無圖與 onError 皆同尺寸佔位。單行省略資訊可展開全文與專輯，來源外連至少 44px 高。

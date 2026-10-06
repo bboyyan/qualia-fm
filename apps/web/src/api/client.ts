@@ -4,6 +4,8 @@
  */
 import type { z } from 'zod';
 import {
+  SongDisplayResponseSchema,
+  type SongDisplay,
   ShowHistoryResponseSchema,
   type ShowSummary,
   CapabilitiesSchema,
@@ -72,6 +74,7 @@ export interface StartPlanOptions {
 }
 
 export interface ApiClient {
+  songDisplay(trackKeys: string[], signal?: AbortSignal): Promise<SongDisplay[]>;
   showHistory(signal?: AbortSignal): Promise<ShowSummary[]>;
   feedback(request: FeedbackRequest): Promise<FeedbackReceipt>;
   ensureSession(force?: boolean): Promise<SessionInfo>;
@@ -204,6 +207,10 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
       return mutate('/api/spotify/loved', LovedResultSchema, 'POST', {}, loved);
     },
     spotifyDisconnect: () => mutateEmpty('/api/auth/spotify/logout'),
+    songDisplay: async (trackKeys, signal) => {
+      await ensureSession();
+      return (await mutate('/api/spotify/song-display', SongDisplayResponseSchema, 'POST', {}, { trackKeys }, signal)).items;
+    },
     tasteMarks: async (signal) => (await recoverSession(() => send('/api/taste/marks', TasteMarksResponseSchema, { signal }), signal)).marks,
     tasteEdit: async (edit) => {
       await ensureSession();

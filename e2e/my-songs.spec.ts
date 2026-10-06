@@ -95,6 +95,10 @@ test('BRA-135：預設路徑在「我的歌」完成收藏、釘選（含上限�
   await expect(page.getByRole('heading', { level: 1, name: '我的歌' })).toBeVisible();
   await expect(page.getByTestId('pin-status')).toContainText('釘選 0／2');
   await expectClean(page);
+  for (const row of await page.getByTestId('song-row').all()) {
+    await expect(row.locator('[data-testid="song-artwork"], [data-testid="song-artwork-placeholder"]')).toHaveCount(1);
+  }
+
 
   // 看最近評價：帳本裡的「愛＋短評」直接出現在列上。
   await search(page, loved);
@@ -139,7 +143,7 @@ test('BRA-135：預設路徑在「我的歌」完成收藏、釘選（含上限�
   await search(page, plain);
   const row = rowOf(page, plain);
   await expect(row.getByRole('button', { name: '釘選', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await row.getByRole('button', { name: '帳本紀錄' }).click();
+  await row.getByRole('button', { name: '曲目資訊與帳本紀錄' }).click();
   const history = row.getByTestId('song-history');
   await expect(history).toContainText('釘選');
   await expect(history).toContainText('改評價：愛');
@@ -344,4 +348,46 @@ test('BRA-156：開台同步釘選／收藏、去重與封鎖，取消後重開�
   await page.getByTestId('generate').click();
   expect((await request).postDataJSON()).toMatchObject({ seed: { kind: 'song', text: next, artist } });
   await expect(page.getByTestId('ready-view')).toBeVisible();
+});
+
+test('BRA-173：封面成功／失敗與透明官方標誌；展開可讀全文', async ({ page }) => {
+  const { titles } = await seedLedger(page.request);
+  const title = titles[0]!;
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#294F42"/></svg>';
+  await page.route('https://i.scdn.co/image/bra173-*', async (route) => {
+    if (route.request().url().endsWith('bad')) return route.abort();
+    await route.fulfill({ contentType: 'image/svg+xml', body: svg });
+  });
+  await page.route('**/api/spotify/song-display', async (route) => {
+    const { trackKeys } = route.request().postDataJSON() as { trackKeys: string[] };
+    await route.fulfill({ json: { items: trackKeys.map((trackKey) => ({ trackKey, status: 'available', metadata: {
+      canonicalTitle: trackKey.includes(title.toLowerCase()) ? title : '很長的曲名'.repeat(20),
+      canonicalArtists: ['很長的歌手'.repeat(20)], canonicalAlbum: '專輯全文',
+      artworkUrl: `https://i.scdn.co/image/bra173-${trackKey.includes(title.toLowerCase()) ? 'good' : 'bad'}`,
+      externalUrl: 'https://open.spotify.com/track/test',
+    } })) } });
+  });
+  await page.goto('/');
+  await page.getByTestId('tab-mine').click();
+  await search(page, title);
+  const row = page.getByTestId('song-row');
+  await expect(row.getByTestId('song-artwork')).toBeVisible();
+  await expect.poll(() => row.getByTestId('song-artwork').evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(64);
+  await row.getByRole('button', { name: '釘選', exact: true }).click();
+  const logo = row.getByTestId('spotify-logo');
+  await expect(logo).toBeVisible();
+  expect(await logo.evaluate((img) => getComputedStyle(img.parentElement!).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+  for (const button of await row.getByRole('group').getByRole('button').all()) {
+    const box = await button.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+  }
+  await search(page, titles[1]!);
+  await expect(row.getByTestId('spotify-logo')).toBeVisible();
+  await expect(row.getByTestId('song-artwork-placeholder')).toBeVisible();
+  await expect(row.getByTestId('song-artwork')).toHaveCount(0);
+  await row.getByRole('button', { name: '曲目資訊與帳本紀錄' }).click();
+  await expect(row.getByText('專輯：專輯全文')).toBeVisible();
+  await expect(row.getByRole('link', { name: '在 Spotify 開啟' })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
 });

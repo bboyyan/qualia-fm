@@ -43,12 +43,16 @@ interface SongListProps {
 
 function SongList({ model, state, songs, onSeed, onAction }: SongListProps) {
   const loadHistory = useCallback((trackKey: string) => void model.loadHistory(trackKey), [model]);
+  const listKey = songs.map((song) => song.trackKey).join('\n');
+  useEffect(() => () => model.clearDisplay(), [model, listKey]);
   return (
-    <ul className={styles.list} aria-label="歌曲清單">
+    <ul key={listKey} className={styles.list} aria-label="歌曲清單">
       {songs.map((song) => (
         <SongRow
           key={song.trackKey}
           song={song}
+          display={state.display[song.trackKey]}
+          onVisible={model.requestDisplay}
           pinFull={pinState(state.songs, song) === 'full'}
           busy={state.pending === song.trackKey}
           disabled={state.pending !== null}

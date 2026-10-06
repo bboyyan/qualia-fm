@@ -30,11 +30,13 @@ import {
 import { assertFeatureAllowed, buildCapabilities } from '../services/capabilities.js';
 import type { PlanService } from '../services/planService.js';
 import type { ShowHistory } from '../ledger/showHistory.js';
+import type { SongDisplayService } from '../services/songDisplayService.js';
 import type { TasteService } from '../services/tasteService.js';
 import { GemWallError, type GemWallStore } from '../gems/gemWallStore.js';
 import { ownerSecretOf, spotifyPublicRoutes, spotifySessionRoutes, type SpotifyServices } from './spotify.js';
 
 export interface ApiDeps {
+  readonly songDisplay: SongDisplayService;
   readonly runtime: RealProviderRuntime;
   readonly tts: OpenAITtsProvider;
   readonly config: ServerConfig;

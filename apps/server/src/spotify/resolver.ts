@@ -75,7 +75,7 @@ function toResolved(track: ApiTrack): ResolvedTrack {
   };
 }
 
-const unavailable = (candidate: Candidate): ResolvedTrack => ({
+const unavailable = (candidate: Pick<Candidate, 'title' | 'artist'>): ResolvedTrack => ({
   provider: 'spotify',
   providerTrackId: null,
   canonicalTitle: candidate.title,
@@ -92,7 +92,7 @@ const unavailable = (candidate: Candidate): ResolvedTrack => ({
 export class SpotifyCatalogResolver implements CatalogResolver {
   constructor(private readonly api: TrackSearch) {}
 
-  async resolve(candidate: Candidate, context: ResolverContext): Promise<ResolvedTrack> {
+  async resolve(candidate: Pick<Candidate, 'title' | 'artist'>, context: ResolverContext): Promise<ResolvedTrack> {
     if (context.signal.aborted) throw context.signal.reason;
     const results = await this.api.searchTracks(searchQuery(candidate), context.signal);
     // 曲名與藝人都要對上（正規化後），且可播放；對不上就標 unavailable，由 PlanService 換下一位候選並記 warning。
