@@ -278,3 +278,73 @@ test('BRA-135 回歸：寫入失敗持續顯示錯誤，搜尋後仍可重試原
   await expect(rowOf(page, title).getByRole('button', { name: '收藏', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expectClean(page);
 });
+
+test('BRA-156：開台同步釘選／收藏、去重與封鎖，取消後重開／重整更新並可勾選開台', async ({ page }, testInfo) => {
+  const { titles, artist } = await seedLedger(page.request);
+  const [pinned, loved, next, blocked] = titles as [string, string, string, string];
+  await page.goto('/');
+  await page.getByTestId('tab-mine').click();
+  await toggle(page, pinned, '釘選');
+  await expect(rowOf(page, pinned).getByRole('button', { name: '釘選', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await toggle(page, blocked, '收藏');
+  await expect(rowOf(page, blocked).getByRole('button', { name: '收藏', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await toggle(page, blocked, '封鎖');
+  await expect(rowOf(page, blocked)).toContainText('已封鎖');
+  await page.getByTestId('tab-home').click();
+  const library = page.getByTestId('ledger-seeds');
+  await expect(library.locator('summary')).toContainText('我的歌（2）');
+  await expect(library).not.toHaveAttribute('open', '');
+  await page.screenshot({ path: testInfo.outputPath('bra156-home-collapsed.png') });
+  await library.locator('summary').click();
+  const list = page.getByTestId('ledger-seed-list');
+  const check = (title: string) => list.getByRole('checkbox', { name: new RegExp(title) });
+  await expect(check(pinned)).not.toBeChecked();
+  await expect(check(loved)).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: new RegExp(blocked) })).toHaveCount(0);
+  await expect(list.getByRole('button', { name: /從清單移除/ })).toHaveCount(0);
+  await check(loved).check();
+  await check(loved).uncheck();
+  // 手動重新輸入封鎖同曲也不加入，保留輸入與解除封鎖提示。
+  await page.getByTestId('seed-input').fill(blocked);
+  await page.getByLabel('藝人（選填）').fill(artist);
+  await page.getByTestId('add-seed').click();
+  await expect(page.getByTestId('seed-input')).toHaveValue(blocked);
+  await expect(page.getByRole('alert')).toContainText('已封鎖');
+  await expect(page.getByRole('checkbox', { name: new RegExp(blocked) })).toHaveCount(0);
+  // 同曲手動加入只勾選既有列，不能重複列出。
+  await page.getByTestId('seed-input').fill(loved);
+  await page.getByLabel('藝人（選填）').fill(artist);
+  await page.getByTestId('add-seed').click();
+  await expect(page.getByRole('checkbox', { name: new RegExp(loved) })).toHaveCount(1);
+  await expect(check(loved)).toBeChecked();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('bra156-home-expanded.png') });
+  // 本輪取消勾選不改帳本，重開仍不自動勾回。
+  await check(loved).uncheck();
+  await page.getByTestId('tab-mine').click();
+  await expect(rowOf(page, loved).getByRole('button', { name: '收藏', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await toggle(page, pinned, '釘選');
+  await expect(rowOf(page, pinned).getByRole('button', { name: '釘選', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await page.getByTestId('tab-home').click();
+  await library.locator('summary').click();
+  await expect(check(pinned)).toHaveCount(0);
+  await expect(check(loved)).not.toBeChecked();
+  await page.getByTestId('tab-mine').click();
+  await toggle(page, loved, '收藏');
+  await expect(rowOf(page, loved).getByRole('button', { name: '收藏', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await page.reload();
+  await expect(library).toHaveCount(0);
+  // 重整後新增釘選，重開開台頁可選擇並送出該首。
+  await page.getByTestId('tab-mine').click();
+  await toggle(page, next, '釘選');
+  await expect(rowOf(page, next).getByRole('button', { name: '釘選', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  // 預設路徑不呈現 MOCK 節目；只有最後的 Ready 驗證使用既有 developer 預覽。
+  await page.goto('/?developer=1');
+  await library.locator('summary').click();
+  await page.getByTestId('seed-list').getByRole('checkbox').uncheck();
+  await check(next).check();
+  const request = page.waitForRequest((req) => req.url().endsWith('/api/plan') && req.method() === 'POST');
+  await page.getByTestId('generate').click();
+  expect((await request).postDataJSON()).toMatchObject({ seed: { kind: 'song', text: next, artist } });
+  await expect(page.getByTestId('ready-view')).toBeVisible();
+});

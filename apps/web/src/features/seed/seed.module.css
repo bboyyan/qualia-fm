@@ -141,3 +141,8 @@
   color: var(--q-muted);
   font-size: 13px;
 }
+
+/* BRA-156：收藏再多也只增加一列入口，展開後才顯示候選。 */
+.ledgerSeeds { margin: 8px 0; border-top: 1px solid var(--q-border); }
+.ledgerSeeds summary { min-height: var(--q-tap); padding: 12px 2px; cursor: pointer; font-size: 14px; color: var(--q-ink); }
+.ledgerSeeds summary:focus-visible { outline: 2px solid var(--q-focus); outline-offset: 2px; }
