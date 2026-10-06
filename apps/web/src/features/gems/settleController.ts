@@ -49,10 +49,12 @@ export class GemSettleController {
     this.update({ settlement: createSettlement(sessionId, settlementCards(engine, this.ratings)), open: true });
   }
 
-  /** 回饋的評價記在這一趟；「不對」的歌之後不進牌堆。 */
+  /**
+   * 只接受目前這趟的回饋；旅程只能由 observe 隨引擎切換，舊回應不可重設新結算。
+   * 尚未 observe 也忽略：services 在 loadShow 通知時已觀察旅程，早於 FeedbackStep 出現。
+   */
   recordRating(sessionId: string | null, segmentId: string, rating: FeedbackRating): void {
-    if (!sessionId) return;
-    if (sessionId !== this.journeyId) this.startJourney(sessionId);
+    if (!sessionId || sessionId !== this.journeyId) return;
     this.ratings = { ...this.ratings, [segmentId]: rating };
   }
 

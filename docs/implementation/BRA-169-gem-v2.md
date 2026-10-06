@@ -54,9 +54,15 @@ E2E_PORT=18769 pnpm exec playwright test e2e/gems.spec.ts e2e/journey.spec.ts --
 - V4：`e2e/gems.spec.ts`：首屏入口條在第一屏 → B 手動聽完五首 → 五張背面牌、確認鈕「還有 5 張沒翻開」→ 翻四張仍不可選 → 全開後選第 3 張 → 「成為你的第 N 顆寶石」→ 收進寶石牆（進度 N/5、已收數、清單含該曲）→ 收聽頁結束卡提示 → 首屏入口條更新；另測 Esc 關掉不遺失翻牌進度。
 - 截圖（390×844，開發者模式 MOCK 節目，所以看得到 MOCK／TEST 示意字樣）：[背面牌](screenshots/bra169-settle-hidden-390x844.png)、[全開後選定](screenshots/bra169-settle-picked-390x844.png)、[成為寶石](screenshots/bra169-settle-chosen-390x844.png)、[WebKit 成為寶石](screenshots/bra169-settle-chosen-webkit-390.png)、[寶石牆](screenshots/bra169-gem-wall-390x844.png)、[首屏入口條](screenshots/bra169-home-entry-390x844.png)。
 
+## M1 審查修正（2026-10-06，Node 24）
+
+- 只有 `observe` 可切換旅程；`recordRating` 忽略非目前 session（含尚未 observe），避免 A 晚到回饋清空 B 的評價／結算／翻牌進度；`journey.recordFeedback` 不變。`services` 在引擎 `loadShow` 同步通知時已 observe，早於 `FeedbackStep` 出現。
+- 回歸單元先紅後綠：新增 4 項，修正前重現 4→5 張及結算消失，修正後 `gemSettle.test.ts` 17 項通過。E2E 新增受控延遲的 A 回饋，在 B 否決一首、結算並翻牌後才釋放，檢查四張牌、翻牌進度與重新開啟。
+- 本輪驗證（沙盒外，Node 24）：`pnpm lint`、`pnpm typecheck`、`pnpm build` 全通過；unit 85 檔／876 項全過（`gemSettle.test.ts` 13→17 項）；`E2E_PORT=18769 pnpm e2e` 三尺寸 208 pass／0 fail／2 skip（mobile-390 70/70）；新 M1 E2E 在修正前的 controller 上會失敗、修正後通過。未做真機測試。
+
 ## 已知限制
 
-- 翻牌進度只在前端記憶體：重新整理頁面後這趟的結算就不見了（已選的寶石仍在伺服器）。
+- 翻牌進度只在前端記憶體：結算出現後重新整理頁面，這趟就選不了寶石（已選的寶石仍在伺服器；後續票 BRA-188，本 PR 不修）。
 - `journeyId` 由前端產生，伺服器無法驗證它真的是一趟（單人自用可接受，D-45）。
 - 沒有精選集命名／結語／分享／繼續旅程（BRA-129 與後續票），沒有聲景色譜與人生 7 大曲。
 - 未做 iPhone 真機測試；Chromium 手機尺寸模擬與 Playwright WebKit 不等於 iPhone Safari。

@@ -119,3 +119,61 @@ test('關掉結算層不遺失翻牌進度，節目結束卡可以回去翻', as
   await expect(overlay).toBeVisible();
   await expect(overlay.locator('[data-card-state="hidden"]')).toHaveCount(4);
 });
+
+test('M1：舊節目回饋晚到，新一趟四張牌與翻牌進度仍保留', async ({ page }) => {
+  let releaseOldFeedback!: () => void;
+  const release = new Promise<void>((resolve) => { releaseOldFeedback = resolve; });
+  let oldFeedbackStarted!: () => void;
+  const started = new Promise<void>((resolve) => { oldFeedbackStarted = resolve; });
+  let firstFeedback = true;
+  await page.route('**/api/feedback', async (route) => {
+    if (!firstFeedback) {
+      await route.continue();
+      return;
+    }
+    firstFeedback = false;
+    const response = await route.fetch();
+    oldFeedbackStarted();
+    await release;
+    await route.fulfill({ response });
+  });
+
+  await openApp(page);
+  await generate(page, 'M1 舊一趟 A');
+  await page.getByTestId('start-listening').click();
+  await page.getByRole('button', { name: '我開始播了', exact: true }).click();
+  await page.getByRole('button', { name: '這首播完了', exact: true }).click();
+  await page.getByRole('button', { name: '愛', exact: true }).click();
+  await page.getByRole('button', { name: '送出回饋', exact: true }).click();
+  await started;
+
+  await page.getByTestId('tab-home').click();
+  await generate(page, 'M1 新一趟 B');
+  await page.getByTestId('start-listening').click();
+  for (let n = 1; n <= 5; n += 1) {
+    await page.getByRole('button', { name: '我開始播了', exact: true }).click();
+    await page.getByRole('button', { name: '這首播完了', exact: true }).click();
+    if (n === 1) {
+      await page.getByRole('button', { name: '不對', exact: true }).click();
+      await page.getByRole('button', { name: '送出回饋', exact: true }).click();
+    } else await skipFeedback(page);
+  }
+  const overlay = page.getByTestId('settle-overlay');
+  await expect(overlay).toBeVisible();
+  await expect(overlay.locator('[data-card-state="hidden"]')).toHaveCount(4);
+  await overlay.getByRole('button', { name: /背面朝上，翻開$/ }).first().click();
+
+  const oldResponse = page.waitForResponse((response) => response.url().endsWith('/api/feedback'));
+  releaseOldFeedback();
+  await (await oldResponse).finished();
+  // 等回應後的微任務與 React 畫面更新完成，不以固定網路延遲製造競態。
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await expect(overlay).toBeVisible();
+  await expect(overlay.locator('[data-card-state]')).toHaveCount(4);
+  await expect(overlay.locator('[data-card-state="hidden"]')).toHaveCount(3);
+  await page.keyboard.press('Escape');
+  await expect(overlay).toBeHidden();
+  await page.getByTestId('settle-reminder').click();
+  await expect(overlay).toBeVisible();
+  await expect(overlay.locator('[data-card-state="hidden"]')).toHaveCount(3);
+});

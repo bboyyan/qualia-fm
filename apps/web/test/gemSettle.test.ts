@@ -101,9 +101,62 @@ describe('GemSettleController：接播放引擎與 API', () => {
   it('回饋「不對」記在這趟，結算時不進牌堆', () => {
     const controller = new GemSettleController(fakeApi());
     const state = loaded();
+    controller.observe(state);
     controller.recordRating('ss_test_1', state.queue[0]!.segment.segmentId, '不對');
     controller.observe(completed(state));
     expect(controller.getState().settlement?.cards.map((card) => card.title)).toEqual(['曲目2', '曲目3', '曲目4', '曲目5']);
+  });
+
+  it('舊一趟 A 的回饋晚到，不清掉 B 的「不對」評價，結算仍只有四張', () => {
+    const controller = new GemSettleController(fakeApi());
+    const a = loaded('ss_test_A');
+    const b = loaded('ss_test_B');
+    controller.observe(a);
+    // A 的回饋已送出，尚未收到成功回應時開始 B。
+    controller.observe(b);
+    const rejected = b.queue[0]!.segment.segmentId;
+    controller.recordRating(b.sessionId, rejected, '不對');
+    controller.recordRating(a.sessionId, a.queue[1]!.segment.segmentId, '愛');
+    controller.observe(completed(b));
+    expect(controller.getState().settlement?.journeyId).toBe(b.sessionId);
+    expect(controller.getState().settlement?.cards).toHaveLength(4);
+    expect(controller.getState().settlement?.cards.map((card) => card.segmentId)).not.toContain(rejected);
+  });
+
+  it.each([true, false])('B 已結算並翻牌（open=%s），A 晚到的回饋不改動結算與開關狀態', (open) => {
+    const controller = new GemSettleController(fakeApi());
+    const a = loaded('ss_test_A');
+    const b = loaded('ss_test_B');
+    controller.observe(a);
+    controller.observe(b);
+    controller.recordRating(b.sessionId, b.queue[0]!.segment.segmentId, '不對');
+    controller.observe(completed(b));
+    const card = controller.getState().settlement!.cards[0]!;
+    controller.reveal(card.segmentId);
+    if (!open) controller.close();
+    const before = controller.getState();
+    controller.recordRating(a.sessionId, a.queue[1]!.segment.segmentId, '愛');
+    expect(controller.getState()).toBe(before);
+    controller.observe(completed(b));
+    expect(controller.getState()).toBe(before);
+    expect(controller.getState().open).toBe(open);
+    expect(controller.getState().settlement?.cards).toHaveLength(4);
+    expect(controller.getState().settlement?.cards[0]?.revealed).toBe(true);
+    controller.close();
+    controller.reopen();
+    expect(controller.getState().open).toBe(true);
+    expect(controller.getState().settlement).toBe(before.settlement);
+  });
+
+  it('尚未 observe 時忽略回饋，由引擎首次觀察建立旅程', () => {
+    const controller = new GemSettleController(fakeApi());
+    const state = loaded();
+    const before = controller.getState();
+    controller.recordRating(state.sessionId, state.queue[0]!.segment.segmentId, '不對');
+    controller.recordRating(null, state.queue[1]!.segment.segmentId, '不對');
+    expect(controller.getState()).toBe(before);
+    controller.observe(completed(state));
+    expect(controller.getState().settlement?.cards).toHaveLength(5);
   });
 
   it('未全揭開時 confirm 不送出；全開＋選定後送出段落識別與色號', async () => {
