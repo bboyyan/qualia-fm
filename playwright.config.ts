@@ -58,6 +58,7 @@ export default defineConfig({
       SHOW_HISTORY_PATH: join(tmpdir(), `qfm-e2e-history-${process.pid}.json`),
       GEM_WALL_PATH,
       SESSION_STORE_PATH: join(tmpdir(), `qfm-e2e-session-${process.pid}.json`),
+      SHARE_STORE_PATH: join(tmpdir(), `qfm-e2e-share-${process.pid}.json`),
     },
   },
   projects: [

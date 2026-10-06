@@ -7,3 +7,4 @@ export * from './taste.js';
 export * from './showHistory.js';
 export * from './gems.js';
 export * from './songDisplay.js';
+export * from './share.js';
