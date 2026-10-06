@@ -30,6 +30,14 @@ it('一般內部錯誤仍顯示原本的故障與重試提示', () => {
   expect(html).toContain('再試一次');
 });
 
+it('伺服器重啟後 NOT_FOUND 即使 retryable:false 仍提供重新開台', () => {
+  // renderFailure 只有 INTERNAL 為 true，忠實保留伺服器 NOT_FOUND 的 false。
+  const html = renderFailure('NOT_FOUND');
+  expect(html).toContain(ERROR_MESSAGES.NOT_FOUND);
+  expect(html).toContain('再試一次');
+  expect(html).toContain('你的輸入已保留。');
+});
+
 it('歷史不可用明示人工修復與未扣額度，不提供重試', () => {
   const html = renderFailure('HISTORY_UNAVAILABLE');
   expect(html).toContain('開台歷史檔讀不到或已損毀，需要人工修復後才能開台；本次未扣額度。');
