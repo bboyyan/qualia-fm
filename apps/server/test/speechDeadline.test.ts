@@ -205,3 +205,58 @@ it('重試等待中段落 deadline 先到：保留 TTS_DEADLINE_TIMEOUT，不發
     reason: 'TTS_DEADLINE_TIMEOUT', providerCode: 'TIMEOUT', providerAttempts: 1,
   }));
 });
+
+it.each([0, 2])('字數額度在成功 %i 段後不足：獨立 reason、數字欄位、不扣拒絕段且保留前綴', async (succeeded) => {
+  const log = vi.spyOn(logger, 'info');
+  const draft = JSON.parse(await validDraftText());
+  draft.candidates.forEach((candidate: { djLine: string }, i: number) => { candidate.djLine = `這是第${i + 1}首歌曲，讓音樂陪伴今晚。`; });
+  const length = countGraphemes(draft.candidates[0].djLine);
+  const limit = succeeded * length + 1;
+  const fetchImpl = fakeOpenAI({ responses: () => Response.json(responsesBody(JSON.stringify(draft))) });
+  const { job, show, config } = await runPlan({ TTS_GRAPHEME_BUDGET_PER_DAY: String(limit) }, fetchImpl);
+  expect(job.status).toBe('completed');
+  expect(show!.segments.slice(0, succeeded).every((s) => s.speech.kind === 'ai_audio')).toBe(true);
+  expect(show!.segments.slice(succeeded).every((s) => s.speech.kind === 'mock_chime')).toBe(true);
+  expect(speechCalls(fetchImpl)).toHaveLength(succeeded);
+  expectTtsLedger(config, show!, succeeded);
+  const degraded = log.mock.calls.filter(([event]) => event === 'tts_degraded');
+  expect(degraded).toHaveLength(1);
+  expect(degraded[0]![1]).toMatchObject({
+    reason: 'TTS_QUOTA_EXCEEDED', quotaLimit: 'graphemes', graphemesUsed: succeeded * length,
+    graphemesLimit: limit, segmentGraphemes: length, synthesizedSegments: succeeded, degradedSegments: 5 - succeeded,
+  });
+  expect(degraded[0]![1]).not.toHaveProperty('providerCode');
+  expect(JSON.stringify(degraded)).not.toContain('讓音樂陪伴今晚');
+  expect(JSON.stringify(degraded)).not.toContain('TEST-fake-secret');
+  expect(show!.warnings[0]).toMatch(new RegExp(`^${PROVIDER_NOTICES.ttsQuotaDaily}：`));
+});
+
+it.each([
+  ['dailyUsd', { BUDGET_DAILY_USD: '0.000001' }, PROVIDER_NOTICES.ttsQuotaDaily],
+  ['totalUsd', { BUDGET_TOTAL_USD: '0.000001' }, PROVIDER_NOTICES.ttsQuotaTotal],
+] as const)('%s 拒絕：結構化分類與對應額度 warning、歷史明示降級', async (quotaLimit, env, prefix) => {
+  const log = vi.spyOn(logger, 'info');
+  const fetchImpl = fakeOpenAI();
+  const config = realConfig({ ...env, LLM_PROVIDER: 'mock' });
+  const client = await bootstrap(createApp(config, { fetchImpl }).app);
+  const job = await waitForJob(client, (await postPlan(client, planRequest())).body.jobId);
+  expect(job.status).toBe('completed');
+  const show = ShowPlanSchema.parse((await client.agent.get(`/api/shows/${job.showId}`).expect(200)).body);
+  expect(show.warnings.some((warning) => warning.startsWith(prefix))).toBe(true);
+  expect(log).toHaveBeenCalledWith('tts_degraded', expect.objectContaining({
+    reason: 'TTS_QUOTA_EXCEEDED', quotaLimit, graphemesUsed: 0, graphemesLimit: 8000,
+    segmentGraphemes: countGraphemes(show.segments[0]!.candidate.djLine),
+  }));
+  expect(fetchImpl).not.toHaveBeenCalled();
+  expect(Object.values(readLedger(config.openai.ledgerPath).days)[0]).toMatchObject({ usd: 0, graphemes: 0 });
+  expect((await client.agent.get('/api/show-history').expect(200)).body.shows[0]).toMatchObject({ speech: 'text', ttsDegraded: true });
+});
+
+it('OpenAI 401 仍為供應商失敗並附 HTTP_401，不誤分類成本地額度', async () => {
+  const log = vi.spyOn(logger, 'info');
+  const fetchImpl = fakeOpenAI({ speech: () => new Response('PRIVATE', { status: 401 }) });
+  const { show } = await runPlan({}, fetchImpl);
+  expect(log).toHaveBeenCalledWith('tts_degraded', expect.objectContaining({ reason: 'TTS_PROVIDER_FAILED', providerCode: 'HTTP_401' }));
+  expect(show!.warnings.some((warning) => warning.startsWith(PROVIDER_NOTICES.tts))).toBe(true);
+  expect(speechCalls(fetchImpl)).toHaveLength(1);
+});

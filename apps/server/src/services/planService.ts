@@ -18,6 +18,7 @@ import {
   type ShowPlan,
 } from '@qualia/contracts';
 import type { RealProviderRuntime } from '../budget/runtime.js';
+import { BudgetQuotaError } from '../budget/quota.js';
 import { OpenAIRequestError } from '../providers/openai/http.js';
 import type { OpenAITtsProvider } from '../providers/openai/tts.js';
 import type { FeedbackLedger } from '../ledger/types.js';
@@ -353,7 +354,10 @@ export class PlanService {
     const remainingMs = () => Math.max(0, Math.floor(stageEnd - monotonicNow()));
     const degrade = (reason: string, message: string, error?: unknown) => {
       stopped = true;
-      notices.push(`${PROVIDER_NOTICES.tts}：${message}`);
+      const quota = reason === 'TTS_QUOTA_EXCEEDED' && error instanceof BudgetQuotaError ? error.quota : null;
+      const prefix = reason !== 'TTS_QUOTA_EXCEEDED' ? PROVIDER_NOTICES.tts
+        : quota?.quotaLimit === 'graphemes' || quota?.quotaLimit === 'dailyUsd' ? PROVIDER_NOTICES.ttsQuotaDaily : PROVIDER_NOTICES.ttsQuotaTotal;
+      notices.push(`${prefix}：${message}`);
       logger.info('tts_degraded', {
         showId: plan.showId,
         remainingMs: remainingMs(),
@@ -362,6 +366,7 @@ export class PlanService {
         reason,
         synthesizedSegments: segments.length,
         degradedSegments: plan.segments.length - segments.length,
+        ...(quota ?? {}),
         ...(error instanceof OpenAIRequestError ? {
           segmentId: plan.segments[segments.length]!.segmentId,
           providerCode: error.providerCode,
@@ -387,7 +392,8 @@ export class PlanService {
         segments.push({ ...segment, candidate: { ...segment.candidate, transitionBridge: null }, speech: { ...speech, url: `/api/media/tts/${plan.showId}/${segment.segmentId}/${key}` } });
       } catch (error) {
         if (signal.aborted) throw signal.reason;
-        const reason = stageSignal.aborted ? 'TTS_DEADLINE_TIMEOUT' : error instanceof AppError && error.code === 'PLAN_TIMEOUT' ? 'TTS_PROVIDER_TIMEOUT' : 'TTS_PROVIDER_FAILED';
+        const reason = stageSignal.aborted ? 'TTS_DEADLINE_TIMEOUT' : error instanceof AppError && error.code === 'PLAN_TIMEOUT' ? 'TTS_PROVIDER_TIMEOUT'
+          : error instanceof AppError && error.code === 'QUOTA_EXCEEDED' ? 'TTS_QUOTA_EXCEEDED' : 'TTS_PROVIDER_FAILED';
         const message = stageSignal.aborted ? '節目準備時間不足，其餘段落改為文字介紹。' : safeReason(error, 'AI 語音合成失敗。');
         degrade(reason, message, error);
         segments.push(segment);

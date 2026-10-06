@@ -82,7 +82,7 @@ handoff/           唯讀規格包
 | `SPOTIFY_ENABLED` | `false`（嚴格閘門：設為 true 需 Client ID／redirect URI／加密金鑰齊全；見 docs/spotify-e-mode.md） |
 | `SPOTIFY_DJ_APPROVED` | `false`（設為 true 拒絕啟動） |
 
-OpenAI 的設定、預扣／結算、fail-closed 行為與曄的啟用檢查表見 [OpenAI 供應商與預算](docs/openai-providers-and-budget.md)。每日 US$ 1、總額 US$ 10、每日 20 plan、TTS 每日 4000 grapheme；失敗可能已計費，保守保留預扣。`.env.example` 保留原範例預設值、金鑰留空、`OPENAI_REAL_CALLS_APPROVED=false`，模型及單價無預設，預設仍為 mock；以外部 env 檔啟動真實供應商的步驟見該文件「本機啟動」一節。本 PR 未啟用真實呼叫；未對真實 OpenAI 做任何測試。
+OpenAI 的設定、預扣／結算、fail-closed 行為與曄的啟用檢查表見 [OpenAI 供應商與預算](docs/openai-providers-and-budget.md)。每日 US$ 1、總額 US$ 10、每日 20 plan、TTS 每日 8000 grapheme；失敗可能已計費，保守保留預扣。`.env.example` 保留原範例預設值、金鑰留空、`OPENAI_REAL_CALLS_APPROVED=false`，模型及單價無預設，預設仍為 mock；以外部 env 檔啟動真實供應商的步驟見該文件「本機啟動」一節。本 PR 未啟用真實呼叫；未對真實 OpenAI 做任何測試。
 
 已加入 iPhone 主畫面 PWA manifest／Apple metadata 與 PNG 圖示，沒有 service worker 或離線能力。執行 `node scripts/generate-icons.mjs` 可重生圖示與 manifest。主畫面／背景播放未經真機驗證，Playwright 留給沙箱外執行。
 

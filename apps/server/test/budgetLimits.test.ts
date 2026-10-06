@@ -13,11 +13,11 @@ const signal = () => new AbortController().signal;
 const ctx = () => ({ signal: signal(), scenario: 'five' as const, attempt: 1 });
 const readLedger = (path: string) => JSON.parse(readFileSync(path, 'utf8')) as { totalUsd: number; days: Record<string, { usd: number; plans: number; graphemes: number }> };
 
-it('預設上限：每日 US$1、總額 US$10、每日 20 plan、每日 4000 grapheme；只能調低不能調高', () => {
-  expect(loadConfig({}).openai.budget).toEqual({ dailyUsd: 1, totalUsd: 10, plansPerDay: 20, graphemesPerDay: 4000 });
+it('預設上限：每日 US$1、總額 US$10、每日 20 plan、每日 8000 grapheme；只能調低不能調高', () => {
+  expect(loadConfig({}).openai.budget).toEqual({ dailyUsd: 1, totalUsd: 10, plansPerDay: 20, graphemesPerDay: 8000 });
   expect(loadConfig({ BUDGET_DAILY_USD: '0.5', BUDGET_TOTAL_USD: '3', BUDGET_MAX_PLANS_PER_DAY: '5', TTS_GRAPHEME_BUDGET_PER_DAY: '500' }).openai.budget)
     .toEqual({ dailyUsd: 0.5, totalUsd: 3, plansPerDay: 5, graphemesPerDay: 500 });
-  for (const env of [{ BUDGET_DAILY_USD: '1.01' }, { BUDGET_TOTAL_USD: '10.5' }, { BUDGET_MAX_PLANS_PER_DAY: '21' }, { TTS_GRAPHEME_BUDGET_PER_DAY: '4001' }, { BUDGET_DAILY_USD: '0' }, { OPENAI_MAX_OUTPUT_TOKENS: '16385' }]) {
+  for (const env of [{ BUDGET_DAILY_USD: '1.01' }, { BUDGET_TOTAL_USD: '10.5' }, { BUDGET_MAX_PLANS_PER_DAY: '21' }, { TTS_GRAPHEME_BUDGET_PER_DAY: '8001' }, { BUDGET_DAILY_USD: '0' }, { OPENAI_MAX_OUTPUT_TOKENS: '16385' }]) {
     expect(() => loadConfig(env), JSON.stringify(env)).toThrow(ConfigError);
   }
 });
@@ -46,17 +46,17 @@ it('每日 US$1 與總額 US$10（預設）：跨日累計到 10 後即使換日
   expect(new BudgetLedger(path, loadConfig({}).openai.budget, () => now).snapshot().totalUsd).toBe(10);
 });
 
-it('TTS 每日 4000 grapheme（預設）：滿額後拒絕且不發請求；快取命中不扣字數', async () => {
+it('TTS 每日 8000 grapheme（預設）：滿額後拒絕且不發請求；快取命中不扣字數', async () => {
   const config = realConfig();
   const runtime = new RealProviderRuntime(config.openai);
   const fetchImpl = fakeOpenAI();
   const tts = new OpenAITtsProvider(config.openai, runtime, fetchImpl);
-  runtime.ledger!.retain(runtime.ledger!.reserve({ usd: 0, graphemes: 3995 }));
+  runtime.ledger!.retain(runtime.ledger!.reserve({ usd: 0, graphemes: 7995 }));
   await tts.synthesize('一二三四五', signal());
   await tts.synthesize('一二三四五', signal());
   await expect(tts.synthesize('六', signal())).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED' });
   expect(fetchImpl).toHaveBeenCalledTimes(1);
-  expect(readLedger(config.openai.ledgerPath).days[taipeiDay(Date.now())]!.graphemes).toBe(4000);
+  expect(readLedger(config.openai.ledgerPath).days[taipeiDay(Date.now())]!.graphemes).toBe(8000);
 });
 
 it('預扣式：發出 HTTP 前帳本檔已寫入完整預扣（含 max_output_tokens），成功後才按 usage 釋放差額', async () => {
@@ -117,4 +117,20 @@ it('併發 1：同一 runtime 下 LLM 與 TTS 多個請求絕不同時在途', a
   await Promise.all([planner.draft(toEditorialInput(planRequest()), ctx()), tts.synthesize('一', signal()), planner.draft(toEditorialInput(planRequest()), ctx()), tts.synthesize('二', signal())]);
   expect(fetchImpl).toHaveBeenCalledTimes(4);
   expect(maximum).toBe(1);
+});
+
+it('每日與總額同時不足時優先 totalUsd，拒絕不修改帳本；每日字數台北換日恢復', () => {
+  let now = Date.parse('2026-10-05T15:59:59Z');
+  const ledger = new BudgetLedger(realConfig().openai.ledgerPath, { ...loadConfig({}).openai.budget, totalUsd: 1 }, () => now);
+  ledger.retain(ledger.reserve({ usd: 1, graphemes: 8000 }));
+  const before = ledger.snapshot();
+  expect(() => ledger.reserve({ usd: 0.01, graphemes: 1 })).toThrow(expect.objectContaining({
+    code: 'QUOTA_EXCEEDED', quota: { quotaLimit: 'totalUsd', graphemesUsed: 8000, graphemesLimit: 8000, segmentGraphemes: 1 },
+  }));
+  expect(ledger.snapshot()).toEqual(before);
+  expect(() => ledger.reserve({ usd: 0, graphemes: 1 })).toThrow(expect.objectContaining({ quota: expect.objectContaining({ quotaLimit: 'graphemes' }) }));
+  now += 1000;
+  ledger.retain(ledger.reserve({ usd: 0, graphemes: 1 }));
+  expect(ledger.snapshot().days['2026-10-06']!.graphemes).toBe(1);
+  expect(() => ledger.reserve({ usd: 0.01 })).toThrow(expect.objectContaining({ quota: expect.objectContaining({ quotaLimit: 'totalUsd' }) }));
 });

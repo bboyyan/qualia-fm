@@ -1,3 +1,4 @@
+import { PROVIDER_NOTICES } from '../packages/contracts/src/index';
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { expectNoHorizontalOverflow, generate } from './support';
 
@@ -86,7 +87,7 @@ interface FakeServer {
 }
 
 /** 假造 E 模式的伺服器：capabilities（核可＋連結狀態）、Spotify 對應後的節目、token／播放代理／Loved。 */
-async function fakeEModeServer(page: Page, options: { linked: boolean; clean?: boolean }): Promise<FakeServer> {
+async function fakeEModeServer(page: Page, options: { linked: boolean; clean?: boolean; warnings?: string[] }): Promise<FakeServer> {
   const server: FakeServer = { linked: options.linked, plays: [], loved: [], devices: [] };
   await page.addInitScript(FAKE_SDK);
   // BRA-156：開台現在讀帳本；假 E 模式 fixture 不讀其他 spec 留下的 MOCK 回饋。
@@ -120,7 +121,7 @@ async function fakeEModeServer(page: Page, options: { linked: boolean; clean?: b
         audioLocator: { kind: 'spotify_uri', uri: uriFor(i + 1) },
       },
     }));
-    await route.fulfill({ response, json: { ...show, segments, ...(options.clean ? { warnings: [], unavailable: [], analysis: { ...show.analysis, hookOfFeeling: '安靜而溫暖', spatialSignature: null, emotionalVelocity: null, timbralPalette: [], lyricalContext: null, caveat: null } } : {}) } });
+    await route.fulfill({ response, json: { ...show, segments, ...(options.clean ? { warnings: options.warnings ?? [], unavailable: [], analysis: { ...show.analysis, hookOfFeeling: '安靜而溫暖', spatialSignature: null, emotionalVelocity: null, timbralPalette: [], lyricalContext: null, caveat: null } } : {}) } });
   });
   await page.route('**/api/spotify/token', (route) => route.fulfill({ json: { accessToken: 'E2E-fake-token', expiresAt: new Date(Date.now() + 3600_000).toISOString() } }));
   await page.route('**/api/spotify/pause', (route) => route.fulfill({ status: 204 }));
@@ -349,3 +350,25 @@ test('BRA-125：預設不呈現示範節目與殘留測試播放設定', async (
   await expect(page.getByTestId('start-listening')).toHaveCount(0);
   await expect(page.locator('body')).not.toContainText(/MOCK|TEST|假帳本/i);
 });
+
+
+for (const [prefix, message] of [
+  [PROVIDER_NOTICES.ttsQuotaDaily, '今日 AI 語音額度已用完，00:00 恢復。'],
+  [PROVIDER_NOTICES.ttsQuotaTotal, 'AI 語音額度已用完，改為文字介紹。'],
+] as const) {
+  test(`BRA-211：手機一般模式顯示 ${prefix}`, async ({ page }) => {
+    // 沿用 mock 伺服器＋假 E 模式回應，只驗證 warning 契約到畫面的傳遞；不啟用真實供應商。
+    await fakeEModeServer(page, { linked: true, clean: true, warnings: [`${prefix}：今日或總預算已達上限。`] });
+    await page.goto('/');
+    await generate(page, '今晚慢慢聽');
+    await expect(page.getByTestId('ready-view')).toBeVisible();
+    const notice = page.getByTestId('provider-notices');
+    await expect(notice).toContainText(message);
+    await expect(notice).not.toContainText('語音暫時無法使用');
+    if (prefix === PROVIDER_NOTICES.ttsQuotaTotal) await expect(notice).not.toContainText('00:00');
+    await expectNoHorizontalOverflow(page);
+    await page.getByTestId('start-listening').click();
+    await expect(page.getByTestId('provider-notices')).toContainText(message);
+    await expectNoHorizontalOverflow(page);
+  });
+}

@@ -10,7 +10,7 @@ import { OpenAITtsProvider } from '../src/providers/openai/tts.js';
 import { bootstrap, planRequest, postPlan, waitForJob } from './helpers.js';
 import { fakeOpenAI, realConfig, realEnv } from './openaiHelpers.js';
 
-const limits = { dailyUsd: 1, totalUsd: 10, plansPerDay: 20, graphemesPerDay: 4000 };
+const limits = { dailyUsd: 1, totalUsd: 10, plansPerDay: 20, graphemesPerDay: 8000 };
 const freshPath = () => join(mkdtempSync(join(tmpdir(), 'qualia-sentinel-')), 'ledger.json');
 
 it('sentinel 命名為「帳本路徑＋.initialized」', () => {

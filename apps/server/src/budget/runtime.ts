@@ -2,6 +2,7 @@ import { statSync } from 'node:fs';
 import type { ServerConfig } from '../config/env.js';
 import { AppError } from '../http/errors.js';
 import { BudgetLedger, taipeiDay } from './ledger.js';
+import { BudgetQuotaError } from './quota.js';
 
 export type OpenAIConfig = ServerConfig['openai'];
 /** LLM 與 TTS 共用 concurrency=1；排隊完成後再次查 gate，預扣完成才可進網路。 */
@@ -46,7 +47,13 @@ export class RealProviderRuntime {
     if (!this.ledger) throw new AppError('FEATURE_RESTRICTED');
     let reservation;
     try { reservation = this.ledger.reserve(cost); }
-    catch { this.refuse(this.ledger.reason ?? '今日或總預算已達上限，請使用示範模式或稍後再試。'); }
+    catch (error) {
+      if (error instanceof BudgetQuotaError) {
+        this.notice = { day: taipeiDay(this.now()), message: error.message };
+        throw error;
+      }
+      this.refuse(this.ledger.reason ?? '今日或總預算已達上限，請使用示範模式或稍後再試。');
+    }
     try {
       const result = await work();
       this.ledger.commit(reservation, result.usd);

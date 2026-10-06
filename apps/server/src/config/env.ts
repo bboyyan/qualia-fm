@@ -63,7 +63,7 @@ const EnvSchema = z.object({
   BUDGET_DAILY_USD: z.preprocess(emptyToUndefined, z.coerce.number().positive().max(1).default(1)),
   BUDGET_TOTAL_USD: z.preprocess(emptyToUndefined, z.coerce.number().positive().max(10).default(10)),
   BUDGET_MAX_PLANS_PER_DAY: int(20, 1, 20),
-  TTS_GRAPHEME_BUDGET_PER_DAY: int(4000, 1, 4000),
+  TTS_GRAPHEME_BUDGET_PER_DAY: int(8000, 1, 8000),
   BUDGET_LEDGER_PATH: z.preprocess(emptyToUndefined, z.string().default('./data/budget-ledger.json')),
   KILL_SWITCH_FILE: z.preprocess(emptyToUndefined, z.string().default('./data/KILL_SWITCH')),
   TTS_CACHE_DIR: z.preprocess(emptyToUndefined, z.string().default('./data/tts')),

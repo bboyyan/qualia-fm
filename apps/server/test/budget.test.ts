@@ -5,7 +5,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { BudgetLedger, taipeiDay } from '../src/budget/ledger.js';
 
 beforeEach(() => { vi.stubGlobal('fetch', () => { throw new Error('禁止真實網路'); }); });
-const limits = { dailyUsd: 1, totalUsd: 10, plansPerDay: 20, graphemesPerDay: 4000 };
+const limits = { dailyUsd: 1, totalUsd: 10, plansPerDay: 20, graphemesPerDay: 8000 };
 it('預扣先持久化，成功釋放差額，重啟保留金額與每日計數', () => {
   const path = join(mkdtempSync(join(tmpdir(), 'qualia-budget-')), 'ledger.json');
   const ledger = new BudgetLedger(path, limits);

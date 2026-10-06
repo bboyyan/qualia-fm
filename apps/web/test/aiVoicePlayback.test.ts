@@ -91,3 +91,21 @@ it('節目 warnings 中的供應商降級提示會顯示（不再只顯示帳本
   expect(html).not.toContain('模型自己的提醒');
   expect(renderToStaticMarkup(createElement(ProviderNotices, { warnings: ['模型自己的提醒'] }))).toBe('');
 });
+
+it.each([
+  [PROVIDER_NOTICES.llm, '選曲服務暫時無法使用，請重新選歌。'],
+  [PROVIDER_NOTICES.tts, '語音暫時無法使用，改為文字介紹。'],
+  [PROVIDER_NOTICES.ttsQuotaDaily, '今日 AI 語音額度已用完，00:00 恢復。'],
+  [PROVIDER_NOTICES.ttsQuotaTotal, 'AI 語音額度已用完，改為文字介紹。'],
+])('一般模式依固定前綴 %s 選文案，developer mode 保留原文', (prefix, message) => {
+  const warning = `${prefix}：安全診斷訊息`;
+  try {
+    vi.stubGlobal('window', { location: { search: '' } });
+    const html = renderToStaticMarkup(createElement(ProviderNotices, { warnings: [warning] }));
+    expect(html).toContain(message);
+    expect(html).not.toContain('安全診斷訊息');
+    if (prefix !== PROVIDER_NOTICES.ttsQuotaDaily) expect(html).not.toContain('00:00');
+    vi.stubGlobal('window', { location: { search: '?developer=1' } });
+    expect(renderToStaticMarkup(createElement(ProviderNotices, { warnings: [warning] }))).toContain(warning);
+  } finally { vi.unstubAllGlobals(); }
+});

@@ -3,6 +3,14 @@ import { isProviderNotice, PROVIDER_NOTICES } from '@qualia/contracts';
 import { Button } from '../../ui/Button';
 import { InlineRecovery } from '../../ui/Feedback';
 
+function noticeMessage(notice: string): string {
+  if (developerMode()) return notice;
+  if (notice.startsWith(PROVIDER_NOTICES.llm)) return '選曲服務暫時無法使用，請重新選歌。';
+  if (notice.startsWith(PROVIDER_NOTICES.ttsQuotaDaily)) return '今日 AI 語音額度已用完，00:00 恢復。';
+  if (notice.startsWith(PROVIDER_NOTICES.ttsQuotaTotal)) return 'AI 語音額度已用完，改為文字介紹。';
+  return '語音暫時無法使用，改為文字介紹。';
+}
+
 /** 真實供應商降級（AI 選歌改 MOCK、AI 語音改文字介紹）必須讓人看見，不只寫進 warnings。 */
 export function ProviderNotices({ warnings }: { warnings: readonly string[] }) {
   const notices = warnings.filter(isProviderNotice);
@@ -10,7 +18,7 @@ export function ProviderNotices({ warnings }: { warnings: readonly string[] }) {
   return (
     <InlineRecovery tone="warning" title="本輪已降級" testId="provider-notices">
       <ul>
-        {notices.map((notice) => <li key={notice}>{developerMode() ? notice : notice.startsWith(PROVIDER_NOTICES.llm) ? '選曲服務暫時無法使用，請重新選歌。' : '語音暫時無法使用，改為文字介紹。'}</li>)}
+        {notices.map((notice) => <li key={notice}>{noticeMessage(notice)}</li>)}
       </ul>
     </InlineRecovery>
   );

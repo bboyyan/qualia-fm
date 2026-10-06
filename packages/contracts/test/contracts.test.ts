@@ -85,3 +85,13 @@ describe('handoff fixtures stay compatible', () => {
     expect(ErrorEnvelopeSchema.safeParse(envelope).success).toBe(true);
   });
 });
+
+it('供應商提示辨識每日／總額額度，所有固定開頭互不重疊', async () => {
+  const { PROVIDER_NOTICES, isProviderNotice } = await import('../src/index.js');
+  const prefixes = Object.values(PROVIDER_NOTICES);
+  for (const prefix of prefixes) {
+    expect(isProviderNotice(`${prefix}：安全訊息`)).toBe(true);
+    expect(prefixes.filter((other) => prefix.startsWith(other))).toEqual([prefix]);
+  }
+  expect(isProviderNotice('模型自己的提醒')).toBe(false);
+});

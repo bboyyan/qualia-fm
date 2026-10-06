@@ -23,7 +23,7 @@ describe('loadConfig', () => {
     expect(env).toMatchObject({ LLM_PROVIDER: 'mock', TTS_PROVIDER: 'mock', OPENAI_REAL_CALLS_APPROVED: 'false', SPOTIFY_ENABLED: 'false', SPOTIFY_DJ_APPROVED: 'false', PORT: '8080' });
     const config = loadConfig(env);
     expect(config.openai).toMatchObject({ llm: 'mock', tts: 'mock', reason: null });
-    expect(config.openai.budget).toEqual({ dailyUsd: 1, totalUsd: 10, plansPerDay: 20, graphemesPerDay: 4000 });
+    expect(config.openai.budget).toEqual({ dailyUsd: 1, totalUsd: 10, plansPerDay: 20, graphemesPerDay: 8000 });
     expect(config.openai).toMatchObject({ providerTimeoutMs: 30_000, ttsTimeoutMs: 30_000, ttsInstructions: undefined });
   });
 
