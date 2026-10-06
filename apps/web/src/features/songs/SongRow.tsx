@@ -2,8 +2,10 @@
  * 「我的歌」的一列：曲名／藝人、最近評價，三個狀態鈕（收藏／釘選／封鎖）、當種子開台，
  * 以及可展開的最近幾筆帳本紀錄。封鎖的歌只留「封鎖」鈕（再按一次解除）與紀錄。
  */
-import { useEffect, useId, useState } from 'react';
-import type { TrackMark } from '@qualia/contracts';
+import { useEffect, useId, useRef, useState } from 'react';
+import type { SongDisplay, TrackMark } from '@qualia/contracts';
+import { SPOTIFY_LOGO } from '../spotify/SpotifyTrackCard';
+import { SongArtwork } from './SongArtwork';
 import { Icon, type IconName } from '../../ui/Icon';
 import { entryLabel, entryNote, isBlocked, isLoved, isPinned, ratingSummary, shortTime, type SongAction } from './mySongs';
 import type { HistoryState } from './mySongsModel';
@@ -61,6 +63,8 @@ function History({ id, history, onRetry }: { id: string; history: HistoryState |
 
 export interface SongRowProps {
   song: TrackMark;
+  display?: SongDisplay;
+  onVisible?: (trackKey: string) => void;
   /** 釘選名額已滿（這首未釘選時按下只會提示）。 */
   pinFull: boolean;
   busy: boolean;
@@ -71,9 +75,22 @@ export interface SongRowProps {
   onLoadHistory: () => void;
 }
 
-export function SongRow({ song, pinFull, busy, disabled, history, onAction, onSeed, onLoadHistory }: SongRowProps) {
+export function SongRow({ song, display, onVisible, pinFull, busy, disabled, history, onAction, onSeed, onLoadHistory }: SongRowProps) {
   const [expanded, setExpanded] = useState(false);
   const id = useId();
+  const rowRef = useRef<HTMLLIElement>(null);
+  const metadata = display?.status === 'available' ? display.metadata : undefined;
+  const title = metadata?.canonicalTitle ?? song.title;
+  const artist = metadata?.canonicalArtists.join('、') ?? song.artist;
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row || !onVisible) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) onVisible(song.trackKey);
+    });
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [song.trackKey, onVisible]);
   const blocked = isBlocked(song);
   const pinned = isPinned(song);
   const rating = ratingSummary(song);
@@ -83,19 +100,24 @@ export function SongRow({ song, pinFull, busy, disabled, history, onAction, onSe
   }, [expanded, history, onLoadHistory]);
 
   return (
-    <li className={styles.row} data-state={blocked ? 'blocked' : pinned ? 'pinned' : undefined} data-testid="song-row" aria-busy={busy || undefined}>
+    <li ref={rowRef} className={styles.row} data-state={blocked ? 'blocked' : pinned ? 'pinned' : undefined} data-testid="song-row" aria-busy={busy || undefined}>
       <div className={styles.rowHead}>
+        <SongArtwork key={metadata?.artworkUrl ?? 'none'} url={metadata?.artworkUrl} title={title} />
         <div className={styles.rowText}>
-          <h3 className={styles.title} data-song-data>
-            {song.title}
+          <h3 className={styles.title} title={title} data-song-data>
+            {title}
           </h3>
-          <p className={styles.artist} data-song-data>
-            {song.artist}
+          <p className={styles.artist} title={artist} data-song-data>
+            {artist}
           </p>
+          <div className={styles.statuses}>
+            {!blocked && isLoved(song) && <span className={styles.tag}>收藏</span>}
+            {pinned && <span className={styles.tag}>釘選</span>}
+            {blocked && <span className={`${styles.tag} ${styles.tagBlocked}`}>已封鎖</span>}
+          </div>
         </div>
-        {pinned && <span className={styles.tag}>釘選</span>}
-        {blocked && <span className={`${styles.tag} ${styles.tagBlocked}`}>已封鎖</span>}
       </div>
+      {metadata && <span className={styles.spotifyBrand}><img {...SPOTIFY_LOGO} alt="Spotify" decoding="async" data-testid="spotify-logo" /></span>}
       <p className={styles.meta} data-testid="song-rating">
         {rating ? (
           <>
@@ -119,21 +141,28 @@ export function SongRow({ song, pinFull, busy, disabled, history, onAction, onSe
             onClick={() => onAction('pin', !pinned)}
           />
         )}
+        {!blocked && (
+          <button type="button" className={styles.toggle} aria-label="當種子開台" disabled={disabled} onClick={onSeed}>
+            當種子
+            <Icon name="arrow" size={18} />
+          </button>
+        )}
         <Toggle icon="block" label="封鎖" pressed={blocked} disabled={disabled} onClick={() => onAction('block', !blocked)} />
       </div>
       <div className={styles.rowFoot}>
         <button type="button" className={styles.disclosure} aria-expanded={expanded} aria-controls={`${id}-history`} onClick={() => setExpanded(!expanded)}>
-          帳本紀錄
+          曲目資訊與帳本紀錄
           <Icon name="chevron" size={16} />
         </button>
-        {!blocked && (
-          <button type="button" className={styles.seed} disabled={disabled} onClick={onSeed}>
-            當種子開台
-            <Icon name="arrow" size={18} />
-          </button>
-        )}
+
       </div>
-      {expanded && <History id={`${id}-history`} history={history} onRetry={onLoadHistory} />}
+      {expanded && <div id={`${id}-history`} className={styles.details}>
+        <p data-song-data>{title}</p>
+        <p data-song-data>{artist}</p>
+        {metadata?.canonicalAlbum && <p data-song-data>專輯：{metadata.canonicalAlbum}</p>}
+        {metadata?.externalUrl && <a className={styles.spotifyLink} href={metadata.externalUrl} target="_blank" rel="noopener noreferrer">在 Spotify 開啟</a>}
+        <History id={`${id}-entries`} history={history} onRetry={onLoadHistory} />
+      </div>}
     </li>
   );
 }

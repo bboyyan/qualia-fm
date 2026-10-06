@@ -15,6 +15,7 @@ import { InMemoryLedger } from './ledger/fake.js';
 import type { FeedbackLedger } from './ledger/types.js';
 import { TasteLedger, filePersistence, memoryPersistence } from './ledger/tasteStore.js';
 import { ShowHistory } from './ledger/showHistory.js';
+import { SongDisplayService } from './services/songDisplayService.js';
 import { TasteService } from './services/tasteService.js';
 import { GemWallStore } from './gems/gemWallStore.js';
 import { RealProviderRuntime } from './budget/runtime.js';
@@ -101,6 +102,8 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
   const spotify = createSpotify(config, overrides.fetchImpl ?? fetch, now);
   const tasteService = new TasteService(overrides.tasteLedger ?? createTasteLedger(config), now);
   const showHistory = overrides.showHistory ?? new ShowHistory(config.showHistory.path ? filePersistence(config.showHistory.path) : memoryPersistence());
+  const store = overrides.store ?? new JobStore(now);
+  const songDisplay = new SongDisplayService(tasteService, store, spotify ? new SpotifyCatalogResolver(spotify.api) : undefined, now);
   const plans = new PlanService({
     showHistory,
     config,
@@ -113,7 +116,7 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
     tts: config.openai.tts === 'openai' ? tts : undefined,
     resolver: overrides.resolver ?? new MockCatalogResolver(config.mock.trackMs),
     spotify: spotify ? { resolver: new SpotifyCatalogResolver(spotify.api), linked: () => spotify.auth.isLinked() } : undefined,
-    store: overrides.store ?? new JobStore(now),
+    store,
     clock: overrides.clock ?? realClock,
     now,
     random: overrides.random,
@@ -122,7 +125,7 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
   app.disable('x-powered-by');
   app.use(requestIdMiddleware, accessLog, securityHeaders(config.gates.spotifyEnabled));
   const gems = overrides.gemWall ?? createGemWall(config, now);
-  const apiDeps = { config, sessions, plans, tasteService, showHistory, gems, now, runtime, tts, spotify };
+  const apiDeps = { songDisplay, config, sessions, plans, tasteService, showHistory, gems, now, runtime, tts, spotify };
   app.use('/api', express.json({ limit: '16kb' }), createApiRouter(apiDeps));
   // Spotify 後台登記的 redirect URI 是 /callback：必須在 SPA fallback 之前處理。
   if (spotify) app.get('/callback', spotifyCallback(apiDeps));

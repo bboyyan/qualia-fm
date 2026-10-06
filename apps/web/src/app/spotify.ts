@@ -9,7 +9,7 @@ import { loadSpotifySdk } from '../audio/spotify/sdk';
 import { browserTimers, documentVisibility, hasTransientActivation, type SpotifyRemote } from '../audio/spotify/types';
 import { deviceStatus } from '../features/spotify/deviceStatus';
 import { useAppStore } from './appStore';
-import { api, getEngine, getRouter } from './services';
+import { api, getEngine, getRouter, mySongs } from './services';
 
 /** Qualia 網頁播放器在 Spotify 裝置清單上的名稱；路徑 C 的候選要排除它。 */
 export const WEB_PLAYER_NAME = 'Qualia FM';
@@ -110,6 +110,7 @@ export function beginSpotifyLink(): void {
 /** 中斷連結：伺服器刪除 token 檔；本頁拔掉 Spotify 輸出、回到手動，重新讀 capabilities。 */
 export async function disconnectSpotify(): Promise<void> {
   await api.spotifyDisconnect();
+  mySongs.clearDisplay();
   syncSpotifyOutput(false);
   const store = useAppStore.getState();
   store.setSettings({ playbackMode: 'manual' });

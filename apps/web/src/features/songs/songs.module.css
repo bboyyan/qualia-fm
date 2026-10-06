@@ -17,9 +17,10 @@
 .pinStatus svg { color: var(--q-accent); flex-shrink: 0; }
 .pinStatus[data-full='true'] { color: var(--q-accent); font-weight: 600; }
 
-.list { display: grid; gap: 12px; padding: 0; margin: 0; list-style: none; }
+/* 欄寬必須能小於長文字的 min-content，內層 ellipsis 才有可截斷的寬度。 */
+.list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 0; margin: 0; list-style: none; }
 .row {
-  position: relative; padding: 16px 16px 10px; background: var(--q-surface);
+  position: relative; min-width: 0; padding: 16px 16px 10px; background: var(--q-surface);
   border: 1px solid var(--q-border); border-radius: var(--q-radius-card); box-shadow: var(--q-shadow-soft);
 }
 .row[data-state='pinned'] { border-color: var(--q-accent-line); background: linear-gradient(90deg, var(--q-accent-wash), var(--q-surface) 46%); }
@@ -41,11 +42,11 @@
 .meta strong { color: var(--q-ink); font-weight: 600; }
 .blockedNote { margin-top: 4px; font-size: 13px; color: var(--q-muted); }
 
-.toggles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.toggles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
 .row[data-state='blocked'] .toggles { grid-template-columns: minmax(0, 1fr); max-width: 140px; }
 .toggle {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 8px;
-  border: 1px solid var(--q-border); border-radius: 999px; background: transparent; color: var(--q-ink); font-size: 14px; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 44px; padding: 0 4px;
+  border: 1px solid var(--q-border); border-radius: 999px; background: transparent; color: var(--q-ink); font-size: 13px; white-space: nowrap;
   transition: background-color var(--q-press-motion) ease, border-color var(--q-press-motion) ease, transform var(--q-press-motion) ease;
 }
 .toggle:hover:not(:disabled) { background: var(--q-subtle); }
@@ -76,3 +77,13 @@
 .empty { display: grid; gap: 10px; justify-items: start; padding: 20px; border: 1px dashed var(--q-border-strong); border-radius: var(--q-radius-card); }
 .empty h2 { font-family: var(--q-font-display); font-size: 21px; }
 .empty p { font-size: 14px; line-height: 1.7; color: var(--q-muted); }
+
+/* BRA-173 A 案：圖片完整呈現，狀態與操作均放在封面外。 */
+.artwork { display: block; flex: 0 0 64px; width: 64px; height: 64px; border-radius: 4px; object-fit: contain; }
+.artworkPlaceholder { display: grid; place-items: center; background: var(--q-subtle); color: var(--q-muted); border: 1px solid var(--q-border); }
+.title, .artist { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.statuses { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.spotifyBrand { display: inline-flex; padding: 11px; background: transparent; }
+.spotifyBrand img { display: block; background: transparent; }
+.details { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.spotifyLink { display: inline-flex; align-items: center; min-height: 44px; color: var(--q-primary); text-decoration: underline; }

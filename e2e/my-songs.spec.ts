@@ -1,3 +1,4 @@
+import { trackKeyOf } from '../packages/contracts/src/index';
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
@@ -95,6 +96,10 @@ test('BRA-135：預設路徑在「我的歌」完成收藏、釘選（含上限�
   await expect(page.getByRole('heading', { level: 1, name: '我的歌' })).toBeVisible();
   await expect(page.getByTestId('pin-status')).toContainText('釘選 0／2');
   await expectClean(page);
+  for (const row of await page.getByTestId('song-row').all()) {
+    await expect(row.locator('[data-testid="song-artwork"], [data-testid="song-artwork-placeholder"]')).toHaveCount(1);
+  }
+
 
   // 看最近評價：帳本裡的「愛＋短評」直接出現在列上。
   await search(page, loved);
@@ -139,7 +144,7 @@ test('BRA-135：預設路徑在「我的歌」完成收藏、釘選（含上限�
   await search(page, plain);
   const row = rowOf(page, plain);
   await expect(row.getByRole('button', { name: '釘選', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await row.getByRole('button', { name: '帳本紀錄' }).click();
+  await row.getByRole('button', { name: '曲目資訊與帳本紀錄' }).click();
   const history = row.getByTestId('song-history');
   await expect(history).toContainText('釘選');
   await expect(history).toContainText('改評價：愛');
@@ -344,4 +349,80 @@ test('BRA-156：開台同步釘選／收藏、去重與封鎖，取消後重開�
   await page.getByTestId('generate').click();
   expect((await request).postDataJSON()).toMatchObject({ seed: { kind: 'song', text: next, artist } });
   await expect(page.getByTestId('ready-view')).toBeVisible();
+});
+
+test('BRA-173：封面成功／失敗與透明官方標誌；展開可讀全文', async ({ page }) => {
+  const { titles, artist } = await seedLedger(page.request);
+  const title = titles[0]!;
+  const goodKey = trackKeyOf(artist, title);
+  const unavailableKey = trackKeyOf(artist, titles[2]!);
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#294F42"/></svg>';
+  // 此情境只模擬展示 API，伺服器未啟用 Spotify，CSP 仍拒絕 i.scdn.co。
+  // 圖片 fixture 用同源路由，驗證載入／onError，不繞過或放寬正式 CSP。
+  const artworkRequests = new Set<string>();
+  await page.route('**/test-artwork/bra173-*', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    artworkRequests.add(path);
+    if (path.endsWith('bad')) return route.abort();
+    await route.fulfill({ contentType: 'image/svg+xml', body: svg });
+  });
+  await page.route('**/api/spotify/song-display', async (route) => {
+    const { trackKeys } = route.request().postDataJSON() as { trackKeys: string[] };
+    await route.fulfill({ json: { items: trackKeys.map((trackKey) => trackKey === unavailableKey
+      ? { trackKey, status: 'unavailable' }
+      : { trackKey, status: 'available', metadata: {
+      canonicalTitle: trackKey === goodKey ? title : '很長的曲名'.repeat(20),
+      canonicalArtists: ['很長的歌手'.repeat(20)], canonicalAlbum: '專輯全文',
+      artworkUrl: `/test-artwork/bra173-${trackKey === goodKey ? 'good' : 'bad'}`,
+      externalUrl: 'https://open.spotify.com/track/test',
+    } }) } });
+  });
+  await page.goto('/');
+  await page.getByTestId('tab-mine').click();
+  await search(page, title);
+  const row = page.getByTestId('song-row');
+  await expect(row.getByTestId('song-artwork')).toBeVisible();
+  await expect.poll(() => row.getByTestId('song-artwork').evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(64);
+  expect(artworkRequests.has('/test-artwork/bra173-good')).toBe(true);
+  // 長歌手名仍收合時先驗證，避免頁面被撐寬後才嘗試操作。
+  await expect(row.getByRole('button', { name: '曲目資訊與帳本紀錄' })).toHaveAttribute('aria-expanded', 'false');
+  await expectNoHorizontalOverflow(page);
+  await row.getByRole('button', { name: '釘選', exact: true }).click();
+  await expect(row.getByRole('button', { name: '釘選', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await row.getByRole('button', { name: '收藏', exact: true }).click();
+  await expect(row.getByRole('button', { name: '收藏', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  const logo = row.getByTestId('spotify-logo');
+  await expect(logo).toBeVisible();
+  expect(await logo.evaluate((img) => getComputedStyle(img.parentElement!).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+  for (const button of await row.getByRole('group').getByRole('button').all()) {
+    const box = await button.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+  }
+  await search(page, titles[1]!);
+  // 封面 onError 與無展示資料不同：正式曲目資料仍需標示 Spotify 來源。
+  await expect(row.getByTestId('spotify-logo')).toBeVisible();
+  await expect(row.getByTestId('song-artwork-placeholder')).toBeVisible();
+  await expect(row.getByTestId('song-artwork')).toHaveCount(0);
+  expect(artworkRequests.has('/test-artwork/bra173-bad')).toBe(true);
+  // 此列曲名與歌手名都超長，收合與展開均不得超出 viewport。
+  await expect(row.getByRole('button', { name: '曲目資訊與帳本紀錄' })).toHaveAttribute('aria-expanded', 'false');
+  await expectNoHorizontalOverflow(page);
+  await row.getByRole('button', { name: '曲目資訊與帳本紀錄' }).click();
+  const details = row.locator('[id$="-history"]');
+  await expect(details.getByText('很長的曲名'.repeat(20), { exact: true })).toBeVisible();
+  await expect(details.getByText('很長的歌手'.repeat(20), { exact: true })).toBeVisible();
+  await expect(row.getByText('專輯：專輯全文')).toBeVisible();
+  await expect(row.getByRole('link', { name: '在 Spotify 開啟' })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  const unavailableResponse = page.waitForResponse((response) => response.url().endsWith('/api/spotify/song-display')
+    && (response.request().postDataJSON() as { trackKeys: string[] }).trackKeys.includes(unavailableKey));
+  await search(page, titles[2]!);
+  expect((await (await unavailableResponse).json()).items).toContainEqual({ trackKey: unavailableKey, status: 'unavailable' });
+  await expect(row.getByRole('heading', { name: titles[2]!, exact: true })).toBeVisible();
+  await expect(row.getByTestId('song-artwork-placeholder')).toBeVisible();
+  await expect(row.getByTestId('song-artwork')).toHaveCount(0);
+  await expect(row.getByTestId('spotify-logo')).toHaveCount(0);
+  await row.getByRole('button', { name: '曲目資訊與帳本紀錄' }).click();
+  await expect(row.getByRole('link', { name: '在 Spotify 開啟' })).toHaveCount(0);
 });

@@ -6,7 +6,7 @@
  * 擁有者（BRA-111 A1）：除了登入本身，所有 Spotify 端點都要出示擁有者憑證（完成連結時發給那個瀏覽器的 HttpOnly cookie）。
  */
 import type { Request, RequestHandler, Response, Router } from 'express';
-import { LovedRequestSchema, SpotifyPauseRequestSchema, SpotifyPlayRequestSchema } from '@qualia/contracts';
+import { SongDisplayRequestSchema, LovedRequestSchema, SpotifyPauseRequestSchema, SpotifyPlayRequestSchema } from '@qualia/contracts';
 import { AppError } from '../http/errors.js';
 import { logger } from '../http/log.js';
 import { assertAllowedOrigin, sessionOf } from '../security/guards.js';
@@ -139,10 +139,26 @@ export function spotifySessionRoutes(router: Router, deps: ApiDeps): void {
   });
   router.post('/auth/spotify/logout', (req, res) => {
     ownerServices(req, deps).auth.disconnect();
+    deps.songDisplay.clear();
     deps.plans.scrubSpotify();
     logger.info('spotify_disconnected', {});
     res.setHeader('Set-Cookie', clearedOwnerCookie(deps.config.secureCookies));
     res.status(204).end();
+  });
+  router.post('/spotify/song-display', async (req, res) => {
+    const parsed = SongDisplayRequestSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError('INVALID_INPUT');
+    res.setHeader('Cache-Control', 'no-store');
+    const controller = new AbortController();
+    const abort = () => { if (!res.writableEnded) controller.abort(); };
+    res.on('close', abort);
+    const allowed = () => deps.config.gates.spotifyEnabled && deps.spotify?.auth.ownerStatus(ownerSecretOf(req)) === 'self';
+    try {
+      const items = await deps.songDisplay.get(parsed.data.trackKeys, sessionOf(res).id, allowed, controller.signal);
+      if (!controller.signal.aborted) res.json({ items });
+    } finally {
+      res.off('close', abort);
+    }
   });
   router.post('/spotify/token', async (req, res) => {
     assertFeatureAllowed(deps.config, 'spotify_dj');
