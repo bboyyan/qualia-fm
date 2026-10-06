@@ -16,6 +16,7 @@ import styles from './songs.module.css';
 
 interface MySongsPageProps {
   model: MySongsModel;
+  onHistory?: () => void;
   onSeed: (song: TrackMark) => void;
 }
 
@@ -74,7 +75,7 @@ function EmptyLibrary() {
   );
 }
 
-export function MySongsPage({ model, onSeed }: MySongsPageProps) {
+export function MySongsPage({ model, onSeed, onHistory }: MySongsPageProps) {
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
   const showToast = useAppStore((s) => s.showToast);
   const announce = useAppStore((s) => s.announce);
@@ -104,6 +105,7 @@ export function MySongsPage({ model, onSeed }: MySongsPageProps) {
         <h1>我的歌</h1>
         <p>收藏、封鎖與釘選，下一次開台前都會先讀。</p>
       </header>
+      {onHistory && <Button variant="outline" onClick={onHistory}>開台歷史</Button>}
       {state.loadError && (
         <InlineRecovery
           tone="offline"

@@ -4,6 +4,8 @@
  */
 import type { z } from 'zod';
 import {
+  ShowHistoryResponseSchema,
+  type ShowSummary,
   CapabilitiesSchema,
   FeedbackReceiptSchema,
   type FeedbackRequest,
@@ -65,6 +67,7 @@ export interface StartPlanOptions {
 }
 
 export interface ApiClient {
+  showHistory(signal?: AbortSignal): Promise<ShowSummary[]>;
   feedback(request: FeedbackRequest): Promise<FeedbackReceipt>;
   ensureSession(force?: boolean): Promise<SessionInfo>;
   capabilities(signal?: AbortSignal): Promise<Capabilities>;
@@ -144,7 +147,7 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
     return session;
   }
 
-  /** BRA-161: recovery is scoped to feedback/taste; the replay cannot recurse. */
+  /** BRA-161: recovery is scoped to feedback/taste/history; the replay cannot recurse. */
   async function recoverSession<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     const usedSession = session;
     try { return await operation(); }
@@ -160,6 +163,10 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
   }
 
   return {
+    showHistory: async (signal) => {
+      await ensureSession();
+      return (await recoverSession(() => send('/api/show-history', ShowHistoryResponseSchema, { signal }), signal)).shows;
+    },
     feedback: async (request) => {
       await ensureSession();
       return recoverSession(() => mutate('/api/feedback', FeedbackReceiptSchema, 'POST', {}, request));

@@ -1,0 +1,11 @@
+.page { padding-bottom: 8px; }
+.heading { padding: 14px 0 18px; }
+.heading p { margin-top: 10px; color: var(--q-muted); font-size: 15px; line-height: 1.7; }
+.list { display: grid; gap: 12px; padding: 0; margin-top: 16px; list-style: none; }
+.row { padding: 16px; background: var(--q-surface); border: 1px solid var(--q-border); border-radius: var(--q-radius-card); }
+.row summary { cursor: pointer; min-height: var(--q-tap); }
+.row time { color: var(--q-muted); font-size: 13px; }
+.row h2 { margin-top: 8px; font-size: 20px; overflow-wrap: anywhere; }
+.row p { margin-top: 8px; line-height: 1.6; overflow-wrap: anywhere; }
+.detail { display: grid; gap: 12px; margin-top: 12px; }
+.detail ol { padding-left: 24px; line-height: 1.8; overflow-wrap: anywhere; }
