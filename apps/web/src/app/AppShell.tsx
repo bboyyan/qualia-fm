@@ -94,7 +94,7 @@ export function AppShell({ children, miniPlayer, sheets }: AppShellProps) {
       </div>
       <aside className={styles.side} aria-label="關於 Qualia FM">
         <h2>Feel the connection.</h2>
-        <p>手機優先的私人電台。不是找同類型，是找到同一種感覺。</p>
+        <p>手機優先的私人電台。</p>
         <DeveloperOnly><p>目前為 MOCK 模式：只播放合成測試音，曲目皆為虛構。</p></DeveloperOnly>
       </aside>
     </div>

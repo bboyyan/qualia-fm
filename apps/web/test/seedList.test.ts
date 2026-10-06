@@ -47,8 +47,8 @@ describe('selection（種子清單與 Ready 共用）', () => {
     expect(pickSelected([{ id: 'a' }, { id: 'b' }, { id: 'c' }], ['c', 'a'], (x) => x.id)).toEqual([{ id: 'a' }, { id: 'c' }]);
   });
 
-  it('startLabel：全選時一鍵「全選・…」，部分選取時說明數量', () => {
-    expect(startLabel('快速開台', 1, 1)).toBe('全選・快速開台');
+  it('startLabel：全選時一鍵「全選・…」，部分選取時說明數量；只有 1 首只寫動詞（BRA-170）', () => {
+    expect(startLabel('快速開台', 1, 1)).toBe('快速開台');
     expect(startLabel('開始收聽', 5, 5)).toBe('全選・開始收聽');
     expect(startLabel('開始收聽', 3, 5)).toBe('開始收聽（已選 3／5）');
   });
@@ -119,8 +119,8 @@ describe('種子清單', () => {
     expect(PlanRequestSchema.safeParse(toPlanRequest(DEFAULT_DRAFT, DEFAULT_SETTINGS)).success).toBe(true);
   });
 
-  it('toPlanRequest（感覺模式）照舊用輸入文字', () => {
-    const request = toPlanRequest({ ...DEFAULT_DRAFT, kind: 'feeling', text: ' TEST 深夜 ' }, DEFAULT_SETTINGS);
+  it('toPlanRequest（感覺模式）用「再補一句」的文字（BRA-170：和歌名欄分開）', () => {
+    const request = toPlanRequest({ ...DEFAULT_DRAFT, kind: 'feeling', feelingText: ' TEST 深夜 ' }, DEFAULT_SETTINGS);
     expect(request.seed).toEqual({ kind: 'feeling', text: 'TEST 深夜', artist: null });
   });
 
@@ -178,23 +178,24 @@ describe('ReadyView：5 首預設全選，一鍵開始', () => {
 describe('SeedComposer：開台預設歌曲模式＋預設種子卡', () => {
   const render = (continuing = false) => renderToStaticMarkup(createElement(SeedComposer, { continuing, onSubmit: noop }));
 
-  it('預設種子卡標「預設種子・可更換」，已勾選，主按鈕一鍵「全選・快速開台」', () => {
+  it('預設種子卡標「預設種子・可更換」，已勾選，主按鈕「快速開台」（只有 1 首，不寫全選）', () => {
     const html = render();
     expect(html).toContain('預設種子・可更換');
     expect(html).toContain('Time Flows Ever Onward');
     expect(html).toContain('Evan Call');
     expect(html).toContain('葬送的芙莉蓮');
     expect(html).toMatch(/<input[^>]*type="checkbox"[^>]*checked=""/);
-    expect(html).toContain('全選・快速開台');
-    expect(html).toMatch(/role="radio"[^>]*aria-checked="true"[^>]*>[\s\S]*?歌曲/);
+    expect(html).toMatch(/>快速開台</);
+    expect(html).not.toContain('全選・快速開台');
+    expect(html).toMatch(/role="radio"[^>]*aria-checked="true"[^>]*>[\s\S]*?從一首歌/);
   });
 
   it('預設種子沒有「移除」，只能取消勾選更換', () => {
     expect(render()).not.toContain('從清單移除');
   });
 
-  it('已有節目在播：主按鈕是「全選・建立下一段」', () => {
-    expect(render(true)).toContain('全選・建立下一段');
+  it('已有節目在播：主按鈕是「建立下一段」', () => {
+    expect(render(true)).toMatch(/>建立下一段</);
   });
 });
 

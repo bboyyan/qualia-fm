@@ -285,7 +285,8 @@ test('BRA-156：開台同步釘選／收藏、去重與封鎖，取消後重開�
   const library = page.getByTestId('ledger-seeds');
   await expect(library.locator('summary')).toContainText('我的歌（2）');
   await expect(library).not.toHaveAttribute('open', '');
-  await expect(page.getByTestId('generate')).toHaveText('全選・快速開台');
+  // 收合時只有預設種子可見（1／1），BRA-170 起不寫「全選・」。
+  await expect(page.getByTestId('generate')).toHaveText('快速開台');
   await page.screenshot({ path: testInfo.outputPath('bra156-home-collapsed.png') });
   await library.locator('summary').click();
   const list = page.getByTestId('ledger-seed-list');
@@ -300,7 +301,7 @@ test('BRA-156：開台同步釘選／收藏、去重與封鎖，取消後重開�
   await page.getByTestId('ledger-seed-list-all').click();
   await expect(page.getByTestId('generate')).toHaveText('快速開台（已選 1／3）');
   await library.locator('summary').click();
-  await expect(page.getByTestId('generate')).toHaveText('全選・快速開台');
+  await expect(page.getByTestId('generate')).toHaveText('快速開台');
   await library.locator('summary').click();
   await expect(page.getByRole('checkbox', { name: new RegExp(blocked) })).toHaveCount(0);
   await expect(list.getByRole('button', { name: /從清單移除/ })).toHaveCount(0);

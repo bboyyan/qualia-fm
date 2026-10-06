@@ -22,9 +22,10 @@ export function pickSelected<T>(items: readonly T[], selected: readonly string[]
   return items.filter((item) => selected.includes(idOf(item)));
 }
 
-/** 主按鈕文字：全選時就是一鍵「全選・…」，部分選取時說明數量。 */
+/** 主按鈕文字：全選時就是一鍵「全選・…」，部分選取時說明數量；清單只有 1 首時「全選」沒有意義，只寫動詞（BRA-170）。 */
 export function startLabel(verb: string, selectedCount: number, total: number): string {
-  return selectedCount === total ? `全選・${verb}` : `${verb}（已選 ${selectedCount}／${total}）`;
+  if (selectedCount === total) return total === 1 ? verb : `全選・${verb}`;
+  return `${verb}（已選 ${selectedCount}／${total}）`;
 }
 
 /** Ready 只播勾選的曲目：依節目順序保留；全選時原樣回傳。 */
