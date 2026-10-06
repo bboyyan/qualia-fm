@@ -17,6 +17,8 @@ import { GemWallPage } from '../features/gems/GemWallPage';
 import { SettleOverlay } from '../features/gems/SettleOverlay';
 import gemStyles from '../features/gems/gems.module.css';
 import { SegmentedControl } from '../ui/controls';
+import { ShareSheet } from '../features/share/ShareSheet';
+import { shares } from '../features/share/shareServices';
 import { InlineRecovery } from '../ui/Feedback';
 import { Button } from '../ui/Button';
 import { AppShell } from './AppShell';
@@ -186,6 +188,7 @@ export function App() {
           <TuneSheet />
           <CapsuleSheet tracker={journey} />
           <SettleOverlay controller={gemSettle} journey={journey} onWall={openGemWall} />
+          <ShareSheet controller={shares} />
         </>
       }
     >

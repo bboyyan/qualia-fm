@@ -29,6 +29,9 @@ import { LovedPlaylist } from './spotify/loved.js';
 import { SpotifyCatalogResolver } from './spotify/resolver.js';
 import { SpotifyTokenStore } from './spotify/tokenStore.js';
 import { SpotifyWebApi } from './spotify/webApi.js';
+import { DEFAULT_SHARE_CONFIG, type ShareConfig } from './share/config.js';
+import { createPublicShareRouter, createShareRouter } from './share/routes.js';
+import { ShareStore } from './share/shareStore.js';
 
 export interface AppOverrides {
   fetchImpl?: typeof fetch;
@@ -45,6 +48,8 @@ export interface AppOverrides {
   resolver?: CatalogResolver;
   /** 候選池抽樣亂數（BRA-127）。 */
   random?: () => number;
+  /** 旅程精選集分享（BRA-129）；未給＝只存記憶體、公開路由關閉。 */
+  share?: ShareConfig;
 }
 
 export interface QualiaApp {
@@ -126,6 +131,10 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
   app.use(requestIdMiddleware, accessLog, securityHeaders(config.gates.spotifyEnabled));
   const gems = overrides.gemWall ?? createGemWall(config, now);
   const apiDeps = { songDisplay, config, sessions, plans, tasteService, showHistory, gems, now, runtime, tts, spotify };
+  const share = overrides.share ?? DEFAULT_SHARE_CONFIG;
+  const shareDeps = { store: new ShareStore(share.path ? filePersistence(share.path) : memoryPersistence(), now), sessions, allowedOrigins: config.allowedOrigins, publicEnabled: share.publicEnabled, rateLimitPerMin: config.limits.sessionRateLimitPerMin, now };
+  app.use('/api/share', express.json({ limit: '16kb' }), createShareRouter(shareDeps));
+  app.use('/api/public', createPublicShareRouter(shareDeps));
   app.use('/api', express.json({ limit: '16kb' }), createApiRouter(apiDeps));
   // Spotify 後台登記的 redirect URI 是 /callback：必須在 SPA fallback 之前處理。
   if (spotify) app.get('/callback', spotifyCallback(apiDeps));

@@ -1,0 +1,157 @@
+/*
+ * 分享頁（BRA-163 幀 06）。夜色面只用在分享卡上（取自 SoundscapeArt 第 1 景），App 本體維持暖白底。
+ * 夜色變數只在本模組內定義，不動全域 tokens.css。
+ */
+.share {
+  --night-from: #34574A;
+  --night-to: #1B3530;
+  --night-ink: #EEF0E4;
+  --night-muted: #B9C4B6;
+  --night-line: rgba(228, 233, 216, 0.18);
+  display: grid;
+  gap: 0;
+}
+
+.status { margin: 8px 0 16px; color: var(--q-muted); }
+
+.night {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: var(--night-ink);
+  background:
+    radial-gradient(120% 80% at 85% 0%, rgba(209, 190, 140, 0.16), transparent 55%),
+    linear-gradient(160deg, var(--night-from), var(--night-to));
+}
+
+.night::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.55;
+  pointer-events: none;
+  background: repeating-radial-gradient(ellipse at 110% 120%, transparent 0 22px, rgba(228, 233, 216, 0.07) 22px 23px);
+}
+
+.card {
+  width: min(100%, 300px);
+  margin: 4px auto 0;
+  padding: 20px 18px 14px;
+  border-radius: 22px;
+  box-shadow: var(--q-shadow-lift);
+}
+
+.kicker { margin: 0; font-size: 11px; font-weight: 650; letter-spacing: 0.18em; color: var(--night-muted); }
+.cardTitle { margin: 8px 0 0; font-family: var(--q-font-display); font-weight: 400; font-size: 24px; line-height: 1.2; color: var(--night-ink); }
+.meta { margin: 4px 0 0; font-size: 12px; color: var(--night-muted); }
+
+.tracks { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.tracks li { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.gem { width: 18px; height: 18px; flex-shrink: 0; }
+.trackText { display: grid; min-width: 0; flex: 1; line-height: 1.3; }
+.trackTitle { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.trackText small { font-size: 11px; color: var(--night-muted); }
+
+.spotify {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--night-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: background-color 160ms ease;
+}
+.spotify:hover { background: rgba(255, 255, 255, 0.1); }
+.spotify:focus-visible { outline: 3px solid var(--night-ink); outline-offset: 1px; }
+
+.cardFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--night-line);
+  font-size: 11px;
+  color: var(--night-muted);
+}
+.cardFooter b { font-family: var(--q-font-display); font-style: italic; font-weight: 400; font-size: 14px; color: var(--night-ink); }
+
+.shareGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 18px; }
+.shareAction {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--q-tap);
+  padding: 6px 0;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--q-ink);
+  cursor: pointer;
+  transition: background-color 160ms ease, transform var(--q-press-motion) ease;
+}
+.shareAction:hover { background: var(--q-subtle); }
+.shareAction:active:not(:disabled) { transform: scale(0.97); }
+.shareAction:focus-visible { outline: 3px solid var(--q-focus); outline-offset: 2px; }
+.ring {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--q-surface);
+  border: 1px solid var(--q-border);
+  color: var(--q-primary);
+}
+.ring svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.shareAction:disabled { color: var(--q-muted); cursor: not-allowed; }
+.shareAction:disabled:hover { background: none; }
+.shareAction:disabled .ring { border-style: dashed; background: transparent; color: var(--q-muted); }
+.shareAction small { display: block; margin-top: -4px; font-size: 11px; line-height: 1.3; }
+
+.scope { margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: var(--q-muted); text-align: center; }
+
+.or { display: flex; align-items: center; gap: 10px; margin: 22px 0 14px; font-size: 12px; color: var(--q-muted); }
+.or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--q-border); }
+
+.continue {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: var(--q-radius-card);
+  background: var(--q-surface);
+  border: 1.5px solid var(--q-primary);
+}
+.continue h3 { margin: 0; font-size: 18px; }
+.continue > p { margin: 0; font-size: 14px; color: var(--q-muted); }
+.seeds { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; padding: 0; list-style: none; }
+.seeds li { padding: 5px 10px; border-radius: 999px; background: var(--q-primary-wash); font-size: 13px; overflow-wrap: anywhere; }
+.continue .note { font-size: 12px; line-height: 1.65; }
+
+.edit { display: grid; gap: 8px; }
+.edit label { font-size: 14px; font-weight: 600; }
+.input {
+  width: 100%;
+  min-height: 88px;
+  padding: 12px 14px;
+  border: 1px solid var(--q-border-strong);
+  border-radius: var(--q-radius-input);
+  background: var(--q-bg);
+  color: var(--q-ink);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.input:focus-visible { outline: 3px solid var(--q-focus); outline-offset: 1px; }
+.input[aria-invalid='true'] { border-color: var(--q-danger); }
+.problem { margin: 0; font-size: 13px; color: var(--q-danger); }
