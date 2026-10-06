@@ -14,6 +14,7 @@ import { PlanService, realClock } from './services/planService.js';
 import { InMemoryLedger } from './ledger/fake.js';
 import type { FeedbackLedger } from './ledger/types.js';
 import { TasteLedger, filePersistence, memoryPersistence } from './ledger/tasteStore.js';
+import { ShowHistory } from './ledger/showHistory.js';
 import { TasteService } from './services/tasteService.js';
 import { RealProviderRuntime } from './budget/runtime.js';
 import { OpenAIEditorialPlanner } from './providers/openai/planner.js';
@@ -32,6 +33,7 @@ export interface AppOverrides {
   ledger?: FeedbackLedger;
   /** 品味帳本（預設依 TASTE_LEDGER_PATH 建立本機檔）。 */
   tasteLedger?: TasteLedger;
+  showHistory?: ShowHistory;
   store?: JobStore;
   now?: () => number;
   clock?: PhaseClock;
@@ -89,7 +91,9 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
   const tts = new OpenAITtsProvider(config.openai, runtime, overrides.fetchImpl ?? fetch, now);
   const spotify = createSpotify(config, overrides.fetchImpl ?? fetch, now);
   const tasteService = new TasteService(overrides.tasteLedger ?? createTasteLedger(config), now);
+  const showHistory = overrides.showHistory ?? new ShowHistory(config.showHistory.path ? filePersistence(config.showHistory.path) : memoryPersistence());
   const plans = new PlanService({
+    showHistory,
     config,
     sessions,
     ledger: overrides.ledger ?? new InMemoryLedger(),
@@ -108,7 +112,7 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
   const app = express();
   app.disable('x-powered-by');
   app.use(requestIdMiddleware, accessLog, securityHeaders(config.gates.spotifyEnabled));
-  const apiDeps = { config, sessions, plans, tasteService, now, runtime, tts, spotify };
+  const apiDeps = { config, sessions, plans, tasteService, showHistory, now, runtime, tts, spotify };
   app.use('/api', express.json({ limit: '16kb' }), createApiRouter(apiDeps));
   // Spotify 後台登記的 redirect URI 是 /callback：必須在 SPA fallback 之前處理。
   if (spotify) app.get('/callback', spotifyCallback(apiDeps));

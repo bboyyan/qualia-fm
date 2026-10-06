@@ -53,6 +53,7 @@ export default defineConfig({
       SESSION_RATE_LIMIT_PER_MIN: '2000',
       PLAN_RATE_LIMIT_PER_HOUR: '500',
       TASTE_LEDGER_PATH,
+      SHOW_HISTORY_PATH: join(tmpdir(), `qfm-e2e-history-${process.pid}.json`),
       SESSION_STORE_PATH: join(tmpdir(), `qfm-e2e-session-${process.pid}.json`),
     },
   },

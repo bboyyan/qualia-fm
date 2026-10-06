@@ -27,6 +27,7 @@ import {
 } from '../security/sessions.js';
 import { assertFeatureAllowed, buildCapabilities } from '../services/capabilities.js';
 import type { PlanService } from '../services/planService.js';
+import type { ShowHistory } from '../ledger/showHistory.js';
 import type { TasteService } from '../services/tasteService.js';
 import { ownerSecretOf, spotifyPublicRoutes, spotifySessionRoutes, type SpotifyServices } from './spotify.js';
 
@@ -37,6 +38,7 @@ export interface ApiDeps {
   readonly sessions: SessionStore;
   readonly plans: PlanService;
   readonly tasteService: TasteService;
+  readonly showHistory: ShowHistory;
   readonly now: () => number;
   /** 只在 SPOTIFY_ENABLED=true 時存在。 */
   readonly spotify?: SpotifyServices;
@@ -175,6 +177,10 @@ export function createApiRouter(deps: ApiDeps): Router {
   spotifySessionRoutes(router, deps);
   planRoutes(router, deps);
   tasteRoutes(router, deps);
+  router.get('/show-history', (_req, res) => {
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({ shows: deps.showHistory.list() });
+  });
   router.use(() => {
     throw new AppError('NOT_FOUND');
   });

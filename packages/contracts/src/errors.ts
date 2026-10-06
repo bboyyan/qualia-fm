@@ -23,6 +23,7 @@ export const ERROR_CODES = [
   'AUTOPLAY_BLOCKED',
   'AUDIO_SOURCE_FAILED',
   'NETWORK_ERROR',
+  'HISTORY_UNAVAILABLE',
   'INTERNAL',
 ] as const;
 
@@ -63,5 +64,6 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   AUTOPLAY_BLOCKED: '手機需要一次點擊才能繼續播放。',
   AUDIO_SOURCE_FAILED: '這首暫時無法播放。',
   NETWORK_ERROR: '網路連線中斷了，不是你按了暫停。',
+  HISTORY_UNAVAILABLE: '開台歷史檔讀不到或已損毀，需要人工修復後才能開台；本次未扣額度。',
   INTERNAL: '服務暫時出了點問題，請稍後再試。',
 };
