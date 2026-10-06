@@ -31,6 +31,8 @@ describe('展示 API（假 Spotify，無真實帳號）', () => {
     const response = await post(client, endpoint, body).expect(200);
     expect(response.body).toEqual({ items: [{ trackKey: key, status: 'unavailable' }] });
     expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['content-security-policy']).toContain("img-src 'self' data:;");
+    expect(response.headers['content-security-policy']).not.toContain('https://i.scdn.co');
     expect(fetchImpl).not.toHaveBeenCalled();
   });
   it('未連結與非 owner 不查 Spotify，也不透露曲目', async () => {
@@ -50,7 +52,10 @@ describe('展示 API（假 Spotify，無真實帳號）', () => {
     const { client, ledger, fake } = await setup();
     const before = await ledger.snapshot();
     const record = vi.spyOn(ledger, 'record');
-    const result = SongDisplayResponseSchema.parse((await post(client, endpoint, body).expect(200)).body);
+    const response = await post(client, endpoint, body).expect(200);
+    // 同一 app 的全域安全標頭：啟用 Spotify 後，owner 取得的封面來源可載入。
+    expect(response.headers['content-security-policy']).toContain("img-src 'self' data: https://i.scdn.co;");
+    const result = SongDisplayResponseSchema.parse(response.body);
     expect(result.items[0]).toMatchObject({ trackKey: key, status: 'available', metadata: { canonicalTitle: title, canonicalArtists: [artist], canonicalAlbum: 'TEST album', artworkUrl: expect.stringContaining('i.scdn.co') } });
     expect(JSON.stringify(result)).not.toMatch(/providerTrackId|audioLocator/);
     expect(fake.callsTo('GET', '/v1/search')).toHaveLength(1);

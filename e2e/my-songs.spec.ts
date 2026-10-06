@@ -354,8 +354,13 @@ test('BRA-173：封面成功／失敗與透明官方標誌；展開可讀全文'
   const { titles } = await seedLedger(page.request);
   const title = titles[0]!;
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#294F42"/></svg>';
-  await page.route('https://i.scdn.co/image/bra173-*', async (route) => {
-    if (route.request().url().endsWith('bad')) return route.abort();
+  // 此情境只模擬展示 API，伺服器未啟用 Spotify，CSP 仍拒絕 i.scdn.co。
+  // 圖片 fixture 用同源路由，驗證載入／onError，不繞過或放寬正式 CSP。
+  const artworkRequests = new Set<string>();
+  await page.route('**/test-artwork/bra173-*', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    artworkRequests.add(path);
+    if (path.endsWith('bad')) return route.abort();
     await route.fulfill({ contentType: 'image/svg+xml', body: svg });
   });
   await page.route('**/api/spotify/song-display', async (route) => {
@@ -363,7 +368,7 @@ test('BRA-173：封面成功／失敗與透明官方標誌；展開可讀全文'
     await route.fulfill({ json: { items: trackKeys.map((trackKey) => ({ trackKey, status: 'available', metadata: {
       canonicalTitle: trackKey.includes(title.toLowerCase()) ? title : '很長的曲名'.repeat(20),
       canonicalArtists: ['很長的歌手'.repeat(20)], canonicalAlbum: '專輯全文',
-      artworkUrl: `https://i.scdn.co/image/bra173-${trackKey.includes(title.toLowerCase()) ? 'good' : 'bad'}`,
+      artworkUrl: `/test-artwork/bra173-${trackKey.includes(title.toLowerCase()) ? 'good' : 'bad'}`,
       externalUrl: 'https://open.spotify.com/track/test',
     } })) } });
   });
@@ -373,6 +378,7 @@ test('BRA-173：封面成功／失敗與透明官方標誌；展開可讀全文'
   const row = page.getByTestId('song-row');
   await expect(row.getByTestId('song-artwork')).toBeVisible();
   await expect.poll(() => row.getByTestId('song-artwork').evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(64);
+  expect(artworkRequests.has('/test-artwork/bra173-good')).toBe(true);
   await row.getByRole('button', { name: '釘選', exact: true }).click();
   const logo = row.getByTestId('spotify-logo');
   await expect(logo).toBeVisible();
@@ -386,6 +392,7 @@ test('BRA-173：封面成功／失敗與透明官方標誌；展開可讀全文'
   await expect(row.getByTestId('spotify-logo')).toBeVisible();
   await expect(row.getByTestId('song-artwork-placeholder')).toBeVisible();
   await expect(row.getByTestId('song-artwork')).toHaveCount(0);
+  expect(artworkRequests.has('/test-artwork/bra173-bad')).toBe(true);
   await row.getByRole('button', { name: '曲目資訊與帳本紀錄' }).click();
   await expect(row.getByText('專輯：專輯全文')).toBeVisible();
   await expect(row.getByRole('link', { name: '在 Spotify 開啟' })).toBeVisible();
