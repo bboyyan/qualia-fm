@@ -16,6 +16,7 @@ import type { FeedbackLedger } from './ledger/types.js';
 import { TasteLedger, filePersistence, memoryPersistence } from './ledger/tasteStore.js';
 import { ShowHistory } from './ledger/showHistory.js';
 import { TasteService } from './services/tasteService.js';
+import { GemWallStore } from './gems/gemWallStore.js';
 import { RealProviderRuntime } from './budget/runtime.js';
 import { OpenAIEditorialPlanner } from './providers/openai/planner.js';
 import { OpenAITtsProvider } from './providers/openai/tts.js';
@@ -34,6 +35,8 @@ export interface AppOverrides {
   /** 品味帳本（預設依 TASTE_LEDGER_PATH 建立本機檔）。 */
   tasteLedger?: TasteLedger;
   showHistory?: ShowHistory;
+  /** 寶石牆（預設依 GEM_WALL_PATH 建立本機檔）。 */
+  gemWall?: GemWallStore;
   store?: JobStore;
   now?: () => number;
   clock?: PhaseClock;
@@ -78,6 +81,12 @@ function createTasteLedger(config: ServerConfig): TasteLedger {
   return new TasteLedger(memoryPersistence());
 }
 
+function createGemWall(config: ServerConfig, now: () => number): GemWallStore {
+  if (config.gemWall.path) return new GemWallStore(filePersistence(config.gemWall.path), now);
+  logger.info('gem_wall_memory_only', { reason: 'GEM_WALL_PATH unset in test' });
+  return new GemWallStore(memoryPersistence(), now);
+}
+
 export function createApp(config: ServerConfig, overrides: AppOverrides = {}): QualiaApp {
   const now = overrides.now ?? Date.now;
   const sessions = new SessionStore(config.sessions.path ? filePersistence(config.sessions.path) : undefined, now);
@@ -112,7 +121,8 @@ export function createApp(config: ServerConfig, overrides: AppOverrides = {}): Q
   const app = express();
   app.disable('x-powered-by');
   app.use(requestIdMiddleware, accessLog, securityHeaders(config.gates.spotifyEnabled));
-  const apiDeps = { config, sessions, plans, tasteService, showHistory, now, runtime, tts, spotify };
+  const gems = overrides.gemWall ?? createGemWall(config, now);
+  const apiDeps = { config, sessions, plans, tasteService, showHistory, gems, now, runtime, tts, spotify };
   app.use('/api', express.json({ limit: '16kb' }), createApiRouter(apiDeps));
   // Spotify 後台登記的 redirect URI 是 /callback：必須在 SPA fallback 之前處理。
   if (spotify) app.get('/callback', spotifyCallback(apiDeps));

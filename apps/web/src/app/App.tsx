@@ -13,13 +13,17 @@ import { SettingsPage } from '../features/settings/SettingsPage';
 import { ShowHistoryPage } from '../features/history/ShowHistoryPage';
 import { MySongsPage } from '../features/songs/MySongsPage';
 import { CapsuleSheet } from '../features/journey/CapsuleSheet';
+import { GemWallPage } from '../features/gems/GemWallPage';
+import { SettleOverlay } from '../features/gems/SettleOverlay';
+import gemStyles from '../features/gems/gems.module.css';
+import { SegmentedControl } from '../ui/controls';
 import { InlineRecovery } from '../ui/Feedback';
 import { Button } from '../ui/Button';
 import { AppShell } from './AppShell';
 import { EnvironmentSheet } from './EnvironmentSheet';
 import { useAppStore } from './appStore';
 import { useBoot, useEffectivePlaybackMode, usePopStateNavigation } from './hooks';
-import { generation, getEngine, journey, mySongs, tuneGeneration } from './services';
+import { gemSettle, gemWall, generation, getEngine, journey, mySongs, tuneGeneration } from './services';
 import { connectPlayer, syncSpotifyOutput } from './spotify';
 import { effectivePlaybackMode } from '../features/spotify/spotifyMode';
 import { pickSegments } from '../features/seed/selection';
@@ -137,13 +141,37 @@ function startFromHistory(show: ShowSummary): void {
   store.setTab('home');
 }
 
-export function App() {
+const MINE_VIEWS = [
+  { value: 'songs', label: '我的歌' },
+  { value: 'gems', label: '寶石牆' },
+] as const;
+
+/** 「我的」tab：我的歌（BRA-135）／寶石牆（BRA-169）兩頁切換。 */
+function MineTab() {
   const [minePage, setMinePage] = useState<'songs' | 'history'>('songs');
+  const view = useAppStore((s) => s.mineView);
+  const setMineView = useAppStore((s) => s.setMineView);
+  const setTab = useAppStore((s) => s.setTab);
+  return (
+    <>
+      <div className={gemStyles.mineSwitch}>
+        <SegmentedControl size="sm" label="我的" options={MINE_VIEWS} value={view} onChange={setMineView} />
+      </div>
+      {view === 'songs' ? (minePage === 'history'
+        ? <ShowHistoryPage onSongs={() => setMinePage('songs')} onSeed={startFromHistory} />
+        : <MySongsPage model={mySongs} onSeed={startFromSong} onHistory={() => setMinePage('history')} />
+      ) : <GemWallPage model={gemWall} onStart={() => setTab('home')} />}
+    </>
+  );
+}
+
+export function App() {
   useBoot();
   usePopStateNavigation();
   useEngineBindings();
   useTuneCommit();
   const tab = useAppStore((s) => s.tab);
+  const openGemWall = useAppStore((s) => s.openGemWall);
   const boot = useAppStore((s) => s.boot);
   const engineState = useEngineState();
   const hasActiveShow = engineState.queue.length > 0;
@@ -157,15 +185,14 @@ export function App() {
           <QueueSheet />
           <TuneSheet />
           <CapsuleSheet tracker={journey} />
+          <SettleOverlay controller={gemSettle} journey={journey} onWall={openGemWall} />
         </>
       }
     >
       {boot === 'error' && <BootError />}
       {tab === 'home' && <HomePage hasActiveShow={hasActiveShow} onStartShow={startReadyShow} />}
       {tab === 'listen' && <ListenPage />}
-      {tab === 'mine' && (minePage === 'history'
-        ? <ShowHistoryPage onSongs={() => setMinePage('songs')} onSeed={startFromHistory} />
-        : <MySongsPage model={mySongs} onSeed={startFromSong} onHistory={() => setMinePage('history')} />)}
+      {tab === 'mine' && <MineTab />}
       {tab === 'settings' && <SettingsPage />}
     </AppShell>
   );

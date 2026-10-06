@@ -1,0 +1,213 @@
+/*
+ * 寶石 v2（BRA-169）。App 本體維持暖白；只有寶石入口條、寶石牆主視覺、結算層、精選集用「夜色面」
+ * （SoundscapeArt 第 0 景的深綠，tokens.css 的 --q-night-*）。
+ */
+.gemIcon { display: block; flex-shrink: 0; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.18)); }
+.gemEmpty { display: block; flex-shrink: 0; color: var(--q-on-night-muted); opacity: 0.7; }
+
+.night,
+.entry,
+.overlay {
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(209, 190, 140, 0.14), transparent 55%),
+    linear-gradient(160deg, var(--q-night-from), var(--q-night-to));
+  color: var(--q-on-night);
+}
+
+.nightKicker {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  font-size: 11px; letter-spacing: 0.16em; font-weight: 650; color: var(--q-on-night-muted);
+}
+.nightLine { margin-top: 6px; font-size: 14px; color: var(--q-on-night); text-align: center; }
+.nightNote { margin-top: 12px; font-size: 13px; line-height: 1.7; color: var(--q-on-night-muted); }
+
+/* ── 首屏入口條（設計稿 01）：首屏唯一的深色塊，一行進度＋一句話，不擠開 composer。 */
+.entry {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center;
+  width: 100%; margin: 4px 0 22px; padding: 14px 16px; border: 0; border-radius: var(--q-radius-card);
+  text-align: left; font: inherit; box-shadow: var(--q-shadow-lift);
+  transition: transform var(--q-press-motion) ease, box-shadow 160ms ease;
+}
+.entry:hover { box-shadow: 0 14px 34px rgba(31, 48, 42, 0.2); }
+.entry:active { transform: scale(0.985); }
+.entry:focus-visible { outline: 3px solid var(--q-focus); outline-offset: 3px; }
+.entryKicker { grid-column: 1; font-size: 11px; letter-spacing: 0.14em; font-weight: 650; color: var(--q-on-night-muted); }
+.entryCount { grid-column: 2; justify-self: end; font-family: var(--q-font-display); font-size: 22px; font-variant-numeric: tabular-nums; }
+.entryCount small { font-size: 14px; color: var(--q-on-night-muted); }
+.entryGems { grid-column: 1 / -1; display: flex; gap: 8px; }
+.entryLine { grid-column: 1; font-size: 13px; color: var(--q-on-night); }
+.entryMore { grid-column: 2; display: inline-flex; align-items: center; gap: 2px; font-size: 13px; font-weight: 650; }
+
+/* ── 寶石牆（設計稿 04） */
+.page { padding-bottom: 8px; }
+.heading { padding: 6px 0 18px; }
+.heading h1 { margin-top: 12px; }
+.heading p:last-child { margin-top: 10px; color: var(--q-muted); font-size: 15px; line-height: 1.7; }
+
+.night { padding: 18px 18px 20px; border-radius: var(--q-radius-card); box-shadow: var(--q-shadow-lift); }
+.live { display: inline-flex; align-items: center; gap: 6px; color: var(--q-night-gold); letter-spacing: 0.06em; }
+.live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--q-night-gold); }
+
+.throne {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: end;
+  margin: 18px 0 8px; padding: 0; list-style: none;
+}
+.throne li { display: grid; justify-items: center; gap: 6px; }
+/* 寶座排成一道弧：中間高、兩側低。 */
+.throne li:nth-child(1), .throne li:nth-child(5) { transform: translateY(14px); }
+.throne li:nth-child(2), .throne li:nth-child(4) { transform: translateY(4px); }
+.throne small { min-height: 16px; font-size: 11px; color: var(--q-on-night-muted); white-space: nowrap; }
+.throne li[data-state='next'] small { color: var(--q-night-gold); font-weight: 650; }
+.throne li[data-state='next'] svg { animation: breathe 2.8s ease-in-out infinite; color: var(--q-night-gold); }
+
+.bigCount {
+  margin-top: 22px; text-align: center; font-family: var(--q-font-display);
+  font-size: 44px; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+}
+.bar { position: relative; overflow: hidden; height: 4px; margin-top: 14px; border-radius: 4px; background: var(--q-on-night-line); }
+.bar span {
+  position: absolute; inset: 0; transform-origin: left center; border-radius: inherit;
+  background: linear-gradient(90deg, var(--q-accent-line), var(--q-night-gold));
+  transition: transform 600ms var(--q-ease-out);
+}
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 16px 0 0; border-block: 1px solid var(--q-border); }
+.stats div { display: flex; flex-direction: column-reverse; padding: 14px 8px; text-align: center; }
+.stats div + div { border-left: 1px solid var(--q-border); }
+.stats dt { margin-top: 2px; font-size: 13px; color: var(--q-muted); }
+.stats dd { margin: 0; font-family: var(--q-font-display); font-size: 28px; color: var(--q-ink-strong); font-variant-numeric: tabular-nums; }
+
+.block { margin-top: 26px; }
+.blockTitle { display: flex; justify-content: space-between; align-items: baseline; font-size: 17px; }
+.blockTitle span { font-size: 13px; font-weight: 500; color: var(--q-muted); font-variant-numeric: tabular-nums; }
+.gemList { display: grid; margin: 10px 0 0; padding: 0; list-style: none; }
+.gemRow { display: flex; align-items: center; gap: 14px; padding: 12px 2px; border-top: 1px solid var(--q-border); }
+.gemRow:first-child { border-top: 0; }
+.gemText { min-width: 0; }
+.gemText strong { display: block; font-family: var(--q-font-display); font-size: 17px; font-weight: 600; color: var(--q-ink-strong); overflow-wrap: anywhere; }
+.gemText small { display: block; margin-top: 2px; font-size: 13px; color: var(--q-muted); overflow-wrap: anywhere; }
+
+.shelf { display: grid; gap: 12px; margin: 10px 0 0; padding: 0; list-style: none; }
+.book { padding: 14px 16px; border-radius: 16px; background: var(--q-surface); border: 1px solid var(--q-border); box-shadow: var(--q-shadow-soft); }
+.bookHead strong { display: block; font-family: var(--q-font-display); font-size: 17px; color: var(--q-ink-strong); }
+.bookHead small { display: block; margin-top: 2px; font-size: 12px; color: var(--q-muted); }
+.bookTracks { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; font-size: 14px; }
+.bookTracks li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bookTracks span { overflow-wrap: anywhere; }
+
+.empty { display: grid; gap: 8px; justify-items: start; margin-top: 20px; padding: 20px 18px; border-radius: var(--q-radius-card); background: var(--q-surface); border: 1px dashed var(--q-border-strong); }
+.empty p:first-child { font-family: var(--q-font-display); font-size: 19px; color: var(--q-ink-strong); }
+.empty p:nth-child(2) { margin-bottom: 6px; font-size: 14px; color: var(--q-muted); }
+.quiet { margin-top: 10px; font-size: 14px; color: var(--q-muted); }
+
+/* ── 「我的」tab 的切換列 */
+.mineSwitch { padding-top: 10px; }
+
+/* ── 結算層（設計稿 03／05）：原生 modal dialog，全螢幕夜色。 */
+.overlay {
+  width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; border: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+}
+.overlay[open] { animation: overlayIn var(--q-sheet-motion) var(--q-ease-out); }
+.overlay::backdrop { background: var(--q-night-to); }
+.overlayTop {
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px;
+  max-width: var(--q-content-max); margin: 0 auto; padding: max(10px, env(safe-area-inset-top)) var(--q-gutter) 6px;
+}
+.closeButton {
+  display: grid; place-items: center; width: var(--q-tap); height: var(--q-tap); margin-left: -12px;
+  border: 0; border-radius: 50%; background: rgba(31, 61, 53, 0.6); color: var(--q-on-night);
+}
+.closeButton:hover { background: var(--q-on-night-line); }
+.closeButton:focus-visible { outline: 2px solid var(--q-night-gold); outline-offset: 2px; }
+.overlayPill { margin: 0 auto; padding: 4px 12px; border-radius: 999px; background: var(--q-on-night-line); font-size: 12px; color: var(--q-on-night-muted); transform: translateX(-18px); }
+
+.settle { max-width: var(--q-content-max); margin: 0 auto; padding: 4px var(--q-gutter) max(28px, env(safe-area-inset-bottom)); }
+.capsuleBrief { padding: 14px 16px; border-radius: 16px; border: 1px solid var(--q-on-night-line); background: rgba(238, 240, 230, 0.06); }
+.briefTags { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+.briefTags li { padding: 2px 10px; border-radius: 999px; font-size: 12px; line-height: 20px; background: var(--q-on-night-line); }
+.briefOutro {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  margin-top: 10px; padding-left: 10px; border-left: 2px solid var(--q-night-gold);
+  font-size: 13px; line-height: 1.7; color: var(--q-on-night-muted);
+}
+.linkButton {
+  min-height: 40px; margin-top: 4px; padding: 0; border: 0; background: none; font: inherit;
+  font-size: 13px; font-weight: 650; color: var(--q-on-night); text-decoration: underline; text-underline-offset: 3px;
+}
+.linkButton:focus-visible { outline: 2px solid var(--q-night-gold); outline-offset: 2px; }
+
+.settleTitle { margin-top: 22px; font-size: 26px; line-height: 1.35; color: var(--q-on-night); }
+.settleLead { margin-top: 8px; font-size: 14px; line-height: 1.7; color: var(--q-on-night-muted); }
+
+.deck { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 20px 0 0; padding: 0; list-style: none; }
+.deck li { width: 100px; }
+.card {
+  display: grid; place-items: center; width: 100%; aspect-ratio: 5 / 7; padding: 8px 6px;
+  border-radius: 12px; font: inherit; text-align: center;
+  transition: transform 160ms var(--q-ease-out), box-shadow 160ms ease, opacity 200ms ease;
+}
+button.card:active { transform: scale(0.96); }
+.card:focus-visible { outline: 3px solid var(--q-night-gold); outline-offset: 3px; }
+.card[data-card-state='hidden'] {
+  border: 1px solid var(--q-on-night-line); color: var(--q-on-night-muted);
+  background:
+    repeating-radial-gradient(circle at 50% 50%, transparent 0 7px, rgba(238, 240, 230, 0.07) 7px 8px),
+    linear-gradient(160deg, #456A58, #24443A);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+.card[data-card-state='hidden']:hover { transform: translateY(-3px); }
+.cardBack { font-family: var(--q-font-display); font-style: italic; font-size: 26px; }
+.card:not([data-card-state='hidden']) {
+  border: 1px solid transparent; background: var(--q-card-back); color: var(--q-ink);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+  animation: flipIn 360ms var(--q-ease-out);
+}
+.card[data-card-state='picked'] { border-color: var(--q-night-gold); box-shadow: 0 0 0 3px var(--q-night-gold), 0 12px 26px rgba(0, 0, 0, 0.3); transform: translateY(-4px); }
+.card[data-card-state='chosen'] { box-shadow: 0 0 0 3px var(--q-night-gold), 0 0 32px rgba(209, 190, 140, 0.55); }
+.card[data-card-state='passed'] { opacity: 0.45; }
+.cardFace { display: grid; justify-items: center; gap: 4px; min-width: 0; }
+.cardFace strong { margin-top: 4px; font-size: 13px; line-height: 1.35; font-weight: 650; color: var(--q-ink-strong); overflow-wrap: anywhere; }
+.cardFace small { font-size: 11px; line-height: 1.3; color: var(--q-muted); overflow-wrap: anywhere; }
+
+.confirm { display: grid; gap: 10px; margin-top: 22px; }
+.settleStatus { font-size: 13px; text-align: center; color: var(--q-on-night-muted); }
+.settleError { padding: 10px 12px; border-radius: 12px; font-size: 14px; background: var(--q-danger-wash); color: var(--q-danger); }
+.settleRule { margin-top: 18px; font-size: 12px; text-align: center; color: var(--q-on-night-muted); }
+
+.chosen { display: grid; gap: 14px; margin-top: 22px; }
+.chosenLine {
+  display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 16px;
+  border: 1px solid var(--q-on-night-line); background: rgba(238, 240, 230, 0.06); font-size: 15px; line-height: 1.5;
+}
+.unlocked { padding: 16px; border-radius: 16px; border: 1px solid var(--q-night-gold); background: rgba(209, 190, 140, 0.08); }
+.unlocked h3 { margin-top: 8px; font-family: var(--q-font-display); font-size: 22px; line-height: 1.35; color: var(--q-on-night); }
+.unlockedString { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
+.unlockedString svg { animation: rise 420ms var(--q-ease-out) both; }
+.unlockedString svg:nth-child(2) { animation-delay: 90ms; }
+.unlockedString svg:nth-child(3) { animation-delay: 180ms; }
+.unlockedString svg:nth-child(4) { animation-delay: 270ms; }
+.unlockedString svg:nth-child(5) { animation-delay: 360ms; }
+.unlockedTracks { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; counter-reset: track; }
+.unlockedTracks li { display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 8px; counter-increment: track; }
+.unlockedTracks li::before { content: counter(track, decimal-leading-zero); grid-row: span 2; font-size: 11px; line-height: 20px; color: var(--q-on-night-muted); }
+.unlockedTracks strong { font-size: 15px; overflow-wrap: anywhere; }
+.unlockedTracks small { font-size: 12px; color: var(--q-on-night-muted); overflow-wrap: anywhere; }
+
+@keyframes breathe { 0%, 100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
+@keyframes flipIn { from { transform: perspective(600px) rotateY(80deg); opacity: 0.4; } to { transform: none; opacity: 1; } }
+@keyframes rise { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .throne li[data-state='next'] svg,
+  .card:not([data-card-state='hidden']),
+  .unlockedString svg,
+  .overlay[open] { animation: none; }
+  .bar span, .card { transition: none; }
+}
+
+@media (max-width: 359px) {
+  .deck li { width: 88px; }
+  .bigCount { font-size: 38px; }
+}

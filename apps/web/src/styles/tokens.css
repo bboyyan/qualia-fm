@@ -42,6 +42,14 @@
   --q-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --q-text-h1: 32px; --q-text-h2: 24px; --q-text-title: 24px;
   --q-text-body: 16px; --q-text-meta: 13px;
+  /* 夜色面（BRA-169）：取自 SoundscapeArt 第 0 景的深綠，只用在寶石、結算、精選集，不是全站夜間主題。 */
+  --q-night-from: #395A49;
+  --q-night-to: #1F3D35;
+  --q-on-night: #EEF0E6;
+  --q-on-night-muted: #B9C6BC;
+  --q-on-night-line: rgba(238, 240, 230, 0.18);
+  --q-night-gold: #D1BE8C;
+  --q-card-back: #F3EEDF;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -11,6 +11,8 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = Number(process.env.E2E_PORT ?? 4173);
 /** 每次執行用新的品味帳本檔（BRA-135）：不寫進 repo 的 data/，上一次執行的標記也不會帶進來。 */
 const TASTE_LEDGER_PATH = join(tmpdir(), `qfm-e2e-taste-${process.pid}.json`);
+/** 寶石牆（BRA-169）同理：每次執行一面新牆，不碰 repo 的 data/。 */
+const GEM_WALL_PATH = join(tmpdir(), `qfm-e2e-gems-${process.pid}.json`);
 
 const phone = (width: number, height: number) => ({
   ...devices['Desktop Chrome'],
@@ -54,6 +56,7 @@ export default defineConfig({
       PLAN_RATE_LIMIT_PER_HOUR: '500',
       TASTE_LEDGER_PATH,
       SHOW_HISTORY_PATH: join(tmpdir(), `qfm-e2e-history-${process.pid}.json`),
+      GEM_WALL_PATH,
       SESSION_STORE_PATH: join(tmpdir(), `qfm-e2e-session-${process.pid}.json`),
     },
   },

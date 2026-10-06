@@ -1,5 +1,6 @@
 /**
- * BRA-128：種子＝1 顆寶石，聽完／回饋鑲嵌，滿 5 顆在收聽頁首屏的小寶石盤提示，打開即見旅程膠囊。
+ * BRA-128：種子＝1 格，聽完／回饋再走一格，滿 5 格在收聽頁首屏的「這趟 N/5」提示，打開即見旅程膠囊。
+ * BRA-169：文案改「這趟 N/5」（邏輯不變）；結算層要等五首都播完才出現（見 gems.spec.ts）。
  */
 import { stat } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
@@ -11,7 +12,8 @@ test('種子＋4 首聽完／回饋 → 開出旅程膠囊（曲目、情緒標�
   await page.getByTestId('start-listening').click();
   const tray = page.getByTestId('gem-tray');
   await expect(tray).toHaveAttribute('data-gems', '1');
-  await expect(tray).toHaveAccessibleName('旅程寶石 1／5，查看旅程');
+  await expect(tray).toHaveAccessibleName('這趟 1/5，查看這趟進度');
+  await expect(tray).toContainText('這趟 1/5');
   await expectNoHorizontalOverflow(page);
 
   // 第 1 首：聽完並留下「愛」；第 2–4 首：聽完、略過回饋。
@@ -29,11 +31,13 @@ test('種子＋4 首聽完／回饋 → 開出旅程膠囊（曲目、情緒標�
     await skipFeedback(page);
   }
 
+  // 種子＋4 首就開膠囊；第 5 首還沒播，v2 結算層不會出現。
+  await expect(page.getByTestId('settle-overlay')).toBeHidden();
   await expect(tray).toHaveAccessibleName('旅程膠囊開好了，打開');
   await expectNoHorizontalOverflow(page);
   if (['mobile-360', 'mobile-390'].includes(testInfo.project.name)) {
     const size = testInfo.project.name === 'mobile-360' ? '360x800' : '390x844';
-    const path = `docs/implementation/screenshots/bra128-tray-ready-${size}.png`;
+    const path = testInfo.outputPath(`bra128-tray-ready-${size}.png`);
     await page.screenshot({ path, scale: 'css', animations: 'disabled' });
     expect((await stat(path)).size).toBeLessThan(300 * 1024);
   }
@@ -46,13 +50,13 @@ test('種子＋4 首聽完／回饋 → 開出旅程膠囊（曲目、情緒標�
   await expect(sheet.getByTestId('capsule-outro')).toContainText('下雨的深夜');
   expect((await sheet.getByTestId('capsule-outro').innerText()).length).toBeGreaterThan(180);
   await expect(sheet.getByLabel('愛', { exact: true })).toBeVisible();
-  await expect(sheet.getByTestId('journey-progress')).toContainText('還差 5 顆');
+  await expect(sheet.getByTestId('journey-progress')).toContainText('還差 5 格');
   if (['mobile-360', 'mobile-390'].includes(testInfo.project.name)) {
     const size = testInfo.project.name === 'mobile-360' ? '360x800' : '390x844';
-    const path = `docs/implementation/screenshots/bra128-capsule-${size}.png`;
+    const path = testInfo.outputPath(`bra128-capsule-${size}.png`);
     await page.screenshot({ path, scale: 'css', animations: 'disabled' });
     expect((await stat(path)).size).toBeLessThan(300 * 1024);
   }
   await page.keyboard.press('Escape');
-  await expect(tray).toHaveAccessibleName('旅程寶石 0／5，查看旅程');
+  await expect(tray).toHaveAccessibleName('這趟 0/5，查看這趟進度');
 });

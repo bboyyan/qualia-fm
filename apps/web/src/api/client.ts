@@ -34,12 +34,17 @@ import {
   type PlanRequest,
   type SessionInfo,
   type ShowPlan,
+  ChooseGemResponseSchema,
+  GemWallSchema,
   TasteHistoryResponseSchema,
   TasteMarksResponseSchema,
   TrackMarkSchema,
   type LedgerEntry,
   type TasteEditRequest,
   type TrackMark,
+  type ChooseGemRequest,
+  type ChooseGemResponse,
+  type GemWall,
 } from '@qualia/contracts';
 
 export class ApiError extends Error {
@@ -90,6 +95,10 @@ export interface ApiClient {
   tasteEdit(request: TasteEditRequest): Promise<TrackMark>;
   /** 單曲最近幾筆帳本紀錄（新到舊）。 */
   tasteHistory(trackKey: string, signal?: AbortSignal): Promise<LedgerEntry[]>;
+  /** 寶石牆（BRA-169）：已收寶石、已解鎖的旅程精選集與進行中這本。 */
+  gemWall(signal?: AbortSignal): Promise<GemWall>;
+  /** 結算選寶石：只送段落識別，曲名由伺服器查；同一趟重送同一首是冪等。 */
+  chooseGem(request: ChooseGemRequest): Promise<ChooseGemResponse>;
 }
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -147,7 +156,7 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
     return session;
   }
 
-  /** BRA-161: recovery is scoped to feedback/taste/history; the replay cannot recurse. */
+  /** BRA-161: recovery is scoped to feedback/taste/history/gems; the replay cannot recurse. */
   async function recoverSession<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     const usedSession = session;
     try { return await operation(); }
@@ -202,6 +211,11 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
     },
     tasteHistory: async (trackKey, signal) =>
       (await recoverSession(() => send(`/api/taste/history?trackKey=${encodeURIComponent(trackKey)}`, TasteHistoryResponseSchema, { signal }), signal)).entries,
+    gemWall: (signal) => recoverSession(() => send('/api/gems', GemWallSchema, { signal }), signal),
+    chooseGem: async (choice) => {
+      await ensureSession();
+      return recoverSession(() => mutate('/api/gems', ChooseGemResponseSchema, 'POST', {}, choice));
+    },
   };
 }
 

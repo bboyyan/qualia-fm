@@ -1,5 +1,6 @@
 /**
- * 收聽頁首屏的小寶石盤：5 格＋數字，一個 48px 點按區，不佔整塊卡片（對齊 BRA-125 清雜）。
+ * 收聽頁首屏的「這趟 N/5」進度：5 格＋數字，一個 48px 點按區，不佔整塊卡片（對齊 BRA-125 清雜）。
+ * BRA-169 起只是這趟的刻度（文案不再叫「寶石」；寶石專指結算時留下的那一首），邏輯同 BRA-128。
  * 膠囊開出且還沒打開時，改成「膠囊開好了」。
  */
 import { useSyncExternalStore } from 'react';
@@ -33,12 +34,12 @@ export function GemTray({ tracker, onOpen }: GemTrayProps) {
       type="button"
       className={ready ? `${styles.tray} ${styles.trayReady}` : styles.tray}
       onClick={onOpen}
-      aria-label={ready ? '旅程膠囊開好了，打開' : `旅程寶石 ${count}／${GEMS_PER_CAPSULE}，查看旅程`}
+      aria-label={ready ? '旅程膠囊開好了，打開' : `這趟 ${count}/${GEMS_PER_CAPSULE}，查看這趟進度`}
       data-testid="gem-tray"
       data-gems={count}
     >
       <GemSlots gems={ready ? (journey.capsule?.gems ?? []) : journey.gems} />
-      <span className={styles.trayLabel}>{ready ? '膠囊' : `${count}/${GEMS_PER_CAPSULE}`}</span>
+      <span className={styles.trayLabel}>{ready ? '膠囊' : `這趟 ${count}/${GEMS_PER_CAPSULE}`}</span>
     </button>
   );
 }

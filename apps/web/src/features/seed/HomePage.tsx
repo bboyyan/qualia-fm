@@ -1,5 +1,6 @@
 import { useAppStore } from '../../app/appStore';
-import { api, generation } from '../../app/services';
+import { api, gemWall, generation } from '../../app/services';
+import { GemWallEntry } from '../gems/GemWallEntry';
 import { Eyebrow } from '../../ui/Feedback';
 import { Icon } from '../../ui/Icon';
 import { GenerationView } from './GenerationView';
@@ -38,6 +39,7 @@ export function HomePage({ hasActiveShow, onStartShow }: HomePageProps) {
   const draft = useAppStore((s) => s.draft);
   const setTab = useAppStore((s) => s.setTab);
   const announce = useAppStore((s) => s.announce);
+  const openGemWall = useAppStore((s) => s.openGemWall);
 
   if (state.status === 'running' || state.status === 'failed') {
     return (
@@ -69,6 +71,7 @@ export function HomePage({ hasActiveShow, onStartShow }: HomePageProps) {
   return (
     <>
       <Hero />
+      <GemWallEntry model={gemWall} onOpen={openGemWall} />
       <SeedComposer
         continuing={hasActiveShow}
         loadLedger={api.tasteMarks}

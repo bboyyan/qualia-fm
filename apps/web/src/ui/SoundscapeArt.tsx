@@ -6,7 +6,7 @@
 import { useId } from 'react';
 import styles from './ui.module.css';
 
-interface Scene {
+export interface Scene {
   from: string;
   to: string;
   sun: string;
@@ -27,6 +27,11 @@ const SCENES: readonly Scene[] = [
   { from: '#35574F', to: '#1C3832', sun: '#D8C796', hill: '#79A091', mist: '#BFD0C4', sunX: 250, label: 'Open window.' },
 ];
 
+/** 第 palette 景（循環取值）；寶石色取它的 hill／mist（BRA-169）。 */
+export function sceneOf(palette: number): Scene {
+  return SCENES[((palette % SCENES.length) + SCENES.length) % SCENES.length] ?? SCENES[0]!;
+}
+
 interface SoundscapeArtProps {
   palette: number;
   kicker?: string;
@@ -36,7 +41,7 @@ interface SoundscapeArtProps {
 }
 
 export function SoundscapeArt({ palette, kicker = 'THE TEXTURE OF TONIGHT', label, spinning = false, compact = false }: SoundscapeArtProps) {
-  const scene = SCENES[((palette % SCENES.length) + SCENES.length) % SCENES.length] ?? SCENES[0]!;
+  const scene = sceneOf(palette);
   const id = useId().replaceAll(':', '');
   return (
     <figure className={`${styles.art} ${compact ? styles.artCompact : ''}`} aria-label="抽象聲景插畫，非專輯封面">

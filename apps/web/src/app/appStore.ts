@@ -15,6 +15,8 @@ export type { Draft } from '../features/seed/seedList';
 
 export type Tab = 'home' | 'listen' | 'mine' | 'settings';
 export type SheetKind = 'bridge' | 'queue' | 'tune' | 'environment' | 'capsule';
+/** 「我的」tab 裡的兩頁（BRA-169）：我的歌／寶石牆。 */
+export type MineView = 'songs' | 'gems';
 
 const SETTINGS_KEY = 'qfm.settings.v2';
 /** v1 的串詞長度預設是短版；讀到時升級為加厚版（BRA-117）。 */
@@ -70,6 +72,7 @@ interface NavOptions {
 
 export interface AppState {
   tab: Tab;
+  mineView: MineView;
   sheet: SheetKind | null;
   toast: ToastData | null;
   live: string;
@@ -81,6 +84,9 @@ export interface AppState {
   capabilities: Capabilities | null;
   boot: 'loading' | 'ready' | 'error';
   setTab: (tab: Tab, options?: NavOptions) => void;
+  setMineView: (view: MineView) => void;
+  /** 寶石牆入口（首屏入口條、結算「收進寶石牆」）。 */
+  openGemWall: () => void;
   openSheet: (sheet: SheetKind) => void;
   closeSheet: (options?: NavOptions) => void;
   showToast: (message: string, action?: ToastData['action']) => void;
@@ -98,6 +104,7 @@ let toastId = 0;
 
 export const useAppStore = create<AppState>()((set, get) => ({
   tab: 'home',
+  mineView: 'songs',
   sheet: null,
   toast: null,
   live: '',
@@ -112,6 +119,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
     if (!options.fromHistory) window.history.pushState({ qfmTab: tab }, '');
     set({ tab });
     window.scrollTo({ top: 0 });
+  },
+  setMineView: (mineView) => set({ mineView }),
+  openGemWall: () => {
+    set({ mineView: 'gems' });
+    get().setTab('mine');
   },
   openSheet: (sheet) => {
     if (get().sheet === sheet) return;
