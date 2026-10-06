@@ -132,3 +132,7 @@ npx playwright screenshot --viewport-size=390,844 --wait-for-timeout=400 "file:/
 3. 無封面／失敗佔位是否可接受；長曲名截斷後，展開入口是否容易找到？
 4. 是否接受首屏約兩首完整卡片，以保留 ≥44px 觸控目標及 Spotify 官方標示？
 5. 空狀態是否能引導去開台？H1 通過的範圍是畫面方向，資料查詢與產品驗收須留待獨立實作分支。
+
+### 2026-10-06 沙箱外補圖（Rudeus）
+
+12:5x（台北時間）由 Rudeus 在沙箱外，用 `qualia-real-test` 既有的 Playwright 1.63.0（對應 Chromium 1243）照上列三行指令補出 `a-my-songs.png`、`a-fallbacks.png`、`a-empty.png`，以 `sips` 確認皆為 390×844。目視檢查：第一列封面完整未裁切、長曲名有省略號、無封面與讀取失敗兩種佔位同尺寸未移位、底部導覽未遮住最後操作。小瑕疵：釘選卡（淡陶土底）上的 Spotify 標誌帶白色底框，留給 H1 判斷。未安裝依賴、未改產品碼或設定。
