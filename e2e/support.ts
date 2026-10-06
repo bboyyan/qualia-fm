@@ -4,6 +4,8 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test';
 export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow, 'horizontal overflow in px').toBeLessThanOrEqual(0);
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scrollWidth, 'document scrollWidth must fit the viewport').toBeLessThanOrEqual(page.viewportSize()!.width);
 }
 
 /** The element must sit fully above the fixed bottom bar (nav + optional mini-player). */

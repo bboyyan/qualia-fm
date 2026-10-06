@@ -384,7 +384,13 @@ test('BRA-173：封面成功／失敗與透明官方標誌；展開可讀全文'
   await expect(row.getByTestId('song-artwork')).toBeVisible();
   await expect.poll(() => row.getByTestId('song-artwork').evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(64);
   expect(artworkRequests.has('/test-artwork/bra173-good')).toBe(true);
+  // 長歌手名仍收合時先驗證，避免頁面被撐寬後才嘗試操作。
+  await expect(row.getByRole('button', { name: '曲目資訊與帳本紀錄' })).toHaveAttribute('aria-expanded', 'false');
+  await expectNoHorizontalOverflow(page);
   await row.getByRole('button', { name: '釘選', exact: true }).click();
+  await expect(row.getByRole('button', { name: '釘選', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await row.getByRole('button', { name: '收藏', exact: true }).click();
+  await expect(row.getByRole('button', { name: '收藏', exact: true })).toHaveAttribute('aria-pressed', 'true');
   const logo = row.getByTestId('spotify-logo');
   await expect(logo).toBeVisible();
   expect(await logo.evaluate((img) => getComputedStyle(img.parentElement!).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
@@ -399,7 +405,13 @@ test('BRA-173：封面成功／失敗與透明官方標誌；展開可讀全文'
   await expect(row.getByTestId('song-artwork-placeholder')).toBeVisible();
   await expect(row.getByTestId('song-artwork')).toHaveCount(0);
   expect(artworkRequests.has('/test-artwork/bra173-bad')).toBe(true);
+  // 此列曲名與歌手名都超長，收合與展開均不得超出 viewport。
+  await expect(row.getByRole('button', { name: '曲目資訊與帳本紀錄' })).toHaveAttribute('aria-expanded', 'false');
+  await expectNoHorizontalOverflow(page);
   await row.getByRole('button', { name: '曲目資訊與帳本紀錄' }).click();
+  const details = row.locator('[id$="-history"]');
+  await expect(details.getByText('很長的曲名'.repeat(20), { exact: true })).toBeVisible();
+  await expect(details.getByText('很長的歌手'.repeat(20), { exact: true })).toBeVisible();
   await expect(row.getByText('專輯：專輯全文')).toBeVisible();
   await expect(row.getByRole('link', { name: '在 Spotify 開啟' })).toBeVisible();
   await expectNoHorizontalOverflow(page);
