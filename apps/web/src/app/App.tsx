@@ -1,5 +1,5 @@
 import { DeveloperOnly } from './developerMode';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { bindMediaSession } from '../audio/mediaSession';
 import { useEngineState } from '../audio/useEngine';
 import { HomePage } from '../features/seed/HomePage';
@@ -10,6 +10,7 @@ import { QueueSheet } from '../features/player/QueueSheet';
 import { TuneSheet } from '../features/player/TuneSheet';
 import { commitTune, commitTuneAnyway, pendingTune, type TuneOutcome } from '../features/player/tuneFlow';
 import { SettingsPage } from '../features/settings/SettingsPage';
+import { ShowHistoryPage } from '../features/history/ShowHistoryPage';
 import { MySongsPage } from '../features/songs/MySongsPage';
 import { CapsuleSheet } from '../features/journey/CapsuleSheet';
 import { InlineRecovery } from '../ui/Feedback';
@@ -23,7 +24,7 @@ import { connectPlayer, syncSpotifyOutput } from './spotify';
 import { effectivePlaybackMode } from '../features/spotify/spotifyMode';
 import { pickSegments } from '../features/seed/selection';
 import { songSeedRequest } from '../features/seed/seedList';
-import type { TrackMark } from '@qualia/contracts';
+import type { ShowSummary, TrackMark } from '@qualia/contracts';
 
 function BootError() {
   return (
@@ -129,7 +130,15 @@ function startFromSong(song: TrackMark): void {
   store.setTab('home');
 }
 
+function startFromHistory(show: ShowSummary): void {
+  const store = useAppStore.getState();
+  void generation.start({ seed: show.seed, requestedCount: 5, dj: { enabled: store.settings.djEnabled, length: store.settings.djLength }, tuning: null });
+  store.announce(`用「${show.seed.text}」重開`);
+  store.setTab('home');
+}
+
 export function App() {
+  const [minePage, setMinePage] = useState<'songs' | 'history'>('songs');
   useBoot();
   usePopStateNavigation();
   useEngineBindings();
@@ -154,7 +163,9 @@ export function App() {
       {boot === 'error' && <BootError />}
       {tab === 'home' && <HomePage hasActiveShow={hasActiveShow} onStartShow={startReadyShow} />}
       {tab === 'listen' && <ListenPage />}
-      {tab === 'mine' && <MySongsPage model={mySongs} onSeed={startFromSong} />}
+      {tab === 'mine' && (minePage === 'history'
+        ? <ShowHistoryPage onSongs={() => setMinePage('songs')} onSeed={startFromHistory} />
+        : <MySongsPage model={mySongs} onSeed={startFromSong} onHistory={() => setMinePage('history')} />)}
       {tab === 'settings' && <SettingsPage />}
     </AppShell>
   );

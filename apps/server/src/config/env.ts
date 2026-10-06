@@ -74,6 +74,7 @@ const EnvSchema = z.object({
   OPENAI_PRICE_TTS_PER_1M_CHARS: z.string().optional(),
   STATIC_DIR: z.preprocess(emptyToUndefined, z.string().optional()),
   SESSION_STORE_PATH: z.preprocess(blankToUndefined, z.string().max(1000).optional()),
+  SHOW_HISTORY_PATH: z.preprocess(blankToUndefined, z.string().max(1000).optional()),
   TASTE_LEDGER_PATH: z.preprocess(blankToUndefined, z.string().max(1000).optional()),
 });
 
@@ -102,6 +103,7 @@ export interface ServerConfig {
   sessions: { path: string | null };
   /** 品味帳本（BRA-134）：絕對路徑的本機 JSON 檔；null＝只存在記憶體（只有 NODE_ENV=test 未設定時）。 */
   tasteLedger: { path: string | null };
+  showHistory: { path: string | null };
   openai: {
     llm: 'mock' | 'openai'; tts: 'mock' | 'openai'; apiKey: string | undefined;
     textModel: string | undefined; ttsModel: string | undefined; voice: string | undefined;
@@ -274,5 +276,6 @@ export function loadConfig(source: Record<string, string | undefined> = process.
     staticDir: env.STATIC_DIR,
     sessions: { path: env.SESSION_STORE_PATH ? resolve(env.SESSION_STORE_PATH) : env.NODE_ENV === 'test' ? null : resolve('data/sessions.json') },
     tasteLedger: { path: tasteLedgerPath(env) },
+    showHistory: { path: env.SHOW_HISTORY_PATH ? resolve(env.SHOW_HISTORY_PATH) : env.NODE_ENV === 'test' ? null : resolve('data/show-history.json') },
   };
 }

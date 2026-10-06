@@ -34,6 +34,7 @@ import { drawOrder, effectiveExploration, type PoolEntry } from './candidatePool
 import { toEditorialInput, type EditorialInput } from './editorialInput.js';
 import { buildShowPlan, type ResolvedCandidate } from './showBuilder.js';
 import { EMPTY_TASTE_HINTS, applyTasteRules, tasteHintsFor } from './tasteRules.js';
+import { ShowHistoryError, type ShowHistory } from '../ledger/showHistory.js';
 import type { TasteRead, TasteService } from './tasteService.js';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -47,6 +48,7 @@ const SPOTIFY_RESOLVE_WARNING = 'Spotify 對應暫時失敗，部分曲目改列
 const spotifyMismatchWarning = (count: number): string => `Spotify 找不到曲名與藝人都相符（且可播放）的曲目，已略過 ${count} 首提名，改用下一首。`;
 
 export interface PlanServiceDeps {
+  readonly showHistory?: ShowHistory;
   /** SPOTIFY_ENABLED 且已連結時，把真實提名對應成 Spotify URI；MOCK 提名不送 Search。 */
   readonly spotify?: { readonly resolver: CatalogResolver; readonly linked: () => boolean };
   readonly runtime?: RealProviderRuntime;
@@ -239,6 +241,9 @@ export class PlanService {
     const deadline = setTimeout(() => job.controller.abort('timeout'), this.deps.config.limits.planDeadlineMs);
     deadline.unref?.();
     try {
+      // D-39：任何外呼與扣額度前先驗歷史；交付前 record 仍會重驗。
+      try { this.deps.showHistory?.list(); }
+      catch { throw new AppError('HISTORY_UNAVAILABLE'); }
       let request = input.request;
       let warning: string | null = null;
       let history: EditorialInput['history'] = [];
@@ -261,6 +266,7 @@ export class PlanService {
       if (this.deps.store.get(job.jobId, job.ownerId)?.status !== 'running') return;
       const plan = warning ? { ...result, warnings: [...result.warnings, warning] } : result;
       this.deps.sessions?.rememberShow(job.ownerId, plan);
+      this.deps.showHistory?.record(plan, request.dj.enabled);
       this.deps.store.putShow(job.ownerId, plan, this.deps.now());
       this.finish(job, plan);
       // D-23：TTS 階段結束、節目儲存並交付後才記錄；只存實際交付的非 MOCK 提名。
@@ -471,7 +477,7 @@ export class PlanService {
   private fail(jobId: string, signal: AbortSignal, error: unknown): void {
     if (signal.aborted && signal.reason === 'cancel') return;
     const code = signal.aborted && signal.reason === 'timeout' ? 'PLAN_TIMEOUT' : error instanceof AppError ? error.code : 'INTERNAL';
-    this.deps.store.update(jobId, { status: 'failed', error: errorEnvelope(code, newRequestId()).error });
+    this.deps.store.update(jobId, { status: 'failed', error: errorEnvelope(code, newRequestId(), !signal.aborted && error instanceof ShowHistoryError ? { message: error.message } : {}).error });
   }
 }
 
