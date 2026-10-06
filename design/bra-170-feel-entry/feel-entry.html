@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BRA-170 開台入口 v2</title>
+<title>BRA-170 開台入口 v3</title>
 <!--
-  BRA-170 畫面稿 v2（靜態、離線、單檔；照曄 H1 回覆修改）。
+  BRA-170 畫面稿 v3（靜態、離線、單檔；v2 照曄 H1 回覆，v3 照曄對 v2 回覆：Hero 只留一個主標）。
   色票／間距／字級逐字抄自 apps/web/src/styles/tokens.css；
   元件樣式對照 ui/ui.module.css（.segmented/.chip/.button.primary/.outline）、app/shell.module.css（topbar/nav）、
   features/seed/seed.module.css（hero/card/fieldLabel/seedField/counter/chips/cta/note/pick*）。
@@ -101,9 +101,9 @@ svg { display: block; flex-shrink: 0; }
 
 /* seed.module.css */
 .hero { padding: 14px 0 22px; }
-.hero h1 { margin-top: 12px; }
 .hero h1 em { font-style: normal; color: var(--q-accent); }
-.hero p:last-child { margin-top: 12px; max-width: 330px; color: var(--q-muted); font-size: 15px; line-height: 1.7; }
+/* v3：拿掉 Eyebrow 與舊 h1，引言升為主標。26px 讓 13 字的第二行在 390 寬（內容 350px）剛好一行 */
+.heroTitle { font-size: 26px; line-height: 1.45; letter-spacing: -0.02em; font-weight: 650; color: var(--q-ink-strong); }
 .card {
   border: 1px solid var(--q-border); background: var(--q-surface); border-radius: 22px;
   padding: 14px 16px 12px; box-shadow: var(--q-shadow-soft);
@@ -205,9 +205,7 @@ body[data-entry='song'] .feelOnly, body[data-entry='feel'] .songOnly { display: 
 
   <main class="main">
     <section class="hero" aria-labelledby="home-title">
-      <p class="eyebrow">YOUR FEELING, ON AIR.</p>
-      <h1 id="home-title">不是同類型。<br>是<em>同一種感覺。</em></h1>
-      <p>從一首歌，或一種感覺，<br>開始探索你的人生終極曲目。</p>
+      <h1 id="home-title" class="heroTitle">從<em>一首歌</em>，或<em>一種感覺</em>，<br>開始探索你的人生終極曲目。</h1>
     </section>
 
     <form class="composer" onsubmit="return false" novalidate>

@@ -1,22 +1,39 @@
-# BRA-170｜開台入口：從一首歌／從一種感覺（畫面稿 v2）
+# BRA-170｜開台入口：從一首歌／從一種感覺（畫面稿 v3）
 
-> v2 照曄的 H1 回覆修改。本輪只改設計稿，不動產品碼，也不改 API 契約。
+> v2 照曄的 H1 回覆修改；v3 照曄對 v2 的回覆，只改 Hero。本輪只改設計稿，不動產品碼，也不改 API 契約。
 
 | 檔案 | 說明 |
 | --- | --- |
 | [`feel-entry.html`](feel-entry.html) | 單檔離線靜態稿，可互動，沒有外部資源。用網址 hash 切狀態：`#song`（預設）、`#feel`、`#feel-empty`、`#feel-text`、`#feel-chip`；加 `-next` 表示已有節目在播（例：`#feel-next`），加 `-full` 是整頁截圖用 |
-| [`feel-entry-song-390-v2.png`](feel-entry-song-390-v2.png) | 390×844（1 倍、非 full-page）：預設「從一首歌」，沒有徽章，Hero 換成新引言 |
-| [`feel-entry-song-390-full-v2.png`](feel-entry-song-390-full-v2.png) | 390×1265 full-page：同上，整頁。歌曲模式的卡片比較長，範例 chips 在首屏下方，這張圖補上它的位置 |
-| [`feel-entry-feel-390-v2.png`](feel-entry-feel-390-v2.png) | 390×844（1 倍、非 full-page）：「從一種感覺」，選了「失戀」、寫了一句、有完整組句預覽，主按鈕是「從「失戀」開台」。模擬使用者已往下捲，卡片頂在上緣 |
+| [`feel-entry-song-390-v3.png`](feel-entry-song-390-v3.png) | 390×844（1 倍、非 full-page）：預設「從一首歌」，Hero 只剩新主標，沒有徽章；「常用的一句感受」小標已進到首屏 |
+| [`feel-entry-song-390-full-v3.png`](feel-entry-song-390-full-v3.png) | 390×1166 full-page：同上，整頁，可看到範例 chips 和主按鈕的位置 |
+| [`feel-entry-feel-390-v3.png`](feel-entry-feel-390-v3.png) | 390×844（1 倍、非 full-page）：「從一種感覺」，選了「失戀」、寫了一句、有完整組句預覽，主按鈕是「從「失戀」開台」。和 v2 一樣模擬使用者已往下捲，卡片頂在上緣（這個狀態內容比首屏高，Hero 放不進來） |
 
 截圖用 repo 內的 Playwright 1.63.0，例如：
 
 ```bash
 pnpm exec playwright screenshot --viewport-size=390,844 --wait-for-timeout=400 \
-  "file://$PWD/design/bra-170-feel-entry/feel-entry.html#feel" design/bra-170-feel-entry/feel-entry-feel-390-v2.png
+  "file://$PWD/design/bra-170-feel-entry/feel-entry.html#feel" design/bra-170-feel-entry/feel-entry-feel-390-v3.png
 ```
 
-v1 的 `feel-entry-390.png` 已刪除，避免混淆。
+v1 的 `feel-entry-390.png` 和 v2 的三張 `*-v2.png` 都已刪除，避免混淆（v2 的圖在 commit `c93dc6f`）。
+
+## v3 變更（曄對 v2 的回覆）
+
+曄指出 Hero 上面兩行是多餘的，v3 只改 Hero 和因此變動的間距，其他 v2 決定都不動。
+
+- **拿掉**：Eyebrow「YOUR FEELING, ON AIR.」，以及舊 h1「不是同類型。／是同一種感覺。」。
+- **引言升為主標**：`<h1 id="home-title">從<em>一首歌</em>，或<em>一種感覺</em>，<br>開始探索你的人生終極曲目。</h1>`。`aria-labelledby="home-title"` 指到它，整頁只有這一個 h1。
+- **字級與樣式**：`font-size: 26px; line-height: 1.45; letter-spacing: -0.02em; font-weight: 650; color: var(--q-ink-strong)`（新 class `.heroTitle`）。
+  - 原 h1 是 32px，但第二行有 13 字，32px 在 390 寬（內容寬 350px）會斷成三行。26px 時第二行約 330px，剛好一行，實測兩行、高 75px。
+  - 字重與 ink-strong 色沿用原 h1／品牌字的層級，比卡片內的 14～18px 文字明顯大一級。
+  - 行高從原 h1 的 1.25 放寬到 1.45，因為是一整句話而不是兩句短標語，太緊會像擠在一起。
+- **`em` 強調「一首歌」「一種感覺」**：用原 h1 已經在用的 `.hero h1 em`（accent 色、不斜體），沒有新增顏色。理由是這兩個詞正好對應下方兩個入口，使用者一讀就知道要從哪兩種方式開始；原本的 h1 也有一段 accent，保留這個品牌節奏。
+- **間距**：`.hero` 的 padding 沿用 `14px 0 22px`，主標不再需要原本 `margin-top: 12px`（那是留給 Eyebrow 的）。
+- **首屏空間怎麼用**：
+  - 「從一首歌／從一種感覺」卡片從 y≈278 上移到 y≈179（約 100px）。
+  - 歌曲模式下，「常用的一句感受」小標從首屏外移到 y≈735，進入首屏；chips 第一列露出上緣，提示下面還有東西。
+  - 沒有另外加東西把空間塞滿。
 
 ## 一句話摘要
 
@@ -26,7 +43,7 @@ v1 的 `feel-entry-390.png` 已刪除，避免混淆。
 
 | # | 曄的決定 | v2 做法 |
 | --- | --- | --- |
-| Hero | 引言改成「從一首歌或一種感覺，開始探索你的人生終極曲目」這類文案 | 改成 **「從一首歌，或一種感覺，／開始探索你的人生終極曲目。」**（兩行）。Eyebrow 和 h1 不動，理由見下節 |
+| Hero | 引言改成「從一首歌或一種感覺，開始探索你的人生終極曲目」這類文案 | 定案為 **「從一首歌，或一種感覺，／開始探索你的人生終極曲目。」**（兩行）。v3 起 Eyebrow 和舊 h1 拿掉，這句升為唯一的主標（h1），見「v3 變更」 |
 | 1 | 預設選「從一首歌」 | 左格「從一首歌」是預設；草稿預設值本來就是 `kind: 'song'`，不用改 |
 | 2 | 8 個情境標籤不改 | 平靜、振奮、健身、失戀、深夜、通勤、專注、雨天，4 欄×2 行，順序不變 |
 | 3 | 標籤單選，再點一次取消 | 單選；選中的標籤有 ✓ 和 primary-wash 底色，再點一次就取消。標籤區右上的小字改成「選一個，再點一次取消」 |
@@ -37,17 +54,17 @@ v1 的 `feel-entry-390.png` 已刪除，避免混淆。
 
 ## Hero 文案
 
-**採用**：
+**採用（曄已定案，v3 升為 h1）**：
 
 > 從一首歌，或一種感覺，
 > 開始探索你的人生終極曲目。
 
 - 最接近曄給的原話，只在「或一種感覺」前後加逗號，讓它斷成兩行、讀起來有停頓。
 - 第一行和下方兩個入口「從一首歌｜從一種感覺」字面一致，使用者讀完引言，眼睛往下就看到同樣兩個選擇。
-- 390 寬時兩行分別 11 字和 13 字，都在原本 `max-width: 330px` 內，不會擠或多斷一行（見截圖）。
-- h1「不是同類型。是同一種感覺。」講的是推薦怎麼連（同一種感覺，不是同曲風）；引言講的是從哪裡開始、要找什麼，兩者不衝突，所以 **h1 與 Eyebrow 都不改**。
+- 390 寬、26px 時兩行分別 11 字和 13 字，不擠也不會斷成三行（見截圖）。
+- ~~v2：Eyebrow 與舊 h1 不改~~ → v3 依曄回覆拿掉，見「v3 變更」。
 
-**備選**：
+**備選**（v2 提出的，僅留紀錄；曄已定案上面那版）：
 
 1. 「一首歌、一種感覺，都能是起點。／慢慢找出你的人生終極曲目。」：比較口語、溫和，但跟入口按鈕的字面沒有對齊。
 2. 「從一首歌或一種感覺出發，／一路聽見你的人生終極曲目。」：「一路聽見」比較有電台感，但「聽見曲目」的搭配有點虛。
@@ -136,18 +153,23 @@ v1 的 `feel-entry-390.png` 已刪除，避免混淆。
 
 | 檔案 | 改動 |
 | --- | --- |
-| `apps/web/src/features/seed/HomePage.tsx` | Hero 引言換成新文案 |
+| `apps/web/src/features/seed/HomePage.tsx` | `Hero` 拿掉 `<Eyebrow>` 與舊 h1，引言升為 `<h1 id="home-title">`（含兩個 `<em>`）；不再用 `Eyebrow` 的話一起移除 import |
+| `apps/web/src/features/seed/seed.module.css` | `.hero h1` 改成 v3 數值（26px／1.45／-0.02em／ink-strong），拿掉 `margin-top: 12px`；刪掉 `.hero p:last-child` |
 | `apps/web/src/features/seed/SeedComposer.tsx` | `MODES` 改成兩格「從一首歌／從一種感覺」，拿掉 sound，**沒有徽章**；feeling 分支改成「標籤格＋再補一句」；**保留 `EXAMPLES`**，加上小標，`onClick` 改成填 `feelingText`；主按鈕上方加完整組句預覽；按鈕文案依狀態表 |
 | `apps/web/src/features/seed/seedList.ts` | `Draft` 新增 `mood: MoodId \| null` 和獨立的 `feelingText`（歌曲模式的 `text` 是歌名欄，不能共用）；新增 `MOOD_PRESETS`、`composeFeelingText()`；`toPlanRequest`／`draftProblem`／`textProblem` 改用組句，全空時的提示改成「先選一個感覺，或寫一句。」 |
 | `apps/web/src/features/seed/seed.module.css` | 新增 `.moods`（4 欄）、`.examplesHead`、`.preview`；`.seedQuote` 拿掉 4 行截斷 |
 | `apps/web/src/app/appStore.ts` | draft 預設值與持久化欄位（`mood`、`feelingText`） |
 | `apps/web/src/ui/controls.tsx`／`ui.module.css` | **不改**。v1 為了徽章要擴充 `SegmentedControl`，v2 已拿掉徽章 |
-| `e2e/shell.spec.ts` | `radio '感覺'` 改成「從一種感覺」；範例 chip「夜裡慢慢放鬆」保留；補案例：點標籤→按鈕文案與預覽全文→開台；歌曲模式點 chip →切模式但不開始；全空時按鈕停用 |
+| `e2e/shell.spec.ts` | 第 58 行 `getByRole('heading', { name: /不是同類型/ })` 改成新主標（例如 `/開始探索你的人生終極曲目/`）；`radio '感覺'` 改成「從一種感覺」；範例 chip「夜裡慢慢放鬆」保留；補案例：點標籤→按鈕文案與預覽全文→開台；歌曲模式點 chip →切模式但不開始；全空時按鈕停用 |
 | 單元測試（seedList） | `composeFeelingText` 三種組合（只有標籤、標籤＋句、只有句），全空時回報 problem，500 字邊界 |
 
 `SeedKind` 契約的 `'sound'` 先保留（舊歷史可能有），只是 UI 不再提供。
 
-## v2 還要曄確認的點
+**要曄確認是否一起改（本輪不改）**：`apps/web/src/app/AppShell.tsx:97` 桌面側欄有一句「手機優先的私人電台。不是找同類型，是找到同一種感覺。」，和拿掉的舊 h1 同一個意思。
 
-1. **8 個標籤的 prompt 措辭**（上面的表）：這是會送給選歌的實際文字，要不要調整語氣或內容？
-2. **chip 帶入時是「取代」不是「附加」**：目前沿用現行行為，點 chip 會換掉原本那句。這樣 OK 嗎？
+## 還要曄確認的點
+
+1. **桌面側欄那句要不要一起拿掉**：`AppShell.tsx:97`「不是找同類型，是找到同一種感覺。」（見上一節）。
+2. **8 個標籤的 prompt 措辭**（「組句與完整顯示」的表）：這是實際送去選歌的文字。沒意見的話就照表實作。
+
+（chip 帶入時「取代」原句，曄已在 v2 回覆確認，不再列。）
