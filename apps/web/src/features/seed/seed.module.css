@@ -1,7 +1,7 @@
 .hero { padding: 14px 0 22px; }
-.hero h1 { margin-top: 12px; }
+/* BRA-170 v3：引言升為唯一主標。26px 讓 13 字的第二行在 390 寬剛好一行；一整句話，行高放寬到 1.45。 */
+.hero h1 { font-size: 26px; line-height: 1.45; letter-spacing: -0.02em; font-weight: 650; color: var(--q-ink-strong); }
 .hero h1 em { font-style: normal; color: var(--q-accent); }
-.hero p:last-child { margin-top: 12px; max-width: 330px; color: var(--q-muted); font-size: 15px; line-height: 1.7; }
 
 .composer { display: block; }
 .card {
@@ -20,13 +20,36 @@
   width: 100%; min-height: var(--q-tap); margin-bottom: 4px; padding: 11px 12px;
   border: 1px solid var(--q-border-strong); border-radius: 12px; background: var(--q-surface); font-size: 16px;
 }
+/* BRA-170 順便修 B：歌名欄沿用藝人欄的框線外觀（textarea 才能接受換行貼上，維持原元素）。 */
+.songField { display: block; margin-bottom: 14px; resize: none; line-height: 1.4; }
 .counter { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 13px; color: var(--q-muted); }
 .over { color: var(--q-danger); font-weight: 650; }
 .error { min-height: 0; color: var(--q-danger); font-size: 13px; line-height: 1.6; }
 .error:empty { display: none; }
 .error:not(:empty) { margin-top: 6px; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.cta { margin-top: 22px; }
+/* BRA-170：從一種感覺＝情境標籤（4 欄×2 行，單選）＋再補一句 */
+.moodHead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.moodHead .fieldLabel { margin-bottom: 0; }
+.moodHint { font-size: 12px; color: var(--q-muted); }
+.moods { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0 0 16px; padding: 0; list-style: none; }
+.moods button { width: 100%; padding: 10px 4px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; text-align: center; }
+.moods button[aria-pressed='true'] { color: var(--q-primary); font-weight: 650; }
+.custom { border-top: 1px solid var(--q-border); padding-top: 12px; }
+.optional { font-size: 12px; font-weight: 400; color: var(--q-muted); }
+/* 範例 chips（常用的一句感受）：兩種模式都在卡片下方，只會填入「再補一句」 */
+.examples { margin-top: 14px; }
+.examplesHead { display: block; margin: 0 2px 8px; font-size: 12px; color: var(--q-muted); }
+.examplesHead strong { color: var(--q-ink); font-weight: 650; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+/* 完整組句預覽：就是送出的 seed.text 原文，換行、不截斷 */
+.preview { margin-top: 18px; }
+.previewLabel { font-size: 12px; font-weight: 650; letter-spacing: 0.04em; color: var(--q-muted); }
+.previewQuote {
+  margin-top: 6px; padding-left: 14px; border-left: 2px solid var(--q-accent-line);
+  color: var(--q-ink); font-size: 16px; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere;
+}
+.previewEmpty .previewQuote { color: var(--q-muted); border-left-color: var(--q-border); font-size: 14px; }
+.cta { margin-top: 18px; }
 .ctaNote { margin-top: 10px; text-align: center; font-size: 13px; color: var(--q-muted); }
 
 .note { display: flex; gap: 12px; align-items: flex-start; margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--q-border); }
@@ -44,8 +67,7 @@
 .generation h1, .ready h1 { margin-top: 12px; }
 .seedQuote {
   margin: 14px 0 22px; padding-left: 14px; border-left: 2px solid var(--q-accent-line);
-  color: var(--q-muted); font-size: 16px; line-height: 1.7; white-space: pre-line;
-  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+  color: var(--q-muted); font-size: 16px; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere;
 }
 .stages { margin: 0 0 22px; padding: 0; list-style: none; }
 .stages li { display: flex; align-items: center; gap: 14px; padding: 13px 0; color: var(--q-muted); font-size: 16px; border-bottom: 1px solid rgba(206, 213, 203, 0.6); }

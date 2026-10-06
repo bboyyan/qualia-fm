@@ -50,9 +50,9 @@ export async function chooseScenario(page: Page, label: string): Promise<void> {
   await page.getByTestId('tab-home').click();
 }
 
-/** BRA-117 起開台預設是「歌曲」種子清單；需要自由文字的流程先切到「感覺」。 */
+/** BRA-117 起開台預設是「歌曲」種子清單；需要自由文字的流程先切到「從一種感覺」（BRA-170）。 */
 export async function chooseFeeling(page: Page): Promise<void> {
-  await page.getByRole('radio', { name: '感覺', exact: true }).click();
+  await page.getByRole('radio', { name: '從一種感覺', exact: true }).click();
 }
 
 export async function generate(page: Page, text = 'TEST fake seed'): Promise<void> {
