@@ -27,11 +27,16 @@ describe('封面展示', () => {
     expect(html).toContain('song-artwork-placeholder');
     expect(html).not.toContain('<img');
   });
-  it('未連結不標示 Spotify；有展示資料用官方標誌及正式曲名', () => {
+  it.each([undefined, { trackKey: song.trackKey, status: 'unavailable' as const }])('未取得展示或明確 unavailable 不標示 Spotify：%j', (display) => {
+    const html = renderToStaticMarkup(createElement(SongRow, { song, display, pinFull: false, busy: false, disabled: false, history: undefined, onAction: noop, onSeed: noop, onLoadHistory: noop }));
+    expect(html).toContain('song-artwork-placeholder');
+    expect(html).toContain('曲名');
+    expect(html).not.toContain('spotify-logo');
+    expect(html).not.toContain('open.spotify.com');
+    expect(html).not.toContain('song-artwork"');
+  });
+  it('有展示資料用官方標誌及正式曲名', () => {
     const props = { song, pinFull: false, busy: false, disabled: false, history: undefined, onAction: noop, onSeed: noop, onLoadHistory: noop };
-    const unavailable = renderToStaticMarkup(createElement(SongRow, props));
-    expect(unavailable).not.toContain('Spotify');
-    expect(unavailable).toContain('song-artwork-placeholder');
     const available = renderToStaticMarkup(createElement(SongRow, { ...props, display }));
     expect(available).toContain('/brand/spotify/Spotify_Full_Logo_RGB_Green.png');
     expect(available).toContain('正式曲名');
@@ -63,6 +68,19 @@ describe('展示生命週期與帳本操作隔離', () => {
     finish([display]);
     await tick();
     expect(model.getState().display).toEqual({});
+  });
+  it.each(['unavailable', 'error'] as const)('展示 API %s 完成後只留帳本曲名及佔位，沒有 Spotify 標誌', async (result) => {
+    const remote = api();
+    if (result === 'error') remote.songDisplay.mockRejectedValue(new Error('展示請求失敗'));
+    else remote.songDisplay.mockResolvedValue([{ trackKey: song.trackKey, status: 'unavailable' }]);
+    const model = new MySongsModel(remote);
+    model.requestDisplay(song.trackKey);
+    await tick();
+    expect(remote.songDisplay).toHaveBeenCalledOnce();
+    expect(model.getState().display[song.trackKey]).toEqual({ trackKey: song.trackKey, status: 'unavailable' });
+    const html = renderToStaticMarkup(createElement(SongRow, { song, display: model.getState().display[song.trackKey], pinFull: false, busy: false, disabled: false, history: undefined, onAction: noop, onSeed: noop, onLoadHistory: noop }));
+    expect(html).toContain('song-artwork-placeholder');
+    expect(html).not.toContain('Spotify');
   });
   it('429 不自動重试且 Retry-After 期間不送後續列', async () => {
     const remote = api();
