@@ -4,7 +4,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { PlanRequestSchema } from '@qualia/contracts';
+import { PlanRequestSchema, trackKeyOf, type TrackMark } from '@qualia/contracts';
 import { DEFAULT_SETTINGS } from '../src/features/settings/settings';
 import { isAllSelected, pickSegments, pickSelected, startLabel, toggleAll, toggleId } from '../src/features/seed/selection';
 import {
@@ -13,8 +13,11 @@ import {
   DEFAULT_SEED_SPOTIFY_URI,
   addSongSeed,
   combineSeeds,
+  mergeLedgerSeeds,
+  toggleSongSeed,
   draftProblem,
   removeSongSeed,
+  songStartLabel,
   toPlanRequest,
   withPendingSong,
 } from '../src/features/seed/seedList';
@@ -193,4 +196,91 @@ describe('SeedComposer：開台預設歌曲模式＋預設種子卡', () => {
   it('已有節目在播：主按鈕是「全選・建立下一段」', () => {
     expect(render(true)).toContain('全選・建立下一段');
   });
+});
+
+const ledgerSong = (title: string, patch: Partial<TrackMark> = {}): TrackMark => ({
+  title, artist: 'Artist', trackKey: trackKeyOf('Artist', title), mark: null, rating: null,
+  note: null, lastAiredAt: null, updatedAt: '2026-10-06T00:00:00Z', ...patch,
+});
+
+describe('BRA-156：帳本種子', () => {
+  it('釘選與愛列入候選但不自動勾選，可選取並用文字開台；封鎖與最近播過不列入', () => {
+    const draft = mergeLedgerSeeds(DEFAULT_DRAFT, [
+      ledgerSong('Pinned', { mark: 'pinned' }), ledgerSong('Loved', { rating: '愛' }),
+      ledgerSong('Blocked', { mark: 'blocked', rating: '愛' }),
+      ledgerSong('Recent', { lastAiredAt: '2026-10-06T00:00:00Z' }),
+    ]);
+    expect(draft.seeds.map((seed) => seed.title)).toEqual(['Time Flows Ever Onward', 'Pinned', 'Loved']);
+    expect(draft.selectedSeedIds).toEqual([DEFAULT_SEED.id]);
+    const picked = toggleSongSeed({ ...draft, selectedSeedIds: [] }, draft.seeds[1]!.id);
+    expect(toPlanRequest(picked, DEFAULT_SETTINGS).seed).toEqual({ kind: 'song', text: 'Pinned', artist: 'Artist' });
+  });
+});
+
+it('BRA-156：同曲合併 NFKC／大小寫／空白，帳本來源不能移除；解除後只保留預設與手動來源', () => {
+  const manual = addSongSeed(DEFAULT_DRAFT, 'Song', 'Artist');
+  const draft = mergeLedgerSeeds(manual, [
+    ledgerSong('Ｔｉｍｅ Flows Ever Onward', { artist: ' EVAN  CALL ', rating: '愛' }),
+    ledgerSong('ＳＯＮＧ', { rating: '愛' }), ledgerSong('Only ledger', { mark: 'pinned' }),
+  ]);
+  expect(draft.seeds.map((seed) => seed.title)).toEqual(['Time Flows Ever Onward', 'Song', 'Only ledger']);
+  expect(addSongSeed(draft, ' ＳＯＮＧ ', ' ARTIST ').seeds).toHaveLength(3);
+  expect(removeSongSeed(draft, draft.seeds[1]!.id)).toBe(draft);
+  expect(removeSongSeed(draft, draft.seeds[2]!.id)).toBe(draft);
+  const unchecked = toggleSongSeed(draft, manual.seeds[1]!.id);
+  expect(mergeLedgerSeeds(unchecked, [ledgerSong('Song', { rating: '愛' })]).selectedSeedIds).toEqual([DEFAULT_SEED.id]);
+  const cleared = mergeLedgerSeeds(draft, []);
+  expect(cleared.seeds.map((seed) => seed.title)).toEqual(['Time Flows Ever Onward', 'Song']);
+  expect(removeSongSeed(cleared, cleared.seeds[1]!.id).seeds).toEqual([expect.objectContaining({ isDefault: true })]);
+});
+
+it('BRA-156：封鎖優先於預設／手動種子，失效選取一併移除', () => {
+  const draft = addSongSeed(DEFAULT_DRAFT, 'Manual', 'Artist');
+  const merged = mergeLedgerSeeds(draft, [
+    ledgerSong('Time Flows Ever Onward', { artist: 'Evan Call', mark: 'blocked', rating: '愛' }),
+    ledgerSong('Manual', { mark: 'blocked', rating: '愛' }),
+  ]);
+  expect(merged.seeds).toEqual([]);
+  expect(merged.selectedSeedIds).toEqual([]);
+  expect(draftProblem(merged)).toContain('至少勾選');
+});
+
+it('BRA-156：釘選兼收藏只列一次，解除其中之一仍保留；兩者皆解除才刪掉純帳本來源', () => {
+  const both = mergeLedgerSeeds(DEFAULT_DRAFT, [ledgerSong('Both', { mark: 'pinned', rating: '愛' })]);
+  expect(both.seeds.map((seed) => seed.title)).toEqual(['Time Flows Ever Onward', 'Both']);
+  const selected = toggleSongSeed(both, both.seeds[1]!.id);
+  for (const patch of [{ rating: '愛' as const }, { mark: 'pinned' as const, rating: '還行' as const }]) {
+    const one = mergeLedgerSeeds(selected, [ledgerSong('Both', patch)]);
+    expect(one.seeds).toHaveLength(2);
+    expect(one.selectedSeedIds).toEqual(selected.selectedSeedIds);
+  }
+  const cleared = mergeLedgerSeeds(selected, [ledgerSong('Both', { rating: '還行' })]);
+  expect(cleared.seeds.map((seed) => seed.title)).toEqual(['Time Flows Ever Onward']);
+  expect(cleared.selectedSeedIds).toEqual([DEFAULT_SEED.id]);
+});
+
+it('BRA-156：同步後手動輸入已封鎖同曲也不能重新放進選單，保留輸入並提示解除封鎖', () => {
+  const draft = mergeLedgerSeeds(DEFAULT_DRAFT, [ledgerSong('Blocked', { mark: 'blocked' })]);
+  expect(addSongSeed(draft, 'ＢＬＯＣＫＥＤ', ' artist ')).toBe(draft);
+  const pending = { ...draft, text: 'Blocked', artist: 'Artist' };
+  expect(withPendingSong(pending)).toBe(pending);
+  expect(draftProblem(pending)).toContain('已封鎖');
+  const unblocked = mergeLedgerSeeds(draft, [ledgerSong('Blocked')]);
+  expect(addSongSeed(unblocked, 'Blocked', 'Artist').seeds.map((seed) => seed.title)).toEqual(['Time Flows Ever Onward', 'Blocked']);
+});
+
+it('D-41：開台鈕依可見項目顯示全選／部分；收合帳本不計 X、N，全選後恢復', () => {
+  const base = addSongSeed(DEFAULT_DRAFT, 'Manual', 'Artist');
+  const draft = mergeLedgerSeeds(base, [ledgerSong('Loved', { rating: '愛' })]);
+  expect(songStartLabel('快速開台', draft, false)).toBe('全選・快速開台');
+  expect(songStartLabel('快速開台', draft, true)).toBe('快速開台（已選 2／3）');
+  const partial = toggleSongSeed(draft, DEFAULT_SEED.id);
+  expect(songStartLabel('快速開台', partial, false)).toBe('快速開台（已選 1／2）');
+  expect(songStartLabel('快速開台', partial, true)).toBe('快速開台（已選 1／3）');
+  const all = { ...partial, selectedSeedIds: toggleAll(partial.seeds.map((seed) => seed.id), partial.selectedSeedIds) };
+  expect(songStartLabel('快速開台', all, true)).toBe('全選・快速開台');
+  const hiddenSelected = toggleSongSeed(all, DEFAULT_SEED.id);
+  expect(songStartLabel('快速開台', hiddenSelected, false)).toBe('快速開台（已選 1／2）');
+  expect(songStartLabel('快速開台', hiddenSelected, true)).toBe('快速開台（已選 2／3）');
+  expect(draft.selectedSeedIds).toEqual(base.selectedSeedIds);
 });

@@ -89,6 +89,8 @@ interface FakeServer {
 async function fakeEModeServer(page: Page, options: { linked: boolean; clean?: boolean }): Promise<FakeServer> {
   const server: FakeServer = { linked: options.linked, plays: [], loved: [], devices: [] };
   await page.addInitScript(FAKE_SDK);
+  // BRA-156：開台現在讀帳本；假 E 模式 fixture 不讀其他 spec 留下的 MOCK 回饋。
+  await page.route('**/api/taste/marks', (route) => route.fulfill({ json: { marks: [] } }));
   await page.route('**/api/capabilities', async (route) => {
     const response = await route.fetch();
     const caps = await response.json();

@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
 
 /** Fails if the document scrolls horizontally (docs/02: no horizontal scroll from 360px). */
 export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
@@ -68,4 +68,23 @@ export async function choosePlaybackMode(page: Page, mode: 'manual' | 'mock'): P
 
 export async function skipFeedback(page: Page): Promise<void> {
   await page.getByRole('button', { name: '略過回饋', exact: true }).click();
+}
+
+/**
+ * 透過既有 API 把帳本恢復中性：清掉所有釘選／封鎖、評價全改「還行」（選歌規則不加權）。
+ * 其他 spec 共用同一台伺服器與帳本，留下的釘選／封鎖／愛／不對會改變它們的 MOCK 節目順序。
+ */
+export async function neutralizeLedger(request: APIRequestContext): Promise<void> {
+  const session = await request.post('/api/session');
+  expect(session.ok()).toBe(true);
+  const { csrfToken } = (await session.json()) as { csrfToken: string };
+  const headers = { 'X-CSRF-Token': csrfToken };
+  const response = await request.get('/api/taste/marks');
+  expect(response.ok()).toBe(true);
+  const { marks } = (await response.json()) as { marks: { trackKey: string; mark: string | null; rating: string | null }[] };
+  for (const mark of marks) {
+    const edit = { ...(mark.mark !== null ? { mark: null } : {}), ...(mark.rating !== null && mark.rating !== '還行' ? { rating: '還行' } : {}) };
+    if (Object.keys(edit).length === 0) continue;
+    expect((await request.post('/api/taste/marks', { headers, data: { target: { trackKey: mark.trackKey }, ...edit } })).ok()).toBe(true);
+  }
 }

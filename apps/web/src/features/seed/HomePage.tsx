@@ -1,5 +1,5 @@
 import { useAppStore } from '../../app/appStore';
-import { generation } from '../../app/services';
+import { api, generation } from '../../app/services';
 import { Eyebrow } from '../../ui/Feedback';
 import { Icon } from '../../ui/Icon';
 import { GenerationView } from './GenerationView';
@@ -71,6 +71,7 @@ export function HomePage({ hasActiveShow, onStartShow }: HomePageProps) {
       <Hero />
       <SeedComposer
         continuing={hasActiveShow}
+        loadLedger={api.tasteMarks}
         onSubmit={() => {
           // 讀送出當下的草稿（composer 可能剛把輸入框裡的歌加進清單）。
           const { draft: current, settings } = useAppStore.getState();

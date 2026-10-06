@@ -1,11 +1,11 @@
 /**
  * 開台草稿與種子清單（BRA-117 A）。預設「歌曲」模式，清單裡先放曄確認過的唯一種子；
  * 可加入其他歌、可多選，勾選的種子合併成一個歌曲 Seed 送出（契約不變）。
- * 不推測其他偏好：清單只放使用者自己輸入的歌，不讀 Spotify 收藏、紀錄或歌單。
+ * 不推測其他偏好：清單只放使用者自己輸入的歌，另讀 Qualia 品味帳本的釘選／愛；不讀 Spotify 收藏、紀錄或歌單。
  */
-import { ARTIST_MAX_GRAPHEMES, SEED_MAX_GRAPHEMES, countGraphemes, type PlanRequest, type SeedKind } from '@qualia/contracts';
+import { ARTIST_MAX_GRAPHEMES, SEED_MAX_GRAPHEMES, countGraphemes, type PlanRequest, type SeedKind, type TrackMark, trackKeyOf } from '@qualia/contracts';
 import type { Settings } from '../settings/settings';
-import { pickSelected, toggleId } from './selection';
+import { pickSelected, startLabel, toggleId } from './selection';
 
 export interface SongSeed {
   readonly id: string;
@@ -14,6 +14,9 @@ export interface SongSeed {
   /** 版本等補充說明（只顯示）。 */
   readonly note: string | null;
   readonly isDefault: boolean;
+  /** 帳本來源不可在開台頁刪除；ledgerOnly 用來區分與手動項目的交集。 */
+  readonly fromLedger?: boolean;
+  readonly ledgerOnly?: boolean;
 }
 
 export interface Draft {
@@ -23,6 +26,8 @@ export interface Draft {
   readonly artist: string;
   readonly seeds: readonly SongSeed[];
   readonly selectedSeedIds: readonly string[];
+  /** 最近一次帳本同步的封鎖鍵，避免手動加入繞過封鎖。 */
+  readonly blockedSeedKeys?: readonly string[];
 }
 
 /** 曄確認過的唯一種子（REQUIREMENTS A1-2、D1：Frieren OST 版）。 */
@@ -50,8 +55,30 @@ export const DEFAULT_DRAFT: Draft = {
 
 const SEPARATOR = '／';
 
-const normalize = (value: string): string => value.trim().replace(/\s+/g, ' ').toLowerCase();
-const seedKey = (title: string, artist: string | null): string => `${normalize(title)}|${normalize(artist ?? '')}`;
+const seedKey = (title: string, artist: string | null): string => trackKeyOf(artist ?? '', title);
+
+/** 重讀帳本後合併草稿：新增候選不自動勾選，保留本輪選取；封鎖優先於所有來源。 */
+export function mergeLedgerSeeds(draft: Draft, marks: readonly TrackMark[]): Draft {
+  const keyOf = (seed: SongSeed): string => trackKeyOf(seed.artist ?? '', seed.title);
+  const blocked = new Set(marks.filter((song) => song.mark === 'blocked').map((song) => trackKeyOf(song.artist, song.title)));
+  const previous = new Map(draft.seeds.map((seed) => [keyOf(seed), seed]));
+  const seeds: SongSeed[] = draft.seeds.filter((seed) => !seed.ledgerOnly && !blocked.has(keyOf(seed)))
+    .map((seed) => ({ ...seed, fromLedger: false }));
+  for (const song of marks) {
+    const key = trackKeyOf(song.artist, song.title);
+    if (blocked.has(key) || (song.mark !== 'pinned' && song.rating !== '愛')) continue;
+    const index = seeds.findIndex((seed) => keyOf(seed) === key);
+    if (index >= 0) {
+      seeds[index] = { ...seeds[index]!, fromLedger: true };
+    } else {
+      const old = previous.get(key);
+      seeds.push({ id: old?.id ?? `taste:${key}`, title: song.title, artist: song.artist,
+        note: null, isDefault: false, fromLedger: true, ledgerOnly: true });
+    }
+  }
+  const ids = new Set(seeds.map((seed) => seed.id));
+  return { ...draft, seeds, blockedSeedKeys: [...blocked], selectedSeedIds: draft.selectedSeedIds.filter((id) => ids.has(id)) };
+}
 
 /** 加入一首並勾選；同名同藝人已在清單就只勾選，不重複。 */
 export function addSongSeed(draft: Draft, title: string, artist: string): Draft {
@@ -59,6 +86,7 @@ export function addSongSeed(draft: Draft, title: string, artist: string): Draft 
   if (!cleanTitle) return draft;
   const cleanArtist = artist.trim().replace(/\s+/g, ' ') || null;
   const key = seedKey(cleanTitle, cleanArtist);
+  if (draft.blockedSeedKeys?.includes(key)) return draft;
   const existing = draft.seeds.find((seed) => seedKey(seed.title, seed.artist) === key);
   if (existing) {
     return draft.selectedSeedIds.includes(existing.id) ? draft : { ...draft, selectedSeedIds: [...draft.selectedSeedIds, existing.id] };
@@ -67,10 +95,10 @@ export function addSongSeed(draft: Draft, title: string, artist: string): Draft 
   return { ...draft, seeds: [...draft.seeds, seed], selectedSeedIds: [...draft.selectedSeedIds, seed.id] };
 }
 
-/** 預設種子不能刪（只能取消勾選＝更換）；其他的可移除。 */
+/** 預設與帳本來源只能取消勾選；純手動項目可移除。 */
 export function removeSongSeed(draft: Draft, id: string): Draft {
   const target = draft.seeds.find((seed) => seed.id === id);
-  if (!target || target.isDefault) return draft;
+  if (!target || target.isDefault || target.fromLedger) return draft;
   return { ...draft, seeds: draft.seeds.filter((seed) => seed.id !== id), selectedSeedIds: draft.selectedSeedIds.filter((value) => value !== id) };
 }
 
@@ -78,9 +106,18 @@ export function toggleSongSeed(draft: Draft, id: string): Draft {
   return { ...draft, selectedSeedIds: toggleId(draft.selectedSeedIds, id) };
 }
 
+/** D-41：開台鈕只統計可見列；收合的帳本列不改變選取或送出的種子。 */
+export function songStartLabel(verb: string, draft: Draft, ledgerExpanded: boolean): string {
+  const visible = draft.seeds.filter((seed) => !seed.ledgerOnly || ledgerExpanded);
+  const selected = visible.filter((seed) => draft.selectedSeedIds.includes(seed.id));
+  return startLabel(verb, selected.length, visible.length);
+}
+
+const pendingSongBlocked = (draft: Draft): boolean => Boolean(draft.blockedSeedKeys?.includes(seedKey(draft.text, draft.artist)));
+
 /** 歌曲模式送出時，輸入框裡還沒按「加入」的歌名也算一首：加入清單並清空輸入。 */
 export function withPendingSong(draft: Draft): Draft {
-  if (draft.kind !== 'song' || !draft.text.trim()) return draft;
+  if (draft.kind !== 'song' || !draft.text.trim() || pendingSongBlocked(draft)) return draft;
   return { ...addSongSeed(draft, draft.text, draft.artist), text: '', artist: '' };
 }
 
@@ -103,6 +140,7 @@ export function textProblem(text: string): string | null {
 /** 送出前的檢查；回傳給人看的下一步，沒問題回 null。 */
 export function draftProblem(draft: Draft): string | null {
   if (draft.kind !== 'song') return textProblem(draft.text);
+  if (draft.text.trim() && pendingSongBlocked(draft)) return '這首歌已封鎖，請到「我的歌」解除封鎖後再加入。';
   const seeds = selectedSeeds(withPendingSong(draft));
   if (seeds.length === 0) return '請至少勾選一首種子歌，或在下面輸入歌名加入。';
   const combined = combineSeeds(seeds);

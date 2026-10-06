@@ -3,9 +3,15 @@
  * 全部是 MOCK 與假資料，不呼叫 Spotify／OpenAI／Notion。
  */
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalOverflow, openApp } from './support';
+import { expectNoHorizontalOverflow, neutralizeLedger, openApp } from './support';
 
 test.describe('BRA-117', () => {
+  // 共用 server／帳本且 workers: 1；每案先建立無收藏、釘選、封鎖的前提。
+  // D-41 的新帳本候選不自動勾選，不能依賴其他 spec 的測後清理。
+  test.beforeEach(async ({ request }) => {
+    await neutralizeLedger(request);
+  });
+
   test('開台預設歌曲模式＋預設種子卡；全選一鍵開台；Ready 同一套勾選清單，只播勾選的', async ({ page }) => {
     await openApp(page, 'mock');
     await expect(page.getByRole('radio', { name: '歌曲', exact: true })).toHaveAttribute('aria-checked', 'true');
@@ -38,6 +44,7 @@ test.describe('BRA-117', () => {
     await expect(page.getByRole('alert')).toContainText('至少勾選');
     await page.getByTestId('seed-list-all').click();
     await expect(page.getByTestId('generate')).toBeEnabled();
+    await expect(page.getByTestId('generate')).toHaveText('全選・快速開台');
   });
 
   test('引言結束自動接同一首曲目，不會跳進回饋', async ({ page }) => {
