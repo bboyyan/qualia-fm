@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from 'react';
 import { useAppStore } from '../../app/appStore';
-import { api, feedbackForms, getEngine, journey, loveFlows } from '../../app/services';
+import { api, feedbackForms, gemSettle, getEngine, journey, loveFlows } from '../../app/services';
 import { currentItem } from '../../audio/queue';
 import type { EngineState } from '../../audio/types';
 import { lovedAvailable } from '../spotify/spotifyMode';
@@ -27,6 +27,8 @@ export function FeedbackStep({ state }: { state: EngineState }) {
       // 回饋已寫入就鑲嵌寶石（BRA-128），即使畫面已換到別首。
       const rating = form.getState().rating;
       if (rating) journey.recordFeedback(state.sessionId, item, rating);
+      // 「不對」的歌不進這趟的結算牌堆（BRA-169）。
+      if (rating) gemSettle.recordRating(state.sessionId, item.segment.segmentId, rating);
       if (!isCurrent()) return;
       if (form.getState().rating === '愛' && lovedAvailable(useAppStore.getState().capabilities, item.segment)) {
         loveFlows.begin(key, new LoveFlowModel(receipt, () => api.spotifyLoved(target)));

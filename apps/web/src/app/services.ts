@@ -10,6 +10,8 @@ import { FeedbackFormStore } from '../features/player/feedbackForm';
 import { LoveFlowStore } from '../features/player/loveFlow';
 import { MySongsModel } from '../features/songs/mySongsModel';
 import { JourneyTracker } from '../features/journey/journeyTracker';
+import { GemWallModel } from '../features/gems/gemWallModel';
+import { GemSettleController } from '../features/gems/settleController';
 import { useAppStore } from './appStore';
 
 export const api = createApiClient();
@@ -19,7 +21,14 @@ export const loveFlows = new LoveFlowStore();
 /** 「我的歌」：品味帳本的清單與單曲動作（BRA-135）。 */
 export const mySongs = new MySongsModel(api);
 /** 寶石＋旅程膠囊（BRA-128）：只在記憶體；滿 5 顆時以朗讀區告知，不跳出大卡片。 */
-export const journey = new JourneyTracker(() => useAppStore.getState().announce('五顆寶石到齊，旅程膠囊開好了'));
+export const journey = new JourneyTracker(() => useAppStore.getState().announce('這趟 5/5，旅程膠囊開好了'));
+/** 寶石牆（BRA-169）：伺服器本機檔，跨 session 保存。 */
+export const gemWall = new GemWallModel(api);
+/** 五首結算翻牌：節目播完開牌堆，選完把伺服器回傳的新牆交給寶石牆。 */
+export const gemSettle = new GemSettleController(api, (result) => {
+  gemWall.apply(result.wall);
+  useAppStore.getState().announce(result.unlocked ? `第 ${result.unlocked.no} 本旅程精選集，開出來了` : `「${result.gem.title}」成為你的第 ${result.wall.total} 顆寶石`);
+});
 
 const deps: GenerationDeps = {
   api: {
@@ -70,7 +79,11 @@ export function getEngine(): PlaybackEngine {
     onAnnounce: (message) => useAppStore.getState().announce(message),
   });
   const created = engine;
-  created.subscribe(() => journey.observe(created.getState()));
+  created.subscribe(() => {
+    const state = created.getState();
+    journey.observe(state);
+    gemSettle.observe(state);
+  });
   return engine;
 }
 

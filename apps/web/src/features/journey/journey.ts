@@ -85,6 +85,14 @@ export function inlayTrack(journey: Journey, input: TrackInput, source: TrackSou
   return rateExisting(journey, input.key, rating);
 }
 
+/** 這趟（引擎 sessionId）有份的最近一顆膠囊；結算畫面引用它，不再開第二顆（BRA-169）。 */
+export function capsuleFor(journey: Journey, sessionId: string): Capsule | null {
+  const capsule = journey.capsule;
+  if (!capsule) return null;
+  const mine = capsule.gems.some((gem) => gem.key === `seed:${sessionId}` || gem.key.startsWith(`${sessionId}:`));
+  return mine ? capsule : null;
+}
+
 export function markCapsuleOpened(journey: Journey): Journey {
   return journey.capsule && !journey.capsuleOpened ? { ...journey, capsuleOpened: true } : journey;
 }

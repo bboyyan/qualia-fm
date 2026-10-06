@@ -76,6 +76,7 @@ const EnvSchema = z.object({
   SESSION_STORE_PATH: z.preprocess(blankToUndefined, z.string().max(1000).optional()),
   SHOW_HISTORY_PATH: z.preprocess(blankToUndefined, z.string().max(1000).optional()),
   TASTE_LEDGER_PATH: z.preprocess(blankToUndefined, z.string().max(1000).optional()),
+  GEM_WALL_PATH: z.preprocess(blankToUndefined, z.string().max(1000).optional()),
 });
 
 export interface ServerConfig {
@@ -104,6 +105,8 @@ export interface ServerConfig {
   /** 品味帳本（BRA-134）：絕對路徑的本機 JSON 檔；null＝只存在記憶體（只有 NODE_ENV=test 未設定時）。 */
   tasteLedger: { path: string | null };
   showHistory: { path: string | null };
+  /** 寶石牆檔（BRA-169）；null＝只用記憶體（測試）。 */
+  gemWall: { path: string | null };
   openai: {
     llm: 'mock' | 'openai'; tts: 'mock' | 'openai'; apiKey: string | undefined;
     textModel: string | undefined; ttsModel: string | undefined; voice: string | undefined;
@@ -200,6 +203,12 @@ function tasteLedgerPath(env: ParsedEnv): string | null {
   return env.NODE_ENV === 'test' ? null : resolve('data/taste-ledger.json');
 }
 
+/** 寶石牆（BRA-169）：預設 ./data/gem-wall.json（啟動時轉絕對路徑）；測試未設定時只用記憶體。 */
+function gemWallPath(env: ParsedEnv): string | null {
+  if (env.GEM_WALL_PATH) return resolve(env.GEM_WALL_PATH);
+  return env.NODE_ENV === 'test' ? null : resolve('data/gem-wall.json');
+}
+
 function originsFor(env: ParsedEnv): string[] {
   const own = [`http://127.0.0.1:${env.PORT}`, `http://localhost:${env.PORT}`];
   const list = env.NODE_ENV === 'production' ? [env.APP_ORIGIN] : [env.APP_ORIGIN, ...own];
@@ -277,5 +286,6 @@ export function loadConfig(source: Record<string, string | undefined> = process.
     sessions: { path: env.SESSION_STORE_PATH ? resolve(env.SESSION_STORE_PATH) : env.NODE_ENV === 'test' ? null : resolve('data/sessions.json') },
     tasteLedger: { path: tasteLedgerPath(env) },
     showHistory: { path: env.SHOW_HISTORY_PATH ? resolve(env.SHOW_HISTORY_PATH) : env.NODE_ENV === 'test' ? null : resolve('data/show-history.json') },
+    gemWall: { path: gemWallPath(env) },
   };
 }

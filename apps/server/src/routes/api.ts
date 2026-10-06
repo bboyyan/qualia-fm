@@ -3,11 +3,13 @@ import { Router, type Request } from 'express';
 import { z } from 'zod';
 import {
   HEADERS,
+  ChooseGemRequestSchema,
   FeedbackRequestSchema,
   MockScenarioSchema,
   TasteEditRequestSchema,
   TasteHistoryQuerySchema,
   PlanRequestSchema,
+  trackKeyOf,
   type MockScenario,
   type SessionInfo,
 } from '@qualia/contracts';
@@ -29,6 +31,7 @@ import { assertFeatureAllowed, buildCapabilities } from '../services/capabilitie
 import type { PlanService } from '../services/planService.js';
 import type { ShowHistory } from '../ledger/showHistory.js';
 import type { TasteService } from '../services/tasteService.js';
+import { GemWallError, type GemWallStore } from '../gems/gemWallStore.js';
 import { ownerSecretOf, spotifyPublicRoutes, spotifySessionRoutes, type SpotifyServices } from './spotify.js';
 
 export interface ApiDeps {
@@ -39,6 +42,7 @@ export interface ApiDeps {
   readonly plans: PlanService;
   readonly tasteService: TasteService;
   readonly showHistory: ShowHistory;
+  readonly gems: GemWallStore;
   readonly now: () => number;
   /** 只在 SPOTIFY_ENABLED=true 時存在。 */
   readonly spotify?: SpotifyServices;
@@ -132,6 +136,33 @@ function tasteRoutes(router: Router, deps: ApiDeps): void {
   });
 }
 
+const GEM_WALL_UNREADABLE = '寶石牆暫時讀不到，已收的寶石沒有被更動，請稍後再試。';
+const GEM_WALL_WRITE_FAILED = '這顆寶石沒有收進寶石牆，請再試一次。';
+
+/** 讀寫失敗明示：損毀檔不覆寫，訊息不帶路徑或檔案內容。 */
+function withGemWall<T>(run: () => T): T {
+  try { return run(); }
+  catch (error) {
+    if (!(error instanceof GemWallError)) throw error;
+    throw new AppError('INTERNAL', { message: error.failure === 'write' ? GEM_WALL_WRITE_FAILED : GEM_WALL_UNREADABLE });
+  }
+}
+
+/** 寶石牆（BRA-169）：單人自用，與品味帳本相同不分 session（D-29）；曲名一律由伺服器從自己的節目查出。 */
+function gemRoutes(router: Router, deps: ApiDeps): void {
+  router.get('/gems', (_req, res) => {
+    res.json(withGemWall(() => deps.gems.wall()));
+  });
+  router.post('/gems', (req, res) => {
+    const parsed = ChooseGemRequestSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError('INVALID_INPUT');
+    const { journeyId, showId, segmentId, palette } = parsed.data;
+    const { title, artist } = deps.plans.trackOf(sessionOf(res).id, showId, segmentId);
+    const outcome = withGemWall(() => deps.gems.choose({ journeyId, title, artist, trackKey: trackKeyOf(artist, title), palette }));
+    res.status(outcome.created ? 201 : 200).json({ gem: outcome.gem, wall: outcome.wall, unlocked: outcome.unlocked });
+  });
+}
+
 function sessionRoutes(router: Router, deps: ApiDeps): void {
   router.get('/capabilities', (req, res) => {
     // linked 只對擁有者為 true；其他 session 只知道「已由別的裝置連結」，不能把 E 模式打開。
@@ -181,6 +212,7 @@ export function createApiRouter(deps: ApiDeps): Router {
     res.setHeader('Cache-Control', 'private, no-store');
     res.json({ shows: deps.showHistory.list() });
   });
+  gemRoutes(router, deps);
   router.use(() => {
     throw new AppError('NOT_FOUND');
   });

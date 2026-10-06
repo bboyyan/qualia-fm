@@ -4,8 +4,9 @@
  */
 import { DeveloperOnly } from '../../app/developerMode';
 import { useAppStore } from '../../app/appStore';
-import { getEngine, journey } from '../../app/services';
+import { gemSettle, getEngine, journey } from '../../app/services';
 import { GemTray } from '../journey/GemTray';
+import { SettleReminder } from '../gems/SettleOverlay';
 import { currentBridge, currentItem, nextItem } from '../../audio/queue';
 import type { EngineState } from '../../audio/types';
 import { useEngineState } from '../../audio/useEngine';
@@ -131,11 +132,13 @@ function NextUp({ state }: { state: EngineState }) {
 
 function CompletedCard() {
   const setTab = useAppStore((s) => s.setTab);
+  const openGemWall = useAppStore((s) => s.openGemWall);
   return (
     <section className={styles.completed} aria-label="節目已結束" data-testid="show-completed">
       <h2>這一段節目聽完了。</h2>
       <p>不會自動生成無限接續；想繼續就從頭再聽，或建立下一段。</p>
       <div className={styles.completedActions}>
+        <SettleReminder controller={gemSettle} onWall={openGemWall} />
         <Button block icon="play" onClick={() => getEngine().play()}>
           從頭再聽一次
         </Button>
