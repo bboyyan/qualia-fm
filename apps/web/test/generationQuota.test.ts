@@ -29,3 +29,9 @@ it('一般內部錯誤仍顯示原本的故障與重試提示', () => {
   expect(html).toContain(ERROR_MESSAGES.INTERNAL);
   expect(html).toContain('再試一次');
 });
+
+it('歷史不可用明示人工修復與未扣額度，不提供重試', () => {
+  const html = renderFailure('HISTORY_UNAVAILABLE');
+  expect(html).toContain('開台歷史檔讀不到或已損毀，需要人工修復後才能開台；本次未扣額度。');
+  expect(html).not.toContain('再試一次');
+});

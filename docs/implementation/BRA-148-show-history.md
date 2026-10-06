@@ -54,3 +54,11 @@ mobile-390 在預設首頁斷言歷史按鈕不存在、四格導覽文字維持
 ## 回滾
 
 revert 本票 commit。沒有 DB migration；新摘要檔可保留，舊版不讀，既有 taste／session 檔案不必變動。
+
+## M1／M2 合併前修正
+
+M1：開台 job 在任何外呼與 `claimPlan` 前驗歷史可讀及格式，不存在視為空歷史；不可讀即 fail-fast、不扣額度、不寫 aired／session context／recentPicks，回 `HISTORY_UNAVAILABLE`、`retryable:false` 並提示人工修復。前端依 retryable 隱藏重試；交付前 record 的重驗與寫入失敗不交付維持 D-39，補償留給 BRA-175。PlanService fake provider／runtime 回歸測試先紅後綠，涵蓋損毀零副作用、修復後同服務恢復、不存在及無法讀取。前端另驗訊息與無重試按鈕。
+
+M2：每次 E2E 種子含 project 名稱與隨機 UUID 前八碼；列篩選、文字斷言及重開種子比對都沿用唯一標記，跨尺寸共用歷史也不互相污染。未清歷史、未改平行設定。
+
+本次驗證（Node 24）：lint、typecheck、build 全過；單元測試 82 檔／836 項全過（新增 4 項）。三尺寸 show-history E2E 共 6 項均被沙盒 Chromium 啟動權限阻擋（MachPortRendezvous Permission denied／EPERM），未進入頁面，需沙盒外補驗；修正前同樣受限，未宣稱本次已重現列數錯誤或 E2E 全綠。全程 fake／mock，未接真實供應商、未改測試線或 env。

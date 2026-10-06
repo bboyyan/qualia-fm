@@ -11,7 +11,8 @@ test('BRA-148：首屏保持開台，兩輪履歷重載後可展開、進我的�
   await expect(page.getByTestId('seed-input')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('bra148-home-mobile-390.png') });
   const session = await (await page.request.post('/api/session')).json() as { csrfToken: string };
-  const seeds = ['BRA148 雨天散步', 'BRA148 夜裡的聲音'];
+  const marker = `BRA148-${testInfo.project.name}-${randomUUID().slice(0, 8)}`;
+  const seeds = [`${marker} 雨天散步`, `${marker} 夜裡的聲音`];
   for (const text of seeds) {
     const res = await page.request.post('/api/plan', {
       headers: { 'X-CSRF-Token': session.csrfToken, 'Idempotency-Key': randomUUID() },
@@ -23,7 +24,7 @@ test('BRA-148：首屏保持開台，兩輪履歷重載後可展開、進我的�
   }
   await page.getByTestId('tab-mine').click();
   await page.getByRole('button', { name: '開台歷史', exact: true }).click();
-  const rows = page.getByTestId('show-history-row').filter({ hasText: 'BRA148' });
+  const rows = page.getByTestId('show-history-row').filter({ hasText: marker });
   await expect(rows).toHaveCount(2);
   await expect(rows.first()).toContainText(seeds[1]!);
   await page.reload();

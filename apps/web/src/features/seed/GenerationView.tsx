@@ -59,7 +59,7 @@ export function GenerationView({ state, seedText, onCancel, onRetry, onEdit }: G
           testId="generation-error"
           actions={
             <>
-              {!quotaExceeded && <Button block onClick={onRetry}>{state.error.code === 'SESSION_EXPIRED' ? '重新建立並再試一次' : '再試一次'}</Button>}
+              {!quotaExceeded && state.error.retryable && <Button block onClick={onRetry}>{state.error.code === 'SESSION_EXPIRED' ? '重新建立並再試一次' : '再試一次'}</Button>}
               <Button block variant="text" onClick={onEdit}>修改感覺</Button>
             </>
           }

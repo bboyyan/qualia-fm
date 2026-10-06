@@ -241,6 +241,9 @@ export class PlanService {
     const deadline = setTimeout(() => job.controller.abort('timeout'), this.deps.config.limits.planDeadlineMs);
     deadline.unref?.();
     try {
+      // D-39：任何外呼與扣額度前先驗歷史；交付前 record 仍會重驗。
+      try { this.deps.showHistory?.list(); }
+      catch { throw new AppError('HISTORY_UNAVAILABLE'); }
       let request = input.request;
       let warning: string | null = null;
       let history: EditorialInput['history'] = [];
