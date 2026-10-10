@@ -36,7 +36,7 @@ export class OpenAITtsProvider {
             const bytes = await openAIRequest(this.fetchImpl, this.config.apiKey!, 'audio/speech', {
               model: this.config.ttsModel, voice: this.config.voice, input: text, instructions, response_format: 'mp3',
             }, attemptSignal, this.config.ttsTimeoutMs, async (response) => Buffer.from(await response.arrayBuffer()));
-            if (!bytes.length || bytes.length > this.config.cacheMaxMb * 1024 * 1024) throw new OpenAIRequestError('INVALID_AUDIO', null, false);
+            if (!bytes.length || bytes.length > this.config.cacheMaxMb * 1024 * 1024) throw OpenAIRequestError.invalidAudio();
             const file = join(this.config.cacheDir, `${key}.mp3`);
             writeFileSync(`${file}.tmp`, bytes, { mode: 0o600 });
             renameSync(`${file}.tmp`, file);
